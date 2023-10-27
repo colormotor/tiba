@@ -52,5 +52,5 @@ class PandaStickFigure:
     def __init__(self):
         self.robot = rtb.models.Panda()
 
-    def polygon(self, q, viewport):
-        return projected_robot_polygon(self.robot, q, viewport=viewport)
+    def polygon(self, q, **kwargs):
+        return projected_robot_polygon(self.robot, q, **kwargs)

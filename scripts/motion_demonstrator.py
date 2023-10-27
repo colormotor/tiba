@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 import numpy as np
-import panda_py
-from panda_py import libfranka
+import importlib
+panda_loader = importlib.find_loader('panda_py')
+if panda_loader is not None:
+    import panda_py
+    from panda_py import libfranka
+    has_robot = True
+else:
+    has_robot = False
+
+
 import imgui
 from polygonsoup import utils, geom
 import roboticstoolbox as rtb
@@ -9,15 +17,16 @@ import tiba
 import time
 from importlib import reload
 reload(tiba)
+reload(tiba.draw)
 
 params = {'Seed': (5, {'min': 0, 'max': 100}),
           'Gripper mm': (34.0, {'min': 2, 'max': 200}),
           'Gripper state': False,
           'Tsm': {
-              'Dist': (3.0, {'min':0, 'max':10}),
-              'rotx': (0, {'min':0, 'max':360}),
+              'Dist': (4.0, {'min':0, 'max':10}),
+              'rotx': (275, {'min':0, 'max':360}),
               'roty': (0, {'min':0, 'max':360}),
-              'rotz': (0, {'min':0, 'max':360}),
+              'rotz': (138, {'min':0, 'max':360}),
           }
           }
 
@@ -179,6 +188,14 @@ class MotionEditor:
 
         print('Ending')
 
+    def robot_polygon(self, q, viewport):
+        return self.stick.polygon(q,
+                           viewport=viewport,
+                           dist=params.tsm.dist,
+                           rotx=params.tsm.rotx,
+                           roty=params.tsm.roty,
+                           rotz=params.tsm.rotz)
+    
     def draw_steps(self, pos, size, width):
         motion = self.get_cur_motion()
         if not motion:
@@ -202,7 +219,7 @@ class MotionEditor:
                 q = step['q']
                 no_fill()
                 stroke(255)
-                P = self.stick.polygon(q, viewport=rect)
+                P = self.robot_polygon(q, viewport=rect)
                 polyline(P)
             elif step['kind'] == 'grip':
                 fill(255, 0, 0)
@@ -248,11 +265,12 @@ circle_button = FrankaButton('circle')
 cross_button = FrankaButton('cross')
 check_button = FrankaButton('check')
 
-hostname = '172.16.0.2'
-panda = panda_py.Panda(hostname)
-desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
-gripper = libfranka.Gripper(hostname)
-desk.listen(on_event)
+if has_robot:
+    hostname = '172.16.0.2'
+    panda = panda_py.Panda(hostname)
+    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    gripper = libfranka.Gripper(hostname)
+    desk.listen(on_event)
 
 editor = MotionEditor('motions.json')
 
@@ -260,6 +278,8 @@ editor = MotionEditor('motions.json')
 def setup():
     sketch.set_gui_callback(gui)
     create_canvas(512, 512) #, 300)
+    if has_robot:
+        panda.teaching_mode(False)
 
 def exit():
     pass
@@ -277,14 +297,16 @@ rad = geom.radians
 def draw():
     background(0)
     background(0)
-    q = panda.q
-    P = editor.stick.polygon(q, viewport=geom.make_rect(0, 0, width, height))
+    if has_robot:
+        q = panda.q
+    else:
+        q = np.zeros(7)
+
+    P = editor.robot_polygon(q, viewport=geom.make_rect(0, 0, width, height))
     stroke(255)
     no_fill()
     polyline(P, closed=False)
 
     state.q = q
-
-    #print(P)
 
     editor.draw_steps([0, 0], 70, width)
