@@ -1,0 +1,327 @@
+#!/usr/bin/env python3
+import numpy as np
+import importlib
+panda_loader = importlib.find_loader('panda_py')
+if panda_loader is not None:
+    import panda_py
+    from panda_py import libfranka
+    has_robot = True
+else:
+    has_robot = False
+
+
+import imgui
+from polygonsoup import utils, geom
+import roboticstoolbox as rtb
+import tiba
+import time
+from importlib import reload
+reload(tiba)
+reload(tiba.draw)
+
+params = {'Seed': (5, {'min': 0, 'max': 100}),
+          'Gripper mm': (34.0, {'min': 2, 'max': 200}),
+          'Gripper state': False,
+          'Guiding': {
+              'x': True,
+              'y': True,
+              'z': True,
+              'rot': True,
+              'elbow': True
+          },
+          'Tsm': {
+              'Dist': (4.0, {'min':0, 'max':10}),
+              'rotx': (275, {'min':0, 'max':360}),
+              'roty': (0, {'min':0, 'max':360}),
+              'rotz': (138, {'min':0, 'max':360}),
+          }
+          }
+
+params = sketch.parameters(params)
+
+def random_q():
+    return list(np.random.uniform(-np.pi, np.pi, 7))
+
+
+class FrankaButton:
+    def __init__(self, button='circle'):
+        self.button = button
+        self.state = False
+
+    def __call__(self, event):
+        if not self.button in event:
+            return False
+        res = False
+        if not self.state and event[self.button]:
+            res = True
+        self.state = event[self.button]
+        return res
+
+class MotionEditor:
+    def __init__(self, path='motions_desk.json'):
+        try:
+            self.motions = utils.load_json(path)
+        except:
+            self.motions = {}
+        self.path = path
+        self.new_motion_name = ''
+        self.cur_motion = -1
+        self.cur_step = -1
+        self.stick = tiba.draw.PandaStickFigure()
+
+    def get_cur_motion(self):
+        names = list(self.motions.keys())
+        if self.cur_motion < 0 or self.cur_motion >= len(names):
+            return {}
+        return self.motions[names[self.cur_motion]]
+
+    def save_motions(self):
+        if not self.motions:
+            return
+        print(self.motions)
+        utils.save_json(self.motions, self.path)
+
+    def gui(self):
+        names = list(self.motions.keys())
+        if self.cur_motion >= len(names):
+            self.cur_motion = -1
+
+        clicked, self.cur_motion = imgui.listbox("Motions", self.cur_motion, names)
+        if clicked:
+            print(self.cur_motion)
+
+        if imgui.button("Add"):
+            imgui.open_popup('Add motion')
+
+
+        if imgui.begin_popup_modal('Add motion').opened:
+            imgui.text("Select name")
+            changed, self.new_motion_name = imgui.input_text('Name', self.new_motion_name, 512)
+
+            if imgui.button('OK'):
+                if self.new_motion_name and self.new_motion_name not in self.motions:
+                    self.motions[self.new_motion_name] = {'steps':[]}
+                    self.save_motions()
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button('Cancel'):
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+
+        if self.get_cur_motion():
+            imgui.same_line()
+            if imgui.button("Delete"):
+                self.motions.pop(names[self.cur_motion] + ':')
+                self.save_motions()
+
+            imgui.text(names[self.cur_motion])
+            self.motion_gui(names[self.cur_motion])
+
+    def add_joint_step(self, q):
+        motion = self.get_cur_motion()
+        if not motion:
+            print('No motion selected')
+            return
+        motion['steps'].append({'kind':'q', 'q':list(q)})
+        self.save_motions()
+
+    def add_grip_step(self, mm):
+        motion = self.get_cur_motion()
+        if not motion:
+            print('No motion selected')
+            return
+        motion['steps'].append({'kind':'grip', 'mm':mm})
+        self.save_motions()
+
+    def add_ungrip_step(self):
+        motion = self.get_cur_motion()
+        if not motion:
+            print('No motion selected')
+            return
+        motion['steps'].append({'kind':'ungrip'})
+        self.save_motions()
+
+
+    def motion_gui(self, key):
+        motion = self.motions[key]
+        names = []
+        for i, step in enumerate(motion['steps']):
+            names.append('%d: %s'%(i+1, step['kind']))
+        clicked, self.cur_step = imgui.listbox("Steps", self.cur_step, names)
+        if clicked:
+            print(self.cur_motion)
+        if -1 < self.cur_motion < len(names):
+            if imgui.button("Delete"):
+                motion['steps'].pop(self.cur_step)
+                self.save_motions()
+        if imgui.button('Play'):
+            imgui.open_popup('Play motion')
+        if imgui.begin_popup_modal('Play motion').opened:
+            imgui.text('Are you sure?')
+            if imgui.button('OK'):
+                self.play_cur_motion()
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button('Cancel'):
+                imgui.close_current_popup()
+            imgui.end_popup()
+
+    def play_cur_motion(self):
+        print("Playing (2 sec delay)")
+        # panda.teaching_mode(False) #
+        time.sleep(2.0)
+        motion = self.get_cur_motion()
+        if not motion:
+            print('No motion')
+
+        print('Playing')
+        for step in motion['steps']:
+            if step['kind'] == 'q':
+                panda.move_to_joint_position(np.array(step['q']))
+            elif step['kind'] == 'grip':
+                mm = step['mm']
+
+                if not state.grasped:
+                    gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04)
+                    state.grasped = True
+
+            elif step['kind'] == 'ungrip':
+
+                if state.grasped:
+                    gripper.stop()
+                    gripper.move(100.0/1000, 0.2)
+                    state.grasped = False
+
+        print('Ending')
+
+    def robot_polygon(self, q, viewport):
+        return self.stick.polygon(q,
+                           viewport=viewport,
+                           dist=params.tsm.dist,
+                           rotx=params.tsm.rotx,
+                           roty=params.tsm.roty,
+                           rotz=params.tsm.rotz)
+    
+    def draw_steps(self, pos, size, width):
+        motion = self.get_cur_motion()
+        if not motion:
+            return
+        x, y = pos
+        for i, step in enumerate(motion['steps']):
+            if x + size > width:
+                x = pos[0]
+                y += size
+
+            rect = geom.make_rect(x, y, size, size)
+            rect = geom.scale_rect(rect, 0.95)
+            if i == self.cur_step:
+                stroke(0, 128, 255)
+            else:
+                stroke(60)
+            fill(30, 128)
+            rectangle(rect)
+
+            if step['kind'] == 'q':
+                q = step['q']
+                no_fill()
+                stroke(255)
+                P = self.robot_polygon(q, viewport=rect)
+                polyline(P)
+            elif step['kind'] == 'grip':
+                fill(255, 0, 0)
+                circle(x + size/2, y+size/2, size/4)
+            else:
+                no_fill()
+                stroke(255, 0, 0)
+                circle(x + size/2, y+size/2, size/4)
+
+            x += size
+
+def on_event(event):
+    print(event)
+    if circle_button(event):
+        state.grasped = not state.grasped
+        if state.grasped:
+            print('Grasp')
+            grasp()
+        else:
+            print('Ungrasp')
+            gripper.stop()
+            gripper.move(100.0/1000, 0.2)
+    if cross_button(event):
+        editor.add_joint_step(state.q)
+    if check_button(event):
+        if state.grasped:
+            editor.add_grip_step(params.gripper_mm)
+        else:
+            editor.add_ungrip_step()
+
+def grasp():
+    print('grasping ', params.gripper_mm)
+    gripper.grasp(params.gripper_mm/1000, 0.2, 10, 0.04, 0.04)
+
+
+state = lambda: None
+state.circle = False
+state.grasped = False
+state.q = None
+
+circle_button = FrankaButton('circle')
+cross_button = FrankaButton('cross')
+check_button = FrankaButton('check')
+
+if has_robot:
+    hostname = '172.16.0.2'
+    panda = panda_py.Panda(hostname)
+    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    gripper = libfranka.Gripper(hostname)
+    desk.listen(on_event)
+
+editor = MotionEditor('motions_desk.json')
+
+
+def setup():
+    sketch.set_gui_callback(gui)
+    create_canvas(512, 512) #, 300)
+
+def exit():
+    if has_robot:
+        desk.stop_listen()
+
+def gui():
+    # changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
+    # if changed:
+    #     print("Setting teaching mode to:", state.teaching_mode)
+    #     damping = np.concatenate([np.ones(5)*2, np.ones(2)*0.5])
+    #     panda.teaching_mode(state.teaching_mode, damping)
+
+    editor.gui()
+
+rad = geom.radians
+
+def draw():
+    background(0)
+
+    if 'guiding' in sketch.gui.changed:
+        print('Guiding params')
+        panda.get_robot().set_guiding_mode([params.guiding.x,
+                                            params.guiding.y,
+                                            params.guiding.z,
+                                            params.guiding.rot,
+                                            params.guiding.rot,
+                                            params.guiding.rot], params.guiding.elbow)
+
+    if has_robot:
+        q = panda.get_robot().read_once().q # panda.q
+    else:
+        q = np.zeros(7)
+
+    P = editor.robot_polygon(q, viewport=geom.make_rect(0, 0, width, height))
+    stroke(255)
+    no_fill()
+    polyline(P, closed=False)
+
+    state.q = q
+
+    editor.draw_steps([0, 0], 70, width)
