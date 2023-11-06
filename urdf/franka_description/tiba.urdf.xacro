@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
+  <xacro:arg name="tip_dist_mm" default="52" />
+  <xacro:arg name="tip_height_mm" default="12.5" />
+  
+  <xacro:include filename="./panda_arm.xacro"/>
+  <xacro:include filename="./hand.xacro"/>
+  <xacro:include filename="./holder.xacro"/>
+
+  <!-- box shaped table as base for the 2 Pandas -->
+  <link name="base">
+    <visual>
+      <origin rpy="0 0 0" xyz="0.45 0 -0.499"/>
+      <geometry>
+        <box size="2 1 1"/>
+      </geometry>
+      <material name="White">
+        <color rgba="1.0 1.0 1.0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.45 0 -0.5"/>
+      <geometry>
+        <box size="2 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- arm with gripper -->
+  <xacro:panda_arm arm_id="tiba" connected_to="base"  xyz="0 0 0.0" safety_distance="0.03"/>
+  <xacro:hand arm_id="tiba" rpy="0 0 0" connected_to="tiba_link8" safety_distance="0.03"/>
+  <xacro:holder arm_id="tiba" connected_to="tiba_hand_tcp" tip_dist_mm="$(arg tip_dist_mm)" tip_height_mm="$(arg tip_height_mm)" safety_distance="0.03"/>
+</robot>

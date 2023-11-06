@@ -2,7 +2,7 @@
 from build123d import *
 from ocp_vscode import *
 import numpy as np
-
+#%%
 def radians( x ):
     return np.pi/180*x
 
@@ -112,6 +112,33 @@ base = Pos(0, 0, 0)*base
 base.color = Color("aliceblue")
 show_all()
 
+#%%
+probe = Part()
+padding = 2
+ph = h/6
+pthickness = thickness/2-padding
+
+phh = h
+probe += Pos(phh/2 - h/2, 0, pthickness/2-thickness/2-padding)*Box(phh+padding*2, w*0.75, pthickness)
+probe -= Pos(phh/2 - h/2, 0, pthickness/2-thickness/2-padding)*Box(phh+padding*2, w*0.25, pthickness)
+
+probe += Pos(ph/2 - h/2, 0, pthickness/2-thickness/2-padding)*Box(ph+padding*2, w+padding*2, pthickness)
+probe += Pos(-ph/2 + h/2, 0, pthickness/2-thickness/2-padding)*Box(ph+padding*2, w+padding*2, pthickness)
+
+flatt = thickness/2+padding
+flath = h*1.7
+probe += Pos(flath/2 + h/2 - padding, 0, flatt/2 - thickness/2 - padding)*Box(flath, w*0.5, flatt)
+probe -= Pos(flath/2 + h/2 + padding*2, 0, flatt/2 - thickness/2)*Box(flath, w*0.35, flatt)
+probe -= Box(h, w, thickness) 
+
+probe.export_stl('probe.stl')
+
+#probe = Pos(0, -40, -20)*probe
+probe.color = Color('MATRABLUE') #[1.0, 0.0, 0.0, 1.0]) #"red")
+
+
+show_all()
+
 # %%
 from polygonsoup import geom, plut
 import matplotlib.pyplot as plt
@@ -121,4 +148,28 @@ theta = radians(30)
 plut.draw_line([0, 0], [-np.cos(theta)*h, -np.sin(theta)*h], 'b')
 plut.stroke_circle([0,0], h, 'k')
 plut.show()
+# %%
+
+
+from polygonsoup import geom, plut
+import matplotlib.pyplot as plt
+from polygonsoup.geom import vec
+plut.figure((5,5))
+rect = geom.make_rect(0, -thickness/2, h, thickness)
+theta = geom.radians(angle)
+plut.stroke_rect(rect, 'r')
+plut.draw_line([-60, 0], [60, 0], 'c', linestyle=':')
+dist = 0
+offset = np.tan(theta)*dist
+penlength = np.cos(theta)*dist
+d = vec(np.cos(theta), np.sin(-theta))
+p = -geom.perp(d)
+print(np.tan(theta)) 
+
+plut.draw_line(p*offset - d*penlength, p*offset + d*penlength, 'k')
+#plut.draw_line([0, 0], [-h, 0], 'r')
+#theta = radians(30)
+#plut.draw_line([0, 0], [-np.cos(theta)*h, -np.sin(theta)*h], 'b')
+#plut.stroke_circle([0,0], h, 'k')
+plut.show(axis=True)
 # %%
