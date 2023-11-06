@@ -5,6 +5,7 @@ from PyLQR.solver import ILQRRecursive
 from PyLQR.sim import KDLRobot
 from PyLQR.utils import primitives, PythonCallbackMessage
 from polygonsoup import utils, plut, geom
+from spatialmath import SE3, SO3, UnitQuaternion
 from tqdm import tqdm, trange
 from importlib import reload
 import sys
@@ -19,29 +20,148 @@ q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973]
 q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
 panda_limits = [q_min_panda, q_max_panda]
 
+def linear_approach(x0, x1, n=0,
+                    angular_approach_step=0.03/10,
+                    pos_approach_step=1.0/1000):
+    pose0 = SE3(*x0[:3])*UnitQuaternion(x0[3:]).SE3()
+    pose1 = SE3(*x1[:3])*UnitQuaternion(x1[3:]).SE3()
+    if n==0:
+        angdist = abs(pose0.angdist(pose1))
+        dist = np.linalg.norm(pose0.t - pose1.t)
+        # Compute approach steps based on distance
+        ang_approach_steps = int(angdist/angular_approach_step)
+        pos_approach_steps = int(dist/pos_approach_step)
+        n = max(ang_approach_steps, pos_approach_steps)
+    # Compute appriach keypoints if necessary
+    if n > 0:
+        approach = pose0.interp(pose1, n)
+        approach = [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in approach]
+        return approach
+    return []
+
+def plan_trajectory(urdf_path,
+                    q0,
+                    trajectory,
+                    batch_size=1000,
+                    dt=0.01,
+                    num_iter=20,
+                    init_phase_length=10,
+                    base_frame='tiba_link0',
+                    tip_frame='tiba_pen_tcp',
+                    r=1e-5,
+                    weights=np.ones(7),
+                    limits=[]):
+    # Load robot (assume zero velocity)
+    dq0 = np.zeros(len(q0))
+    rbt = KDLRobot(urdf_path, base_frame, tip_frame, q0, dq0)
+    print(dir(rbt))
+    # Weight matrix (assume fixed for now)
+    Q = np.diag(weights)
+
+    # Get initial end effector pose
+    x0 = np.concatenate([rbt.get_ee_pos(), rbt.get_ee_orn()])
+    states = []
+
+    # Initial phase (try without interpolating orientation)
+    for t in np.linspace(0, 1, init_phase_length):
+        pos = x0[:3] + (trajectory[0][:3] - x0[:3])*t
+        orn = x0[3:]
+        states.append(np.concatenate([pos, orn]))
+
+    # Append trajectory
+    states = states + list(trajectory)
+
+    num_batches = len(states) // batch_size
+    inds = np.linspace(0, len(states)-1, len(states)).astype(int)
+    if num_batches > 0:
+        # Nb this will not necessarily result in the indicated batch size
+        inds = np.array_split(inds, num_batches)
+    else:
+        inds = [inds]
+    nb_control_vars = len(dq0)
+    Qs = []
+    dQs = []
+    for I in inds:
+        timesteps = list(I - I[0])
+        rbt.set_conf(q0, dq0, True)
+        keypoints = [PosOrnKeypoint(states[ind][:3], states[ind][3:], Q, i) for i, ind in enumerate(I)] #pose, t in zip(states[I], timesteps)]
+        horizon = len(I)
+        cmd_penalties = list(r*np.ones(nb_control_vars))
+
+        print(states[0][3:])
+        print(timesteps)
+        print(len(keypoints))
+        print('creating system')
+        if limits:
+            sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, dt)
+        else:
+            sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, horizon, 1, dt)
+
+        print('created system')
+        planner = ILQRRecursive(sys)
+
+        u0_t = np.zeros(nb_control_vars)
+        u0 = np.tile(u0_t, horizon-1)
+        cb = PythonCallbackMessage()
+        print('Planning batch')
+        try:
+            Qs_batch, _, dQs_batch, _, _ = planner.solve(u0.reshape((-1, nb_control_vars)), num_iter, True, True, cb)
+            print('Done')
+            Qs.append(Qs_batch)
+            dQs.append(dQs_batch)
+            q0 = Qs_batch[-1]
+        except Exception as e:
+            print(e)
+
+    return sum(Qs, []), sum(dQs, [])
+
+
 def plan_trajectory_constant_orientation(urdf_path,
-                                         keypoints,
+                                         from_pose,
+                                         trajectory,
                                          orient,
-                                         timesteps,
+                                         subd,
                                          dt,
                                          q0,
-                                         base_frame,
-                                         tip_frame,
+                                         base_frame='tiba_link0',
+                                         tip_frame='tiba_pen_tcp',
+                                         angular_approach_step=0.03/10,
+                                         pos_approach_step=1.0/1000,
                                          penalty=1e-5,
                                          niter=10,
                                          weights=np.ones(7),
                                          limits=[]):
-    rbt = KDLRobot(urdf, base_frame, tip_frame, q0, np.zeros(len(q0)))
-    if type(timesteps) == int:
-        timesteps = [timesteps*i for i in range(len(keypoints))]
+    # Load robot
+    rbt = KDLRobot(urdf_path, base_frame, tip_frame, q0, np.zeros(len(q0)))
 
+    # Weight matrix
     Qtarget = np.diag(weights)
-    keypoints = [PosOrnKeypoint(p, orient, Qtarget, t) for t, p in zip(timesteps, keypoints)]
+
+    # Find Euclidean and geodesic distance between source pose and first pose in trajectory
+    first_pose = SE3(*trajectory[0]) * UnitQuaternion(orient).SE3()
+    angdist = abs(from_pose.angdist(first_pose))
+    dist = np.linalg.norm(from_pose.t - first_pose.t)
+    # Compute approach steps based on distance
+    ang_approach_steps = int(angdist/angular_approach_step)
+    pos_approach_steps = int(dist/pos_approach_step)
+    approach_steps = max(ang_approach_steps, pos_approach_steps)
+
+    # Compute appriach keypoints if necessary
+    if approach_steps > 0:
+        timesteps = [i for i in range(approach_steps)]
+        approach = from_pose.interp(first_pose, approach_steps)
+        keypoints = [PosOrnKeypoint(pose.t, np.array(UnitQuaternion(pose)), Qtarget, t) for pose, t in zip(approach, timesteps)]
+    else:
+        keypoints = []
+
+    # Compute trajectory
+    timesteps = list(np.cumsum([approach_steps] + [subd for _ in range(len(trajectory))]))
+    keypoints += [PosOrnKeypoint(p, orient, Qtarget, t) for t, p in zip(timesteps, trajectory)]
 
     nb_ctrl_var = len(q0)
     cmd_penalties = list(penalty*np.ones(nb_ctrl_var))
-    horizon = timesteps[-1]+1
-
+    #horizon = timesteps[-1]+1
+    horizon = min(timesteps[-1]+1, 200)
     if limits:
         sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, dt)
     else:
@@ -53,8 +173,9 @@ def plan_trajectory_constant_orientation(urdf_path,
     u0 = np.tile(u0_t, horizon-1)
     cb = PythonCallbackMessage()
 
-    X2,F_X2,U2,K2,k2 = planner.solve(u0.reshape((-1,nb_ctrl_var)), niter, True, True, cb)
-    return X2
+    X2,F_X2,U2,K2,k2 = planner.solve(u0.reshape((-1, nb_ctrl_var)), niter, True, True, cb)
+    print(U2)
+    return X2, U2
 
 def residuals(e, Q, Xh):
     X = np.array([pose.t[:2] for pose in e.fkine(Q.T)])
