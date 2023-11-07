@@ -282,13 +282,16 @@ def setup():
         panda.teaching_mode(False)
 
 def exit():
-    pass
+    if has_robot:
+        panda.teaching_mode(False)
+        desk.stop_listen()
 
 def gui():
     changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
     if changed:
         print("Setting teaching mode to:", state.teaching_mode)
-        panda.teaching_mode(state.teaching_mode, np.ones(7))
+        damping = np.concatenate([np.ones(5)*10, np.ones(2)*0.5])
+        panda.teaching_mode(state.teaching_mode, damping)
 
     editor.gui()
 

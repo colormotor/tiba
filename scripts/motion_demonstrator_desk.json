@@ -1,0 +1,22 @@
+{
+    "params": {
+        "seed": 5,
+        "gripper_mm": 34.0,
+        "gripper_state": false,
+        "guiding": {
+            "x": true,
+            "y": true,
+            "z": true,
+            "rot": false,
+            "elbow": true
+        },
+        "tsm": {
+            "dist": 4.0,
+            "rotx": 275,
+            "roty": 0,
+            "rotz": 138
+        }
+    },
+    "presets": {},
+    "aux": {}
+}
