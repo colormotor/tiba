@@ -31,6 +31,7 @@ class DynamicVAO:
         self.vao = None
         self.vbos = []
         self.resize(reserve_vertices, reserve_indices)
+        self.num_vertices = 0
 
     def resize(self, reserve_vertices, reserve_indices, update_indices=True):
         self.release(update_indices)
@@ -78,11 +79,15 @@ class DynamicVAO:
         if reserve_vertices > self.reserved_vertices:
             resize = True
 
+        self.num_vertices = reserve_vertices
+
         update_indices = False
         if indices is not None and len(indices) > self.reserved_indices:
             resize = True
             reserve_indices = len(indices)
             update_indices = True
+        if indices is not None:
+            self.num_vertices = len(indices)
 
         if resize:
             self.resize(reserve_vertices, reserve_indices, update_indices)
@@ -94,7 +99,7 @@ class DynamicVAO:
             vbo.write(V.copy(order='C').astype(types[fmt]))
 
     def render(self, primitives):
-        self.vao.render(primitives)
+        self.vao.render(primitives, self.num_vertices) #self.reserved_vertices//2)
 
 def local_path(path):
     return os.path.join(os.path.dirname(__file__), path)
@@ -150,8 +155,8 @@ class Renderer:
                                        reserve_vertices=1000,
                                        reserve_indices=1000)
         self.points_vao = DynamicVAO(self.points_prog,
-                                       [("3f", "position"),
-                                        ("1f", "radius")],
+                                       [("3f", "position")],
+                                        #("1f", "radius")],
                                        reserve_vertices=1000)
         self.ctx.enable(mgl.BLEND)
         self.matrix_stack = [np.eye(4)]
@@ -224,10 +229,12 @@ class Renderer:
         self.polyline_vao.render(mgl.LINE_STRIP_ADJACENCY)
 
     def points(self, P, radius):
-        self.points_vao.update([P, np.ones(len(P))*radius])
+        self.points_vao.update([P]) #, np.ones(len(P))*radius])
         prog = self.points_prog
         prog['color'].value = self.cur_color
         prog["viewport"].value = self.size
+        prog['radius'].value = radius*100
         prog["ortho"].write(shader_matrix(self.ortho_projection))
         prog["mvp"].write(shader_matrix(self.mvp))
+        self.ctx.point_size = radius
         self.points_vao.render(mgl.POINTS)
