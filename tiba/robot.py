@@ -72,7 +72,7 @@ class Tiba(Robot):
             [2.1750, 2.1750, 2.1750, 2.1750, 2.6100, 2.6100, 2.6100, 3.0, 3.0]
         )
 
-        self.qr = np.array([0, -0.3, 0, -2.2, 0, 2.0, 0])
+        self.qr = np.array([0, -0.3, 0, -2.2, 0, 2.0, np.pi / 4])
         self.qz = np.zeros(7)
 
         self.addconfiguration("qr", self.qr)
