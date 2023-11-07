@@ -31,6 +31,7 @@ class DynamicVAO:
         self.vao = None
         self.vbos = []
         self.resize(reserve_vertices, reserve_indices)
+        self.num_vertices = 0
 
     def resize(self, reserve_vertices, reserve_indices, update_indices=True):
         self.release(update_indices)
@@ -78,11 +79,15 @@ class DynamicVAO:
         if reserve_vertices > self.reserved_vertices:
             resize = True
 
+        self.num_vertices = reserve_vertices
+
         update_indices = False
         if indices is not None and len(indices) > self.reserved_indices:
             resize = True
             reserve_indices = len(indices)
             update_indices = True
+        if indices is not None:
+            self.num_vertices = len(indices)
 
         if resize:
             self.resize(reserve_vertices, reserve_indices, update_indices)
@@ -94,7 +99,7 @@ class DynamicVAO:
             vbo.write(V.copy(order='C').astype(types[fmt]))
 
     def render(self, primitives):
-        self.vao.render(primitives)
+        self.vao.render(primitives, self.num_vertices) #self.reserved_vertices//2)
 
 def local_path(path):
     return os.path.join(os.path.dirname(__file__), path)
@@ -141,8 +146,11 @@ class Renderer:
                                               fragment_shader=read_local('shaders/polyline.frag'),
                                               geometry_shader=read_local('shaders/polyline.geom'))
 
-        self.points_prog = self.ctx.program(vertex_shader=read_local('shaders/disk.vert'),
-                                              fragment_shader=read_local('shaders/disk.frag'))
+        # self.points_prog = self.ctx.program(vertex_shader=read_local('shaders/disk.vert'),
+        #                                       fragment_shader=read_local('shaders/disk.frag'))
+
+        self.points_prog = self.ctx.program(vertex_shader=read_local('shaders/points.vert'),
+                                            fragment_shader=read_local('shaders/points.frag'))
 
 
         self.polyline_vao = DynamicVAO(self.polyline_prog,
@@ -150,10 +158,12 @@ class Renderer:
                                        reserve_vertices=1000,
                                        reserve_indices=1000)
         self.points_vao = DynamicVAO(self.points_prog,
-                                       [("3f", "position"),
-                                        ("1f", "radius")],
-                                       reserve_vertices=1000)
+                                       [("3f", "position")],
+                                        #("1f", "radius")],
+                                       reserve_vertices=1000,
+                                       reserve_indices=1000)
         self.ctx.enable(mgl.BLEND)
+        self.ctx.disable(mgl.DEPTH_TEST)
         self.matrix_stack = [np.eye(4)]
 
     def __del__(self):
@@ -162,7 +172,7 @@ class Renderer:
         self.polyline_prog.release()
 
     def line_width(self, width):
-        self.ctx.line_width = width
+        self._line_width = width #ctx.line_width = width
 
     def clear(self, *args):
         self.ctx.clear(*get_color(*args))
@@ -171,7 +181,7 @@ class Renderer:
         self.cur_color = get_color(*args)
 
     def viewport(self, width, height):
-        self.size = [width, height]
+        self.ctx.viewport = (0, 0, width, height) #size = [width, height]
         self.ortho_projection = geom.ortho(-width/2, width/2, -height/2, height/2, 0.5, -0.5)
         self.matrix_stack = [np.eye(4)]
 
@@ -213,8 +223,8 @@ class Renderer:
 
         prog = self.polyline_prog
 
-        prog["linewidth"].value = self.ctx.line_width
-        prog["viewport"].value = self.size
+        prog["linewidth"].value = self._line_width
+        prog["viewport"].value = self.ctx.viewport[2:] #size
         prog["miter_limit"].value = -1.0
         prog['color'].value = self.cur_color
         prog["antialias"].value = 1.4
@@ -224,10 +234,23 @@ class Renderer:
         self.polyline_vao.render(mgl.LINE_STRIP_ADJACENCY)
 
     def points(self, P, radius):
-        self.points_vao.update([P, np.ones(len(P))*radius])
+        #print(self.ctx.viewport)
+        # self.ctx.disable(mgl.DEPTH_TEST)
+        self.ctx.enable(mgl.PROGRAM_POINT_SIZE)
+        self.points_vao.update([P], list(range(len(P)))) #, np.ones(len(P))*radius])
         prog = self.points_prog
         prog['color'].value = self.cur_color
-        prog["viewport"].value = self.size
-        prog["ortho"].write(shader_matrix(self.ortho_projection))
+        prog['radius'].value = radius
         prog["mvp"].write(shader_matrix(self.mvp))
         self.points_vao.render(mgl.POINTS)
+
+    # def points(self, P, radius):
+    #     self.points_vao.update([P]) #, np.ones(len(P))*radius])
+    #     prog = self.points_prog
+    #     prog['color'].value = self.cur_color
+    #     prog["viewport"].value = self.size
+    #     prog['radius'].value = radius*100
+    #     prog["ortho"].write(shader_matrix(self.ortho_projection))
+    #     prog["mvp"].write(shader_matrix(self.mvp))
+    #     self.ctx.point_size = radius
+    #     self.points_vao.render(mgl.POINTS)

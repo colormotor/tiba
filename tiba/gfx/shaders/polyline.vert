@@ -15,5 +15,5 @@ void main()
     v_linewidth = linewidth;
     v_miter_limit = miter_limit;
     vec4 pos = mvp*vec4(position, 1.0);
-    gl_Position = vec4((pos.xy / pos.w)*viewport, 0.0, 1.0);
+    gl_Position = vec4((pos.xy / pos.w)*viewport*0.5, 0.0, 1.0);
 }

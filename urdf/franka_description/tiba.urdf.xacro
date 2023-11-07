@@ -28,6 +28,6 @@
 
   <!-- arm with gripper -->
   <xacro:panda_arm arm_id="tiba" connected_to="base"  xyz="0 0 0.0" safety_distance="0.03"/>
-  <xacro:hand arm_id="tiba" rpy="0 0 0" connected_to="tiba_link8" safety_distance="0.03"/>
+  <xacro:hand arm_id="tiba" rpy="0 0 ${-pi/4}" connected_to="tiba_link8" safety_distance="0.03"/>
   <xacro:holder arm_id="tiba" connected_to="tiba_hand_tcp" tip_dist_mm="$(arg tip_dist_mm)" tip_height_mm="$(arg tip_height_mm)" safety_distance="0.03"/>
 </robot>
