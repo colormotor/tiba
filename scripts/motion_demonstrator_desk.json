@@ -10,11 +10,18 @@
             "rot": false,
             "elbow": true
         },
+        "drawing": {
+            "plane_angle": 30,
+            "plane_dist": 0.453000009059906,
+            "plane_height": 0.30000001192092896,
+            "plane_offset": 0.01600000075995922
+        },
         "tsm": {
-            "dist": 4.0,
+            "dist": 1.059000015258789,
+            "voffset": -0.2590000033378601,
             "rotx": 275,
             "roty": 0,
-            "rotz": 138
+            "rotz": 44
         }
     },
     "presets": {},

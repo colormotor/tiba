@@ -165,9 +165,10 @@ class SketchView3d:
     def points(self, P, radius=2):
         self.sketch.canvas.no_stroke()
         self.sketch.canvas.fill(self.cur_color)
-        P = geom.view_3d(P, self.mv, self.proj, viewport=self.viewport, pointcloud=True, clip=True)[0]
-        for p in P:
-            self.sketch.canvas.circle(p, radius)
+        P = geom.view_3d(P, self.mv, self.proj, viewport=self.viewport, pointcloud=True, clip=True)
+        if P:
+            for p in P[0]:
+                self.sketch.canvas.circle(p, radius)
 
     def robot(self, rob):
         T = rob.fkine_all(rob.q)

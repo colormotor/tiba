@@ -8,7 +8,10 @@ from polygonsoup import utils, plut, geom
 from spatialmath import SE3, SO3, UnitQuaternion
 from tqdm import tqdm, trange
 from importlib import reload
-import sys
+import os, sys
+
+from spatialmath.base import trnorm
+import roboticstoolbox as rtb
 
 reload(utils)
 
@@ -355,3 +358,138 @@ def linear_approach_2d(e, q, p, n):
     t = np.linspace(0, 1, n)
     x0 = e.fkine(q).t[:2]
     return np.array([x0 + (p-x0)*tt for tt in t])
+
+class DrawingPad:
+    def __init__(self, path='pad.pkl'):
+        self.path = os.path.expanduser(path)
+        self.frame = np.eye(4)
+        self.offset = 0.0
+        self.box = None
+        self.points = []
+
+    def clear(self):
+        self.points.clear()
+        self.save()
+
+    def add_point(self, p):
+        p = np.array(p)
+        for q in self.points:
+            if np.linalg.norm(p - q) < 3e-3:
+                print('Redundant point!')
+                return
+        self.points.append(p)
+        self.save()
+
+    def save(self):
+        utils.save_pkl(self.points, self.path)
+
+    def load(self):
+        try:
+            self.points = utils.load_pkl(self.path)
+        except FileNotFoundError as e:
+            print(e)
+
+    def is_valid(self):
+        return len(self.points) > 3 and self.box is not None
+
+    def update(self, P=None):
+        # Compute frame
+        if P is not None:
+            self.points = P
+
+        if len(self.points) < 4:
+            return
+
+        U, S, mu = principal_components(self.points)
+        frame = np.eye(4)
+        frame[:3,:3] = U
+        frame[:3, 3] = mu
+        frame[:3, :3] = orthonormalize_xy(U, np.eye(3))
+        self.frame = frame
+
+        # Compute bounding box for sample points
+        self.box = compute_frame_aligned_xy_box(self.points, self.frame)
+
+    def get_pen_orientation(self, robot, q):
+        z = self.frame[:3,2]
+        tcp_frame = robot.pen_tcp_frame(q)
+        tcp_frame = align_frame_z(tcp_frame, -z)
+        return np.array(UnitQuaternion(SE3(tcp_frame)))
+
+    def fit_trajectory(self, P, padding=100):
+        return fit_to_frame_box(P, self.box, self.frame, padding, offset=self.offset)
+
+    def draw(self, v3d):
+        v3d.frame(self.frame, 0.5)
+        if self.is_valid():
+            v3d.color(0, 0.4, 1.0, 1.0)
+            draw_frame_aligned_xy_box(v3d, self.box, self.frame)
+            v3d.color(0, 0.4, 1.0, 0.5)
+            draw_frame_aligned_xy_box(v3d, self.box, self.frame, self.offset)
+        if len(self.points):
+            v3d.color(1, 0, 0, 0.4)
+            v3d.points(self.points, 6)
+
+def principal_components(X, resolve_signs=False):
+    mu = np.mean(X, axis=0)
+    X = (X - mu).T @ (X - mu)
+    U, S, Vt = np.linalg.svd(X.T @ X)
+    idx = S.argsort()[::-1]
+    return U[:,idx], S[idx], mu
+
+
+def orthonormalize_xy(U, A):
+    ''' Compute X and Y axes based on z of U and x, y of A'''
+    V = np.array(U)
+    V[:3,0] = np.cross(A[:,1], U[:,2], )
+    V[:3,1] = np.cross(U[:,2], A[:,0])
+    # Must make sure we don't get precision issues
+    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
+    V[:3,:3] = trnorm(V[:3,:3])
+    return V
+
+def align_frame_z(frame, z):
+    z = np.array(z)
+    frame = np.array(frame)
+    frame[:3,2] = z
+    frame[:3,0] = np.cross(frame[:3,1], z)
+    frame[:3,1] = np.cross(z, frame[:3,0])
+    # Must make sure we don't get precision issues
+    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
+    return trnorm(frame)
+
+
+def compute_frame_aligned_xy_box(P, frame):
+    # Assume we are projecting to XY
+    Q = geom.affine_transform(np.linalg.inv(frame), P)
+    box = geom.bounding_box(Q[:,:2])
+    return box
+
+
+def get_offset_frame(frame, offset):
+    z = frame[:3, 2]
+    oframe = np.array(frame)
+    oframe[:3, 3] = frame[:3, 3] + z*offset
+    return oframe
+
+def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
+    P = geom.close(np.array(geom.rect_corners(box)))
+    P = np.hstack([P, np.zeros([P.shape[0], 1])])
+    frame = get_offset_frame(frame, offset)
+    P = geom.affine_transform(frame, P)
+    v3d.polyline(P)
+
+
+def fit_to_frame_box(P, box, frame, input_padding=10, flip_x=False, flip_y=False, offset=0):
+    ''' Fit a polyline to a box projected to XY plane defined by a given frame'''
+    P = np.array(P)
+    if flip_y:
+        P[:,1] = -P[:,1]
+    if flip_x:
+        P[:,0] = -P[:,0]
+    mat = geom.rect_in_rect_transform(geom.bounding_box(P, input_padding), box)
+    P = geom.affine_transform(mat, P)
+
+    P = np.hstack([P, np.zeros([P.shape[0], 1])])
+    frame = get_offset_frame(frame, offset)
+    return geom.affine_transform(frame, P)
