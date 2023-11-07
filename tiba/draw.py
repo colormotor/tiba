@@ -114,16 +114,37 @@ class SketchView3d:
         self.sketch = sketch
         self.cur_color = (1.0, 1.0, 1.0, 1.0)
         self._line_width = 1.0
+        self.saved_viewport = None
+        self.fov = 60
 
-    def set_view(self, viewport, trans, rot, fov=60):
+    def set_view(self, viewport, trans, rot, fov=None):
         self.viewport = [np.array(viewport[0]),
                          np.array(viewport[1])]
         width, height = geom.rect_size(self.viewport)
+        if fov is not None:
+            self.fov = fov
+        self.proj = geom.perspective(geom.radians(self.fov), width/height)
         self.mv = geom.trans_3d(trans) @ (geom.rotx_3d(rot[0]) @
                                           geom.roty_3d(rot[1]) @
                                           geom.rotz_3d(rot[2]))
-        self.proj = geom.perspective(geom.radians(fov), width/height)
 
+    def canvas(self):
+        return self.sketch.canvas
+
+    def save_viewport(self):
+        self.saved_viewport = self.viewport
+
+    def set_viewport(self, viewport):
+        self.viewport = [np.array(viewport[0]),
+                         np.array(viewport[1])]
+        width, height = geom.rect_size(self.viewport)
+        self.proj = geom.perspective(geom.radians(self.fov), width/height)
+
+    def restore_viewport(self):
+        if self.saved_viewport is None:
+            print('No saved viewport')
+            return
+        self.set_viewport(self.saved_viewport)
 
     def polyline(self, P, closed=False):
         self.sketch.canvas.stroke_weight(self._line_width)

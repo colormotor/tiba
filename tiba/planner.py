@@ -24,8 +24,8 @@ q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
 panda_limits = [q_min_panda, q_max_panda]
 
 def linear_approach(x0, x1, n=0,
-                    angular_approach_step=0.03/10,
-                    pos_approach_step=1.0/1000):
+                    angular_approach_step=(np.pi/4)/1000,
+                    pos_approach_step=0.1/1000):
     pose0 = SE3(*x0[:3])*UnitQuaternion(x0[3:]).SE3()
     pose1 = SE3(*x1[:3])*UnitQuaternion(x1[3:]).SE3()
     if n==0:
@@ -41,6 +41,14 @@ def linear_approach(x0, x1, n=0,
         approach = [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in approach]
         return approach
     return []
+
+def batch_indices(n, batch_size):
+    n_batches = n//batch_size + 1
+    if n_batches < 2:
+        return [np.array(list(range(n)))]
+    I = np.linspace(0, n-1, n_batches).astype(int)
+    return [np.array(list(range(a, b+1))) for a, b in zip(I, I[1:])]
+
 
 def plan_trajectory(urdf_path,
                     q0,
@@ -74,6 +82,7 @@ def plan_trajectory(urdf_path,
     # Append trajectory
     states = states + list(trajectory)
 
+    # inds = batch_indices(len(states), batch_size) #
     num_batches = len(states) // batch_size
     inds = np.linspace(0, len(states)-1, len(states)).astype(int)
     if num_batches > 0:
@@ -84,6 +93,7 @@ def plan_trajectory(urdf_path,
     nb_control_vars = len(dq0)
     Qs = []
     dQs = []
+    u0_t = np.zeros(nb_control_vars)
     for I in inds:
         timesteps = list(I - I[0])
         rbt.set_conf(q0, dq0, True)
@@ -103,7 +113,7 @@ def plan_trajectory(urdf_path,
         print('created system')
         planner = ILQRRecursive(sys)
 
-        u0_t = np.zeros(nb_control_vars)
+
         u0 = np.tile(u0_t, horizon-1)
         cb = PythonCallbackMessage()
         print('Planning batch')
@@ -111,8 +121,11 @@ def plan_trajectory(urdf_path,
             Qs_batch, _, dQs_batch, _, _ = planner.solve(u0.reshape((-1, nb_control_vars)), num_iter, True, True, cb)
             print('Done')
             Qs.append(Qs_batch)
+            #dQs_batch = np.cumsum(ddQs_batch, axis=0)
             dQs.append(dQs_batch)
             q0 = Qs_batch[-1]
+            dq0 = dQs_batch[-1]
+            u0_t = np.array(dQs_batch[-1])
         except Exception as e:
             print(e)
 
@@ -427,8 +440,10 @@ class DrawingPad:
             v3d.color(0, 0.4, 1.0, 0.5)
             draw_frame_aligned_xy_box(v3d, self.box, self.frame, self.offset)
         if len(self.points):
-            v3d.color(1, 0, 0, 0.4)
-            v3d.points(self.points, 6)
+            v3d.color(1, 0, 0, 0.3)
+            v3d.points(self.points, 12)
+            v3d.color(1, 0, 0, 1)
+            v3d.points(self.points, 4)
 
 def principal_components(X, resolve_signs=False):
     mu = np.mean(X, axis=0)

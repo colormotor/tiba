@@ -5,6 +5,7 @@ panda_loader = importlib.find_loader('panda_py')
 if panda_loader is not None:
     import panda_py
     from panda_py import libfranka
+    from panda_py import controllers
     has_robot = True
 else:
     has_robot = False
@@ -127,7 +128,7 @@ class MotionEditor:
         if self.get_cur_motion():
             imgui.same_line()
             if imgui.button("Delete"):
-                self.motions.pop(names[self.cur_motion] + ':')
+                self.motions.pop(names[self.cur_motion])
                 self.save_motions()
 
             imgui.text(names[self.cur_motion])
@@ -156,7 +157,6 @@ class MotionEditor:
             return
         motion['steps'].append({'kind':'ungrip'})
         self.save_motions()
-
 
     def motion_gui(self, key):
         motion = self.motions[key]
@@ -210,19 +210,14 @@ class MotionEditor:
 
         print('Ending')
 
-    def robot_polygon(self, q, viewport):
-        return self.stick.polygon(q,
-                           viewport=viewport,
-                           dist=params.tsm.dist,
-                           rotx=params.tsm.rotx,
-                           roty=params.tsm.roty,
-                           rotz=params.tsm.rotz)
-    
-    def draw_steps(self, pos, size, width):
+    def draw_steps(self, v3d, robot, pos, size, width):
         motion = self.get_cur_motion()
         if not motion:
             return
         x, y = pos
+        c = v3d.canvas()
+        v3d.save_viewport()
+
         for i, step in enumerate(motion['steps']):
             if x + size > width:
                 x = pos[0]
@@ -231,27 +226,29 @@ class MotionEditor:
             rect = geom.make_rect(x, y, size, size)
             rect = geom.scale_rect(rect, 0.95)
             if i == self.cur_step:
-                stroke(0, 128, 255)
+                c.stroke(0, 0.5, 1.0)
             else:
-                stroke(60)
-            fill(30, 128)
-            rectangle(rect)
-
+                c.stroke(0.5)
+            c.fill(0.2, 0.5)
+            c.rectangle(rect)
+            v3d.set_viewport(rect)
             if step['kind'] == 'q':
                 q = step['q']
-                no_fill()
-                stroke(255)
-                P = self.robot_polygon(q, viewport=rect)
-                polyline(P)
+                P, penP = robot.robot_polylines(q)
+                v3d.color(0, 0.5, 1.0)
+                v3d.line_width(3)
+                v3d.polyline(P)
+                v3d.polyline(penP)
             elif step['kind'] == 'grip':
-                fill(255, 0, 0)
-                circle(x + size/2, y+size/2, size/4)
+                c.fill(1, 0, 0)
+                c.circle(x + size/2, y+size/2, size/4)
             else:
-                no_fill()
-                stroke(255, 0, 0)
-                circle(x + size/2, y+size/2, size/4)
+                c.no_fill()
+                c.stroke(1, 0, 0)
+                c.circle(x + size/2, y+size/2, size/4)
 
             x += size
+        v3d.restore_viewport()
 
 def on_event(event):
     print(event)
@@ -287,7 +284,7 @@ state.grasped = False
 state.q = None
 state.Qs = []
 state.trajectory = []
-state.dt = 0.01
+state.dt = 0.001
 state.plane_calibration = False
 
 circle_button = FrankaButton('circle')
@@ -304,12 +301,12 @@ if has_robot:
 editor = MotionEditor('motions_desk.json')
 
 v3d = SketchView3d(sketch)
-robot = Tiba(48.0, 12.0)
+robot = Tiba(50.5, 12.0)
 robot.q = robot.qr
 pad = planner.DrawingPad('pad.pkl')
 pad.load()
 
-def draw_steps(robot, v3d, Qs, max_steps=200):
+def draw_steps(robot, v3d, Qs, max_steps=150):
     n = min(len(Qs), max_steps)
     I = np.linspace(0, len(Qs)-1, n, dtype=int)
     v3d.color(1, 0.25)
@@ -364,12 +361,17 @@ def gui():
         trajectory = [np.concatenate([pos, state.orientation]) for pos in state.trajectory]
         trajectory = planner.linear_approach(cur_pos, trajectory[0]) + trajectory
         trajectory += planner.linear_approach(trajectory[-1], cur_pos)
-
+        for i in range(100):
+            trajectory.append(np.array(trajectory[-1]))
         state.Qs, state.dQs = planner.plan_trajectory(robot.urdf_file,
                                                       q0,
                                                       trajectory,
                                                       dt=state.dt)
-
+        print('Smoothing velocity')
+        state.dQs = np.array(state.dQs)
+        state.dQs = geom.smoothing_spline(len(state.dQs), state.dQs, smooth_k=20)
+        print("saving")
+        utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
         # state.Qs, state.dQs = planner.plan_trajectory_constant_orientation(robot.urdf_file,
         #                                                         cur_pose,
         #                                                         state.trajectory,
@@ -380,7 +382,7 @@ def gui():
         #                                                         penalty=1e-6)
 
     if state.Qs:
-        if imgui.button('Execute trajectory'):
+        if imgui.button('Simulate trajectory'):
             env = swift.Swift()
             env.launch(realtime=True)
             env.add(robot)
@@ -389,12 +391,44 @@ def gui():
                 #print(dq)
                 robot.q = q
                 env.step(state.dt)
+        if imgui.button("Execute trajectory"):
+            imgui.open_popup('Execute')
+
+        if imgui.begin_popup_modal('Execute').opened:
+            imgui.text('Are you sure?')
+            if imgui.button('OK'):
+                execute_trajectory()
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button('Cancel'):
+                imgui.close_current_popup()
+            imgui.end_popup()
 
     if (not state.plane_calibration):
         editor.gui()
     else:
         if imgui.button('Clear points'):
             pad.clear()
+
+def execute_trajectory():
+    print('2 second delay')
+    time.sleep(2.0)
+    Q = state.Qs
+    dQ = state.dQs
+    print('Moving to initial position')
+    panda.move_to_joint_position(Q[0])
+    i = 0
+    print('Starting control loop')
+    ctrl = controllers.JointPosition()
+    panda.start_controller(ctrl)
+    with panda.create_context(frequency=1000) as ctx:
+        while ctx.ok() and i < len(dQ):
+            ctrl.set_control(Q[i], dQ[i])
+            i += 1
+        print('Stopping controller')
+        panda.stop_controller()
+    time.sleep(1.0)
+    print('Finished motion')
 
 rad = geom.radians
 
@@ -424,7 +458,7 @@ def draw():
     state.q = q
     draw_robot(q)
     no_fill()
-    editor.draw_steps([0, 0], 70, width)
+    editor.draw_steps(v3d, robot, [0, 0], 70, width)
 
 
 def draw_robot(q):
@@ -469,12 +503,13 @@ def draw_robot(q):
 
     no_fill()
     stroke(1)
-    Q = np.random.uniform(-100, 100, (17, 2)) + 100
-    trajectory = linear_trajectory(Q, 1)
-    trajectory = []
-    r = 100
-    for t in np.linspace(0, np.pi*2, 220):
-        trajectory.append([np.cos(t)*r + r, np.sin(t)*r + r])
+    Q = np.random.uniform(-100, 100, (15, 2)) + 100
+    trajectory = geom.bspline((len(Q)-1)*900, Q)
+    #trajectory = linear_trajectory(Q, 1)
+    # trajectory = []
+    # r = 100
+    # for t in np.linspace(0, np.pi*2, 3000):
+    #     trajectory.append([np.cos(t)*r + r, np.sin(t)*r + r])
 
     polyline(trajectory)
 

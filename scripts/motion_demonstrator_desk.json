@@ -1,27 +1,27 @@
 {
     "params": {
-        "seed": 5,
+        "seed": 24,
         "gripper_mm": 34.0,
         "gripper_state": false,
         "guiding": {
             "x": true,
             "y": true,
             "z": true,
-            "rot": false,
+            "rot": true,
             "elbow": true
         },
         "drawing": {
             "plane_angle": 30,
             "plane_dist": 0.453000009059906,
             "plane_height": 0.30000001192092896,
-            "plane_offset": 0.01600000075995922
+            "plane_offset": -0.0010000000474974513
         },
         "tsm": {
-            "dist": 1.059000015258789,
-            "voffset": -0.2590000033378601,
-            "rotx": 275,
+            "dist": 1.1180000305175781,
+            "voffset": -0.42399999499320984,
+            "rotx": 284,
             "roty": 0,
-            "rotz": 44
+            "rotz": 121
         }
     },
     "presets": {},
