@@ -507,6 +507,7 @@ def draw_robot(q):
     v3d.line_width(6)
     v3d.polyline(P)
 
+    v3d.line_width(2.0)
     penframe = robot.pen_frame(q)
     v3d.frame(penframe, alpha=0.9, scale=0.05)
     v3d.frame(robot.pen_tcp_frame(q))

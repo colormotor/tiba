@@ -155,6 +155,16 @@ class SketchView3d:
             if len(P) > 1:
                 self.sketch.canvas.polyline(P, closed=closed)
 
+    def arrow(self, a, b):
+        self.sketch.canvas.stroke_weight(self._line_width)
+        self.sketch.canvas.no_fill()
+        self.sketch.canvas.stroke(self.cur_color)
+        P = np.array([a, b])
+        S = geom.view_3d([P], self.mv, self.proj, viewport=self.viewport)
+        for P in S:
+            if len(P) == 2:
+                self.sketch.canvas.arrow(*P)
+
     def line(self, a, b):
         self.polyline([a, b])
 
@@ -209,12 +219,13 @@ class SketchView3d:
         color = self.cur_color
         colors = [[1, 0, 0, alpha],
                   [0, 1, 0, alpha],
-                  [0, 0, 1, alpha]]
+                  [0, 0.3, 1, alpha]]
         self.sketch.canvas.stroke_weight(self._line_width)
         for i in range(3):
             self.color(colors[i])
+            self.arrow(*segments[i])
             #self.sketch.canvas.stroke(colors[i])
-            self.polyline(segments[i])
+            #self.polyline(segments[i])
         self.color(color)
 
     def box(self, bmin, bmax):

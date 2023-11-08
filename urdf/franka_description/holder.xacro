@@ -44,7 +44,16 @@
         </geometry>
       </visual>
     </link>
-    <link name='${arm_id}_pen_tcp'/>
+    <link name='${arm_id}_pen_tcp'>
+      <visual>
+        <geometry>
+          <sphere radius="0.02"/>
+        </geometry>
+        <material name="tipcolor">
+            <color rgba="1 1 1 1"/>
+        </material>
+      </visual>
+    </link>
     <joint name="${arm_id}_pen_tcp_joint" type="fixed">
       <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 ${length}" /> 
       <parent link="${arm_id}_pen"/>
