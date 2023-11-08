@@ -4,10 +4,10 @@
   <xacro:macro name="holder" params="connected_to:='' arm_id:='panda' rpy:='0 0 0' xyz:='0 0 0' tip_dist_mm:='52' tip_height_mm:='12.5' safety_distance:=0">
     <xacro:property name="theta" value="${pi / 180.0 * 15.0}" />
     <xacro:property name="d0" value="${tip_height_mm/tan(theta)}" />
-    <xacro:property name="dist" value="${d0 + tip_dist_mm}" />
+    <xacro:property name="d" value="${d0 + tip_dist_mm}" />
     
-    <xacro:property name="offset" value="${sin(theta)*dist/1000.0}" />
-    <xacro:property name="length" value="${cos(theta)*dist/1000.0 - d0/(cos(theta)*1000.0)}" />
+    <xacro:property name="offset" value="${sin(theta)*d/1000.0}" />
+    <xacro:property name="length" value="${cos(theta)*d/1000.0 - d0/(cos(theta)*1000.0)}" />
     
     <xacro:unless value="${connected_to == ''}">
       <joint name="${arm_id}_holder_tcp_joint" type="fixed">

@@ -18,9 +18,12 @@ import time
 from importlib import reload
 reload(tiba)
 reload(tiba.draw)
+reload(tiba.robot)
 from tiba.robot import Tiba
 from tiba.draw import View3d, SketchView3d
 from tiba import planner
+import tiba.trajectory_utils as tu
+reload(tu)
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
@@ -46,6 +49,7 @@ params = {'Seed': (5, {'min': 0, 'max': 100}),
           },
           'Tsm': {
               'Dist': (4.0, {'min':0, 'max':10}),
+              'Xoffset': (0.0, {'min':-1, 'max':1}),
               'Voffset': (0.0, {'min':-1, 'max':1}),
               'rotx': (275, {'min':0, 'max':360}),
               'roty': (0, {'min':0, 'max':360}),
@@ -53,7 +57,6 @@ params = {'Seed': (5, {'min': 0, 'max': 100}),
           }
           }
 
-params = sketch.parameters(params)
 
 def random_q():
     return list(np.random.uniform(-np.pi, np.pi, 7))
@@ -300,11 +303,22 @@ if has_robot:
 
 editor = MotionEditor('motions_desk.json')
 
-v3d = SketchView3d(sketch)
-robot = Tiba(50.5, 12.0)
-robot.q = robot.qr
 pad = planner.DrawingPad('pad.pkl')
 pad.load()
+pad.update()
+pad_pose = SE3(pad.frame)
+print(pad_pose)
+print('t: ', pad_pose.t)
+print('rpy: ', pad_pose.rpy())
+print('eul: ', pad_pose.eul())
+
+
+robot = Tiba(50.5, 12.0)
+print(robot.fkine_all(robot.qr))
+print(robot.q)
+print(robot.qr)
+robot.q = robot.qr
+v3d = None
 
 def draw_steps(robot, v3d, Qs, max_steps=150):
     n = min(len(Qs), max_steps)
@@ -339,9 +353,20 @@ def setup():
     create_canvas(700, 600) #, 300)
     set_color_scale(1.0)
 
+    global params, v3d
+    params = sketch.parameters(params)
+    v3d = SketchView3d(sketch)
+
 def exit():
+    print("Exit")
     if has_robot:
         desk.stop_listen()
+
+def rest_trajectory(traj, n):
+    traj = list(traj)
+    for i in range(n):
+        traj.append(np.array(traj[-1]))
+    return traj
 
 def gui():
     # changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
@@ -359,8 +384,9 @@ def gui():
         cur_pos = robot.pen_tcp_pos(robot.q)
         q0 = robot.q
         trajectory = [np.concatenate([pos, state.orientation]) for pos in state.trajectory]
-        trajectory = planner.linear_approach(cur_pos, trajectory[0]) + trajectory
-        trajectory += planner.linear_approach(trajectory[-1], cur_pos)
+
+        trajectory = rest_trajectory(planner.linear_approach(cur_pos, trajectory[0]), 400) + rest_trajectory(trajectory, 300)
+        trajectory += rest_trajectory(planner.linear_approach(trajectory[-1], cur_pos), 400)
         for i in range(100):
             trajectory.append(np.array(trajectory[-1]))
         state.Qs, state.dQs = planner.plan_trajectory(robot.urdf_file,
@@ -448,7 +474,7 @@ def draw():
     if has_robot:
         q = panda.get_robot().read_once().q # panda.q
     else:
-        q = np.zeros(7)
+        q = robot.qr # np.zeros(7)
 
     # P = editor.robot_polygon(q, viewport=geom.make_rect(0, 0, width, height))
     # stroke(255)
@@ -463,7 +489,7 @@ def draw():
 
 def draw_robot(q):
     viewport = geom.make_rect(0, 0, width, height)
-    v3d.set_view(viewport, [0.0, params.tsm.voffset, -params.tsm.dist],
+    v3d.set_view(viewport, [params.tsm.xoffset, params.tsm.voffset, -params.tsm.dist],
                  geom.radians(np.array([params.tsm.rotx, params.tsm.roty, params.tsm.rotz])))
 
     # no_fill()
@@ -503,8 +529,12 @@ def draw_robot(q):
 
     no_fill()
     stroke(1)
-    Q = np.random.uniform(-100, 100, (15, 2)) + 100
-    trajectory = geom.bspline((len(Q)-1)*900, Q)
+    Q = np.vstack([tu.tsp_glyph(5, 40, 100) + 100,
+                   tu.tsp_glyph(4, 40, 100) + 100 + [170, 0]])
+    #Q = np.random.uniform(-100, 100, (6, 2)) + 100
+    #Q = np.vstack([Q[0], Q, Q[-1]])
+    #trajectory = geom.bspline((len(Q)-1)*900, Q)
+    trajectory = tu.smooth_stroke_lqt(Q, isotropy=0.3, sigma=0.8, subsample=70, angle=50)
     #trajectory = linear_trajectory(Q, 1)
     # trajectory = []
     # r = 100
@@ -512,7 +542,9 @@ def draw_robot(q):
     #     trajectory.append([np.cos(t)*r + r, np.sin(t)*r + r])
 
     polyline(trajectory)
-
+    fill(255)
+    no_stroke()
+    text([10, 30], '%d points'%(len(trajectory)))
     if pad.is_valid():
         state.trajectory = pad.fit_trajectory(trajectory, padding=80)
 
@@ -523,3 +555,7 @@ def draw_robot(q):
         #Qs = move_to_pose(robot, dest, 20)
         if state.Qs:
             draw_steps(robot, v3d, state.Qs)
+
+if __name__== '__main__':
+    import py5canvas
+    py5canvas.run()

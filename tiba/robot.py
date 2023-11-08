@@ -54,12 +54,12 @@ class Tiba(Robot):
 
         links, name, urdf_string, urdf_filepath = self.URDF_read(self.urdf_file,
                                                                  tld=path)
-        #print(links)
+        print(links)
         super().__init__(
             links,
             name=name,
             manufacturer="Franka Emika",
-            gripper_links=links[9],
+            gripper_links=links[10],
             urdf_string=urdf_string,
             urdf_filepath=urdf_filepath,
         )
@@ -113,7 +113,7 @@ class Tiba(Robot):
 
 
     def robot_polylines(self, q):
-        T = self.fkine_all(q)[:10]
+        T = self.fkine_all(q)[3:11]
         P = [A.t for A in T]
         P += [self.wrist_frame(q)[:3,3]]
         P += [self.pen_holder_frame(q)[:3,3]]

@@ -9,6 +9,7 @@ from spatialmath import SE3, SO3, UnitQuaternion
 from tqdm import tqdm, trange
 from importlib import reload
 import os, sys
+import pdb
 
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
@@ -53,7 +54,7 @@ def batch_indices(n, batch_size):
 def plan_trajectory(urdf_path,
                     q0,
                     trajectory,
-                    batch_size=1000,
+                    batch_size=10000,
                     dt=0.01,
                     num_iter=20,
                     init_phase_length=10,
@@ -82,14 +83,14 @@ def plan_trajectory(urdf_path,
     # Append trajectory
     states = states + list(trajectory)
 
-    # inds = batch_indices(len(states), batch_size) #
-    num_batches = len(states) // batch_size
-    inds = np.linspace(0, len(states)-1, len(states)).astype(int)
-    if num_batches > 0:
-        # Nb this will not necessarily result in the indicated batch size
-        inds = np.array_split(inds, num_batches)
-    else:
-        inds = [inds]
+    inds = batch_indices(len(states), batch_size) #
+    # num_batches = len(states) // batch_size
+    # inds = np.linspace(0, len(states)-1, len(states)).astype(int)
+    # if num_batches > 0:
+    #     # Nb this will not necessarily result in the indicated batch size
+    #     inds = np.array_split(inds, num_batches)
+    # else:
+    #     inds = [inds]
     nb_control_vars = len(dq0)
     Qs = []
     dQs = []
@@ -495,13 +496,14 @@ def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
     v3d.polyline(P)
 
 
-def fit_to_frame_box(P, box, frame, input_padding=10, flip_x=False, flip_y=False, offset=0):
+def fit_to_frame_box(P, box, frame, input_padding=10, flip_x=False, flip_y=True, offset=0):
     ''' Fit a polyline to a box projected to XY plane defined by a given frame'''
     P = np.array(P)
     if flip_y:
         P[:,1] = -P[:,1]
     if flip_x:
         P[:,0] = -P[:,0]
+    P = geom.affine_transform(geom.rot_2d(geom.radians(-90)), P)
     mat = geom.rect_in_rect_transform(geom.bounding_box(P, input_padding), box)
     P = geom.affine_transform(mat, P)
 

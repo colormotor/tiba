@@ -193,7 +193,7 @@ class SketchView3d:
 
     def robot(self, rob):
         T = rob.fkine_all(rob.q)
-        P = np.array([x.t for x in T])[1:-6]
+        P = np.array([x.t for x in T])[2:-6]
         self.polyline(P)
 
     def frame(self, mat, alpha=1.0, scale=0.1):
