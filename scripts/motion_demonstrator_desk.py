@@ -46,6 +46,7 @@ params = {'Seed': (5, {'min': 0, 'max': 100}),
               'Plane dist' : (0.5, {'min': 0, 'max': 1}),
               'Plane height' : (0.3, {'min': 0, 'max': 1}),
               'Plane offset' : (0.0, {'min': -0.1, 'max': 0.1}),
+              'Padding' : (80, {'min':0.0, 'max':450})
           },
           'Tsm': {
               'Dist': (4.0, {'min':0, 'max':10}),
@@ -287,6 +288,7 @@ state.grasped = False
 state.q = None
 state.Qs = []
 state.trajectory = []
+state.trajectory_2d = None
 state.dt = 0.001
 state.plane_calibration = False
 
@@ -313,7 +315,7 @@ print('rpy: ', pad_pose.rpy())
 print('eul: ', pad_pose.eul())
 
 
-robot = Tiba(50.5, 12.0)
+robot = Tiba(45, 11.5)
 print(robot.fkine_all(robot.qr))
 print(robot.q)
 print(robot.qr)
@@ -336,6 +338,18 @@ def draw_steps(robot, v3d, Qs, max_steps=150):
     v3d.color(1, 0, 0, 0.4)
     v3d.line_width(4)
     v3d.polyline(pts)
+
+def draw_trajectory_2d(P, max_steps=200):
+    n = min(len(P), max_steps)
+    I = np.linspace(0, len(P)-1, n, dtype=int)
+    P = np.array(P)[I]
+    polyline(P)
+
+def draw_trajectory_3d(v3d, P, max_steps=200):
+    n = min(len(P), max_steps)
+    I = np.linspace(0, len(P)-1, n, dtype=int)
+    P = np.array(P)[I]
+    v3d.polyline(P)
 
 def interpolate_poses(p1, p2, t):
     return SE3(p1 + (p2 - p1)*t)
@@ -395,7 +409,7 @@ def gui():
                                                       dt=state.dt)
         print('Smoothing velocity')
         state.dQs = np.array(state.dQs)
-        state.dQs = geom.smoothing_spline(len(state.dQs), state.dQs, smooth_k=20)
+        #state.dQs = geom.smoothing_spline(len(state.dQs), state.dQs, smooth_k=20)
         print("saving")
         utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
         # state.Qs, state.dQs = planner.plan_trajectory_constant_orientation(robot.urdf_file,
@@ -459,6 +473,7 @@ def execute_trajectory():
 rad = geom.radians
 
 def draw():
+
     background(0)
     np.random.seed(params.seed)
 
@@ -470,6 +485,17 @@ def draw():
                                             params.guiding.rot,
                                             params.guiding.rot,
                                             params.guiding.rot], params.guiding.elbow)
+
+
+
+
+    if 'seed' in sketch.gui.changed or state.trajectory_2d is None:
+
+        Q = np.vstack([tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)])
+        #Q = np.random.uniform(-100, 100, (6, 2)) + 100
+        #Q = np.vstack([Q[0], Q, Q[-1]])
+        #trajectory = geom.bspline((len(Q)-1)*900, Q)
+        state.trajectory_2d = tu.smooth_stroke_lqt(Q, isotropy=0.5, sigma=1, subsample=60, angle=50)
 
     if has_robot:
         q = panda.get_robot().read_once().q # panda.q
@@ -530,27 +556,23 @@ def draw_robot(q):
 
     no_fill()
     stroke(1)
-    Q = np.vstack([tu.tsp_glyph(5, 40, 100) + 100,
-                   tu.tsp_glyph(4, 40, 100) + 100 + [170, 0]])
-    #Q = np.random.uniform(-100, 100, (6, 2)) + 100
-    #Q = np.vstack([Q[0], Q, Q[-1]])
-    #trajectory = geom.bspline((len(Q)-1)*900, Q)
-    trajectory = tu.smooth_stroke_lqt(Q, isotropy=0.3, sigma=0.8, subsample=70, angle=50)
+
     #trajectory = linear_trajectory(Q, 1)
     # trajectory = []
     # r = 100
     # for t in np.linspace(0, np.pi*2, 3000):
     #     trajectory.append([np.cos(t)*r + r, np.sin(t)*r + r])
-
-    polyline(trajectory)
+    trajectory = state.trajectory_2d
+    draw_trajectory_2d(trajectory)
     fill(255)
     no_stroke()
     text([10, 30], '%d points'%(len(trajectory)))
     if pad.is_valid():
-        state.trajectory = pad.fit_trajectory(trajectory, padding=80)
+        state.trajectory = pad.fit_trajectory(trajectory, padding=params.drawing.padding)
 
         v3d.color(1.0)
-        v3d.polyline(state.trajectory)
+        draw_trajectory_3d(v3d, state.trajectory)
+        #v3d.polyline(state.trajectory)
 
         #dest = interpolate_poses(SE3(old_frame), SE3(tcp_frame), 0.5)
         #Qs = move_to_pose(robot, dest, 20)
