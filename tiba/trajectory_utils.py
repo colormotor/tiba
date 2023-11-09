@@ -47,3 +47,9 @@ def inverse_path_tsp(P, **kwargs):
     def invdist(a, b):
         return 1.0/(1+distance(a, b))
     return path_tsp(P, invdist, **kwargs)
+
+
+def gauss_motion(a, b, duration, dt):
+    n = int(duration / dt)
+    x = np.linspace(0, 1, n)
+    return a + (b - a)*np.exp(-x**2*10)

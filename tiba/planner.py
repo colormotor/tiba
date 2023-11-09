@@ -380,6 +380,8 @@ class DrawingPad:
         self.offset = 0.0
         self.box = None
         self.points = []
+        self.pos_offset = [0.0, 0.0]
+        self.scale = [1.0, 1.0]
 
     def clear(self):
         self.points.clear()
@@ -423,6 +425,11 @@ class DrawingPad:
 
         # Compute bounding box for sample points
         self.box = compute_frame_aligned_xy_box(self.points, self.frame)
+        scaled_box = [np.array(self.box[0]), np.array(self.box[1])]
+        size = geom.rect_size(self.box)
+        scaled_box[0] += self.pos_offset*size
+        scaled_box[1] = scaled_box[0] + self.scale*size
+        self.scaled_box = scaled_box
 
     def get_pen_orientation(self, robot, q):
         z = self.frame[:3,2]
