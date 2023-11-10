@@ -99,6 +99,10 @@ class Tiba(Robot):
         frame = self.fkine(q, start='base', end='tiba_link8')
         return np.array(frame)
 
+    def hand_frame(self, q):
+        frame = self.fkine(q, start='base', end='tiba_hand_tcp')
+        return np.array(frame)
+
     def pen_holder_frame(self, q):
         frame = self.fkine(q, start='base', end='tiba_holder')
         return np.array(frame)
@@ -111,6 +115,10 @@ class Tiba(Robot):
         frame = self.fkine(q, start='base', end='tiba_pen_tcp')
         return np.array(frame)
 
+    def pen_tcp_frame_to_hand(self, frame):
+        hand_to_pen = self.fkine(self.qr, start='tiba_holder', end='tiba_pen_tcp')
+        frame = frame @ np.linalg.inv(hand_to_pen)
+        return frame
 
     def robot_polylines(self, q):
         T = self.fkine_all(q)[3:11]

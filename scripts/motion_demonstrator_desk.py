@@ -472,7 +472,8 @@ def gui():
 
     if imgui.button('Align tip down'):
         frame_down = planner.align_frame_z(robot.pen_tcp_frame(robot.q), np.array([0, 0, -1]))
-        panda.move_to_cartesian_pose(frame_down)
+        hand_frame_comp = robot.pen_tcp_frame_to_hand(frame_down)
+        panda.move_to_cartesian_pose(hand_frame_comp)
 
     if (not state.plane_calibration):
         editor.gui()
@@ -613,8 +614,15 @@ def draw_gl():
     v3d.frame(penframe, alpha=0.9, scale=0.05)
     v3d.frame(robot.pen_tcp_frame(q))
 
+    hand_frame_real = robot.hand_frame(q)
+    v3d.frame(hand_frame_real, scale=0.2)
+    hand_frame_comp = robot.pen_tcp_frame_to_hand(robot.pen_tcp_frame(q))
+    # v3d.frame(hand_frame_comp, scale=0.3)
+
     penframe_down = planner.align_frame_z(robot.pen_tcp_frame(q), np.array([0, 0, -1]))
-    v3d.frame(penframe_down, alpha=0.4)
+    v3d.frame(penframe_down, alpha=0.7)
+    hand_frame_comp = robot.pen_tcp_frame_to_hand(penframe_down)
+    v3d.frame(hand_frame_comp, scale=0.3)
 
     v3d.line_width(9)
     v3d.color(1, 0.4)
