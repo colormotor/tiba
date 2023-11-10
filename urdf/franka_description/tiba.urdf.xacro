@@ -2,6 +2,8 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
   <xacro:arg name="tip_dist_mm" default="52" />
   <xacro:arg name="tip_height_mm" default="12.5" />
+  <xacro:arg name="angle" default="15.0" />
+
   <xacro:arg name="pad_rot" default="3.12860235 0.55984526 -3.12626225"/>
   <xacro:arg name="pad_pos" default="0.62997504 -0.03598302 0.24842281"/>
 
@@ -57,5 +59,5 @@
   <!-- arm with gripper -->
   <xacro:panda_arm arm_id="tiba" connected_to="base"  xyz="0 0 0.0" safety_distance="0.03"/>
   <xacro:hand arm_id="tiba" rpy="0 0 ${-pi/4}" connected_to="tiba_link8" safety_distance="0.03"/>
-  <xacro:holder arm_id="tiba" connected_to="tiba_hand_tcp" tip_dist_mm="$(arg tip_dist_mm)" tip_height_mm="$(arg tip_height_mm)" safety_distance="0.03"/>
+  <xacro:holder arm_id="tiba" connected_to="tiba_hand_tcp" tip_dist_mm="$(arg tip_dist_mm)" tip_height_mm="$(arg tip_height_mm)" angle="$(arg angle)" safety_distance="0.03"/>
 </robot>

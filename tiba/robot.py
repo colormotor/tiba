@@ -43,14 +43,15 @@ class Tiba(Robot):
     Class that imports a Arduino Braccio URDF model
     """
 
-    def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5):
+    def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5, angle=15.0):
         path = os.path.join(os.path.dirname(__file__), '../urdf/franka_description/')
         self.xacro_file = os.path.join(path, 'tiba.urdf.xacro')
         self.urdf_file = os.path.join(path, 'tiba_test.urdf')
         xacro_to_urdf(self.xacro_file, self.urdf_file,
                       tld=path,
                       mappings={'tip_dist_mm': tip_dist_mm,
-                                'tip_height_mm': tip_height_mm})
+                                'tip_height_mm': tip_height_mm,
+                                'angle': angle})
 
         links, name, urdf_string, urdf_filepath = self.URDF_read(self.urdf_file,
                                                                  tld=path)
