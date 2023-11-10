@@ -25,7 +25,7 @@ q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
 panda_limits = [q_min_panda, q_max_panda]
 
 def linear_approach(x0, x1, n=0,
-                    angular_approach_step=(np.pi/4)/1000,
+                    angular_approach_step=(np.pi/5)/1000,
                     pos_approach_step=0.1/1000):
     pose0 = SE3(*x0[:3])*UnitQuaternion(x0[3:]).SE3()
     pose1 = SE3(*x1[:3])*UnitQuaternion(x1[3:]).SE3()
@@ -503,6 +503,10 @@ def orthonormalize_xy(z, A):
     # https://github.com/bdaiinstitute/spatialmath-python/issues/28
     V[:3,:3] = trnorm(V[:3,:3])
     return V
+
+def frame_to_pos(frame):
+    pose = SE3(frame)
+    return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
 
 def align_frame_z(frame, z):
     z = np.array(z)
