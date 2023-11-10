@@ -9,7 +9,8 @@ if panda_loader is not None:
     has_robot = True
 else:
     has_robot = False
-
+from motor import lqt
+reload(lqt)
 import imgui
 from polygonsoup import utils, geom
 import roboticstoolbox as rtb
@@ -20,9 +21,11 @@ reload(tiba)
 reload(tiba.draw)
 reload(tiba.robot)
 from tiba.robot import Tiba
-from tiba.draw import View3d, SketchView3d
+from tiba.draw import View3d, SketchView3d, GlView3d
 from tiba import planner
 import tiba.trajectory_utils as tu
+import tiba.gfx.renderer as renderer
+reload(renderer)
 reload(tu)
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
@@ -30,6 +33,7 @@ import roboticstoolbox as rtb
 reload(planner)
 from collections import namedtuple
 import swift
+
 
 params = {'Seed': (5, {'min': 0, 'max': 100}),
           'Gripper mm': (34.0, {'min': 2, 'max': 200}),
@@ -56,7 +60,7 @@ params = {'Seed': (5, {'min': 0, 'max': 100}),
               'roty': (0, {'min':0, 'max':360}),
               'rotz': (138, {'min':0, 'max':360}),
           }
-          }
+}
 
 
 def random_q():
@@ -215,6 +219,8 @@ class MotionEditor:
         print('Ending')
 
     def draw_steps(self, v3d, robot, pos, size, width):
+        v3d = v3d.sketch_view
+
         motion = self.get_cur_motion()
         if not motion:
             return
@@ -291,6 +297,8 @@ state.trajectory = []
 state.trajectory_2d = None
 state.dt = 0.001
 state.plane_calibration = False
+state.steps = []
+state.tcp_pos = np.zeros(7)
 
 circle_button = FrankaButton('circle')
 cross_button = FrankaButton('cross')
@@ -321,6 +329,20 @@ print(robot.q)
 print(robot.qr)
 robot.q = robot.qr
 v3d = None
+
+def compute_steps(robot, Qs, max_steps=200):
+    n = min(len(Qs), max_steps)
+    I = np.linspace(0, len(Qs)-1, n, dtype=int)
+    polylines = []
+    points = []
+
+    for i in I:
+        q = Qs[i]
+        P, penP = robot.robot_polylines(q)
+        polylines.append(P)
+        polylines.append(penP)
+        points.append(robot.pen_tcp_pos(q)[:3])
+    return polylines, points
 
 def draw_steps(robot, v3d, Qs, max_steps=150):
     n = min(len(Qs), max_steps)
@@ -369,7 +391,7 @@ def setup():
 
     global params, v3d
     params = sketch.parameters(params)
-    v3d = SketchView3d(sketch)
+    v3d = GlView3d(sketch) #SketchView3d(sketch)
 
 def exit():
     print("Exit")
@@ -389,7 +411,8 @@ def gui():
     #     damping = np.concatenate([np.ones(5)*2, np.ones(2)*0.5])
     #     panda.teaching_mode(state.teaching_mode, damping)
     changed, state.plane_calibration = imgui.checkbox("Plane calibration", state.plane_calibration)
-
+    if imgui.button('Print tcp pos'):
+        print(state.tcp_pos[:3])
     if imgui.button('Launch Swift'):
         env = swift.Swift()
         env.launch(realtime=True)
@@ -412,6 +435,9 @@ def gui():
         #state.dQs = geom.smoothing_spline(len(state.dQs), state.dQs, smooth_k=20)
         print("saving")
         utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
+        print('Computing forward kinematics')
+        state.steps, state.fk_points = compute_steps(robot, state.Qs)
+
         # state.Qs, state.dQs = planner.plan_trajectory_constant_orientation(robot.urdf_file,
         #                                                         cur_pose,
         #                                                         state.trajectory,
@@ -444,6 +470,10 @@ def gui():
                 imgui.close_current_popup()
             imgui.end_popup()
 
+    if imgui.button('Align tip down'):
+        frame_down = planner.align_frame_z(robot.pen_tcp_frame(robot.q), np.array([0, 0, -1]))
+        panda.move_to_cartesian_pose(frame_down)
+
     if (not state.plane_calibration):
         editor.gui()
     else:
@@ -472,10 +502,20 @@ def execute_trajectory():
 
 rad = geom.radians
 
+def params_changed(*args):
+    for key in args:
+        if key in sketch.gui.changed:
+            return True
+    return False
+
 def draw():
 
     background(0)
     np.random.seed(params.seed)
+
+    # Udate drawing pad data
+    pad.offset = params.drawing.plane_offset
+    pad.update()
 
     if 'guiding' in sketch.gui.changed:
         print('Guiding params')
@@ -489,13 +529,28 @@ def draw():
 
 
 
-    if 'seed' in sketch.gui.changed or state.trajectory_2d is None:
-
+    if params_changed('seed', 'drawing.padding') or state.trajectory_2d is None:
+        print('update')
         Q = np.vstack([tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)])
+        Q3d = pad.fit_to_box(Q, padding=params.drawing.padding)
+        #Q3d = pad.fit_trajectory(Q, padding=params.drawing.padding)
+        # Add penups
+        up = np.array([0, 0, 1])
+        Q3d = np.vstack([Q3d[0] + up*(50/1000),
+                         Q3d,
+                         Q3d[-1] + up*(50/1000)])
+
+        variability = [1, 0.7] + [1 for _ in Q[1:-1]] + [0.3, 1]
+        state.trajectory = tu.smooth_stroke_lqt(Q3d, isotropy=0.5, sigma=1, subsample=100, subd=5, angle=50,
+                                                variability=variability)
+        utils.save_pkl(state.trajectory, 'traj.pkl')
+        state.trajectory = pad.fit_to_frame(state.trajectory)
+
         #Q = np.random.uniform(-100, 100, (6, 2)) + 100
         #Q = np.vstack([Q[0], Q, Q[-1]])
         #trajectory = geom.bspline((len(Q)-1)*900, Q)
-        state.trajectory_2d = tu.smooth_stroke_lqt(Q, isotropy=0.5, sigma=1, subsample=60, angle=50)
+        state.trajectory_2d = Q
+        #state.trajectory_2d = tu.smooth_stroke_lqt(Q, isotropy=0.5, sigma=1, subsample=60, angle=50)
 
     if has_robot:
         q = panda.get_robot().read_once().q # panda.q
@@ -508,12 +563,29 @@ def draw():
     # polyline(P, closed=False)
     robot.q = q
     state.q = q
-    draw_robot(q)
+    state.tcp_pos = robot.pen_tcp_pos(q)
+    no_fill()
+    stroke(1, 0.5)
+    trajectory = state.trajectory_2d
+    draw_trajectory_2d(trajectory)
+    fill(255)
+    no_stroke()
+    text_size(20)
+    text([10, 30], '%d points'%(len(state.trajectory)))
+    text([10, 60], 'tcp pos: [%f %f %f]'%(state.tcp_pos[0], state.tcp_pos[1], state.tcp_pos[2]))
+
+    #v3d.sketch_view.text([2,0,0], "2m")
+
+    #draw_robot()
     no_fill()
     editor.draw_steps(v3d, robot, [0, 0], 70, width)
 
+def draw_gl():
 
-def draw_robot(q):
+    #return
+
+    q = robot.q
+    #def draw_robot(q):
     viewport = geom.make_rect(0, 0, width, height)
     v3d.set_view(viewport, [params.tsm.xoffset, params.tsm.voffset, -params.tsm.dist],
                  geom.radians(np.array([params.tsm.rotx, params.tsm.roty, params.tsm.rotz])))
@@ -528,47 +600,41 @@ def draw_robot(q):
 
     v3d.frame(np.eye(4), alpha=0.4, scale=0.5)
 
+
     P, penP = robot.robot_polylines(q)
     v3d.color(0, 0.5, 1.0)
     v3d.line_width(6)
     v3d.polyline(P)
+
+    #return
 
     v3d.line_width(2.0)
     penframe = robot.pen_frame(q)
     v3d.frame(penframe, alpha=0.9, scale=0.05)
     v3d.frame(robot.pen_tcp_frame(q))
 
-    v3d.line_width(1)
-    v3d.color(1)
+    penframe_down = planner.align_frame_z(robot.pen_tcp_frame(q), np.array([0, 0, -1]))
+    v3d.frame(penframe_down, alpha=0.4)
+
+    v3d.line_width(9)
+    v3d.color(1, 0.4)
     v3d.polyline(penP)
-
-    v3d.text([2,0,0], "2m")
-
+    v3d.line_width(1)
+    #v3d.sketch_view.text([2,0,0], "2m")
     # P = np.random.uniform(-0.4, 0.4, (100, 3))*[1, 1, 0.01]
     # P = geom.affine_transform(geom.roty_3d(-geom.radians(params.drawing.plane_angle)), P)
     # P = P+[params.drawing.plane_dist, 0, params.drawing.plane_height]
-    #v3d.color(1, 0, 1, 0.5)
-    #v3d.points(P, 2)
-    pad.offset = params.drawing.plane_offset
-    pad.update()
+    # v3d.color(1, 0, 1, 0.5)
+    # v3d.points(P, 2)
+
     pad.draw(v3d)
+    #return
+
     state.orientation = pad.get_pen_orientation(robot, q)
 
-    no_fill()
-    stroke(1)
 
-    #trajectory = linear_trajectory(Q, 1)
-    # trajectory = []
-    # r = 100
-    # for t in np.linspace(0, np.pi*2, 3000):
-    #     trajectory.append([np.cos(t)*r + r, np.sin(t)*r + r])
-    trajectory = state.trajectory_2d
-    draw_trajectory_2d(trajectory)
-    fill(255)
-    no_stroke()
-    text([10, 30], '%d points'%(len(trajectory)))
     if pad.is_valid():
-        state.trajectory = pad.fit_trajectory(trajectory, padding=params.drawing.padding)
+        #state.trajectory = pad.fit_trajectory(trajectory, padding=params.drawing.padding)
 
         v3d.color(1.0)
         draw_trajectory_3d(v3d, state.trajectory)
@@ -577,8 +643,15 @@ def draw_robot(q):
         #dest = interpolate_poses(SE3(old_frame), SE3(tcp_frame), 0.5)
         #Qs = move_to_pose(robot, dest, 20)
         if state.Qs:
-            draw_steps(robot, v3d, state.Qs)
+            v3d.line_width(0.3)
+            v3d.color(1.0, 0.1)
+            v3d.stroke_shape(state.steps)
+            v3d.color(1.0, 0.0, 0.0)
+            v3d.points(state.fk_points)
+            #draw_steps(robot, v3d, state.Qs)
 
+    # Reset viewport
+    v3d.rend.ctx.viewport = (0, 0, sketch.window_width, sketch.window_height)
 if __name__== '__main__':
     import py5canvas
     py5canvas.run()

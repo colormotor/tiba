@@ -20,8 +20,8 @@ def smooth_stroke_lqt(X, only_pos=True, **kwargs):
                           stop_motion=True,
                           isotropy=1,
                           activation_sigma=0.5,
-                          subd=9,
-                          subsample=3)
+                          subd=5,
+                          subsample=100) # Assuming duration of 0.5
     default_params.update(kwargs)
     X = lqt.semitied_lqt(X.T, dim=dim, **default_params)
     if only_pos:

@@ -257,3 +257,142 @@ class SketchView3d:
         pts = geom.view_3d([pos], self.mv, self.proj, viewport=self.viewport, pointcloud=True, clip=True)
         if pts:
             self.sketch.canvas.text(pts[0][0], text, center=center)
+
+class GlView3d:
+    def __init__(self, sketch):
+        from tiba.gfx import renderer
+        self.cur_color = (1.0, 1.0, 1.0, 1.0)
+        self._line_width = 1.0
+        self.saved_viewport = None
+        self.fov = 60
+        self.rend = renderer.Renderer()
+        self.sketch_view = SketchView3d(sketch)
+
+    def set_view(self, viewport, trans, rot, fov=None):
+        self.viewport = [np.array(viewport[0]),
+                         np.array(viewport[1])]
+        width, height = geom.rect_size(self.viewport)
+        if fov is not None:
+            self.fov = fov
+        self.rend.viewport(width, height)
+        self.rend.perspective(self.fov, width, height)
+        self.rend.apply_matrix(geom.trans_3d(trans) @ (geom.rotx_3d(rot[0]) @
+                                          geom.roty_3d(rot[1]) @
+                                          geom.rotz_3d(rot[2])))
+        self.sketch_view.set_view(viewport, trans, rot, fov)
+
+    def save_viewport(self):
+        self.saved_viewport = self.viewport
+
+    def set_viewport(self, viewport):
+        self.viewport = [np.array(viewport[0]),
+                         np.array(viewport[1])]
+        width, height = geom.rect_size(self.viewport)
+        self.proj = geom.perspective(geom.radians(self.fov), width/height)
+
+    def restore_viewport(self):
+        if self.saved_viewport is None:
+            print('No saved viewport')
+            return
+        self.set_viewport(self.saved_viewport)
+
+    def polyline(self, P, closed=False):
+        P = np.array(P)
+        self.rend.stroke(P, closed)
+
+    # def arrow(self, a, b):
+    #     self.sketch.canvas.stroke_weight(self._line_width)
+    #     self.sketch.canvas.no_fill()
+    #     self.sketch.canvas.stroke(self.cur_color)
+    #     P = np.array([a, b])
+    #     S = geom.view_3d([P], self.mv, self.proj, viewport=self.viewport)
+    #     for P in S:
+    #         if len(P) == 2:
+    #             self.sketch.canvas.arrow(*P)
+
+    def line(self, a, b):
+        self.polyline([a, b])
+
+    def stroke_shape(self, S, closed=False):
+        self.rend.stroke_shape(S, closed)
+
+    def xy_grid(self, size, n, z=0):
+        polygons = []
+        for x in np.linspace(-size, size, n):
+            polygons += [[[x, -size, z], [x, size, z]]]
+        for y in np.linspace(-size, size, n):
+            polygons += [[[-size, y, z], [size, y, z]]]
+        self.stroke_shape(polygons, closed=False)
+
+    def line_width(self, width):
+        self._line_width = width
+        self.rend.line_width(width)
+
+    def color(self, *args):
+        self.cur_color = get_color(*args)
+        self.rend.color(self.cur_color)
+
+    def points(self, P, radius=2):
+        self.rend.points(np.array(P), radius)
+
+    def robot(self, rob):
+        T = rob.fkine_all(rob.q)
+        P = np.array([x.t for x in T])[2:-6]
+        self.polyline(P)
+
+    def frame(self, mat, alpha=1.0, scale=0.1):
+        pos = mat[:3, -1]
+        x = mat[:3, 0]*scale
+        y = mat[:3, 1]*scale
+        z = mat[:3, 2]*scale
+        segments = [[pos, pos+x],
+                    [pos, pos+y],
+                    [pos, pos+z]]
+        segments = [np.array(P) for P in segments]
+
+        color = self.cur_color
+        colors = [[1, 0, 0, alpha],
+                  [0, 1, 0, alpha],
+                  [0, 0.3, 1, alpha]]
+        lw = self._line_width
+        self.rend.line_width(self._line_width) #sketch.canvas.stroke_weight(self._line_width)
+        for i in range(3):
+            self.color(colors[i])
+            self.polyline(segments[i])
+            #self.arrow(*segments[i])
+            #self.sketch.canvas.stroke(colors[i])
+            #self.polyline(segments[i])
+        self.color(color)
+        self.line_width(lw)
+
+    def box(self, bmin, bmax):
+        #self.sketch.canvas.stroke_weight(self._line_width)
+        #self.sketch.canvas.no_fill()
+        #self.sketch.canvas.stroke(self.cur_color)
+        S = []
+        S.append(np.array([[min[0], min[1], min[2]],
+                           [max[0], min[1], min[2]],
+                           [max[0], max[1], min[2]],
+                           [min[0], max[1], min[2]]]))
+        S.append(np.array([[min[0], min[1], max[2]],
+                           [max[0], min[1], max[2]],
+                           [max[0], max[1], max[2]],
+                           [min[0], max[1], max[2]]]))
+
+
+        self.stroke_shape(S, closed=True)
+
+    def cuboid(self, center, size):
+        center = np.array(center)
+        size = np.array(size)
+
+        bmin = center - size/2
+        bmax = center + size/2
+        self.box(bmin, bmax)
+
+    def text(self, pos, text, center=True):
+        self.sketch.canvas.no_stroke()
+        self.sketch.canvas.fill(self.cur_color)
+        pts = geom.view_3d([pos], self.mv, self.proj, viewport=self.viewport, pointcloud=True, clip=True)
+        if pts:
+            self.sketch.canvas.text(pts[0][0], text, center=center)

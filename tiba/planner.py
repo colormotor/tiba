@@ -54,7 +54,7 @@ def batch_indices(n, batch_size):
 def plan_trajectory(urdf_path,
                     q0,
                     trajectory,
-                    batch_size=10000,
+                    batch_size=0,
                     dt=0.01,
                     num_iter=20,
                     init_phase_length=10,
@@ -83,6 +83,12 @@ def plan_trajectory(urdf_path,
     # Append trajectory
     states = states + list(trajectory)
 
+    if batch_size == 0:
+        batch_size = len(states)
+    else:
+        print("Warning! Planning velocity commands for piecewise trajectory")
+        print("Resulting speed may have discontinuities")
+
     inds = batch_indices(len(states), batch_size) #
     # num_batches = len(states) // batch_size
     # inds = np.linspace(0, len(states)-1, len(states)).astype(int)
@@ -102,9 +108,9 @@ def plan_trajectory(urdf_path,
         horizon = len(I)
         cmd_penalties = list(r*np.ones(nb_control_vars))
 
-        print(states[0][3:])
-        print(timesteps)
-        print(len(keypoints))
+        # print(states[0][3:])
+        # print(timesteps)
+        # print(len(keypoints))
         print('creating system')
         if limits:
             sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, dt)
@@ -191,7 +197,7 @@ def plan_trajectory_constant_orientation(urdf_path,
     cb = PythonCallbackMessage()
 
     X2,F_X2,U2,K2,k2 = planner.solve(u0.reshape((-1, nb_ctrl_var)), niter, True, True, cb)
-    print(U2)
+    #print(U2)
     return X2, U2
 
 def residuals(e, Q, Xh):
@@ -408,6 +414,9 @@ class DrawingPad:
     def is_valid(self):
         return len(self.points) > 3 and self.box is not None
 
+    def z(self):
+        return self.frame[:3, 2]
+
     def update(self, P=None):
         # Compute frame
         if P is not None:
@@ -420,7 +429,7 @@ class DrawingPad:
         frame = np.eye(4)
         frame[:3,:3] = U
         frame[:3, 3] = mu
-        frame[:3, :3] = orthonormalize_xy(U, np.eye(3))
+        frame[:3, :3] = orthonormalize_xy(U[:3,2], np.eye(3))
         self.frame = frame
 
         # Compute bounding box for sample points
@@ -437,8 +446,21 @@ class DrawingPad:
         tcp_frame = align_frame_z(tcp_frame, -z)
         return np.array(UnitQuaternion(SE3(tcp_frame)))
 
+    def fit_to_box(self, P, padding=0):
+        ''' Fits an input 2d trajectory to the given 2d box'''
+        return fit_to_box_and_augment(P, self.scaled_box, padding)
+
+    def fit_to_frame(self, P, clamp_z=True):
+        ''' Fits a 3d trajectory assumed to lie on the XY plan, to the frame of the drawing pad'''
+        P = np.array(P)
+        if clamp_z:
+            P[:,2] = np.maximum(P[:,2], 0.0)
+        return fit_to_frame(P, self.frame, self.offset)
+
     def fit_trajectory(self, P, padding=100):
-        return fit_to_frame_box(P, self.box, self.frame, padding, offset=self.offset)
+        P = self.fit_to_box(P, padding) #fit_to_box_and_augment(P, self.box, padding)
+        return self.fit_to_frame(P)
+        #return fit_to_frame_box(P, self.box, self.frame, padding, offset=self.offset)
 
     def draw(self, v3d):
         v3d.frame(self.frame, 0.5)
@@ -461,11 +483,22 @@ def principal_components(X, resolve_signs=False):
     return U[:,idx], S[idx], mu
 
 
-def orthonormalize_xy(U, A):
+# def orthonormalize_xy(U, A):
+#     ''' Compute X and Y axes based on z of U and x, y of A'''
+#     V = np.array(U)
+#     V[:3,0] = np.cross(A[:,1], U[:,2], )
+#     V[:3,1] = np.cross(U[:,2], A[:,0])
+#     # Must make sure we don't get precision issues
+#     # https://github.com/bdaiinstitute/spatialmath-python/issues/28
+#     V[:3,:3] = trnorm(V[:3,:3])
+#     return V
+
+def orthonormalize_xy(z, A):
     ''' Compute X and Y axes based on z of U and x, y of A'''
-    V = np.array(U)
-    V[:3,0] = np.cross(A[:,1], U[:,2], )
-    V[:3,1] = np.cross(U[:,2], A[:,0])
+    V = np.array(A)
+    V[:3,2] = z
+    V[:3,0] = np.cross(A[:,1], z)
+    V[:3,1] = np.cross(z, A[:,0])
     # Must make sure we don't get precision issues
     # https://github.com/bdaiinstitute/spatialmath-python/issues/28
     V[:3,:3] = trnorm(V[:3,:3])
@@ -481,13 +514,11 @@ def align_frame_z(frame, z):
     # https://github.com/bdaiinstitute/spatialmath-python/issues/28
     return trnorm(frame)
 
-
 def compute_frame_aligned_xy_box(P, frame):
     # Assume we are projecting to XY
     Q = geom.affine_transform(np.linalg.inv(frame), P)
     box = geom.bounding_box(Q[:,:2])
     return box
-
 
 def get_offset_frame(frame, offset):
     z = frame[:3, 2]
@@ -503,8 +534,7 @@ def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
     v3d.polyline(P)
 
 
-def fit_to_frame_box(P, box, frame, input_padding=10, flip_x=False, flip_y=True, offset=0):
-    ''' Fit a polyline to a box projected to XY plane defined by a given frame'''
+def fit_to_box_and_augment(P, box, input_padding=10, flip_x=False, flip_y=True):
     P = np.array(P)
     if flip_y:
         P[:,1] = -P[:,1]
@@ -513,7 +543,10 @@ def fit_to_frame_box(P, box, frame, input_padding=10, flip_x=False, flip_y=True,
     P = geom.affine_transform(geom.rot_2d(geom.radians(-90)), P)
     mat = geom.rect_in_rect_transform(geom.bounding_box(P, input_padding), box)
     P = geom.affine_transform(mat, P)
-
     P = np.hstack([P, np.zeros([P.shape[0], 1])])
+    return P
+
+def fit_to_frame(P, frame, offset=0):
+    ''' Fit a polyline to a box projected to XY plane defined by a given frame'''
     frame = get_offset_frame(frame, offset)
     return geom.affine_transform(frame, P)

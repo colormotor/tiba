@@ -182,7 +182,8 @@ batch = Part()
 batch += part
 batch += probe
 batch += widget
-base.export_stl('batch.stl')
+batch = Pos(-150, 0, 0)*batch
+batch.export_stl('batch.stl')
 show_all()
 # %%
 from polygonsoup import geom, plut

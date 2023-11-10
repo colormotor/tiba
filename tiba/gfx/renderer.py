@@ -4,6 +4,7 @@ import numpy as np
 import numbers
 import os
 from polygonsoup import geom
+import pdb
 
 def is_number(x):
     return isinstance(x, numbers.Number)
@@ -38,13 +39,10 @@ class DynamicVAO:
 
         self.reserved_vertices = reserve_vertices
         self.reserved_indices = reserve_indices
-        print('resize')
         self.vbos = []
 
         for fmt, name in self.attributes:
             size = sizes[fmt]
-            print(size)
-            print(reserve_vertices)
             buffer_size = reserve_vertices * size
             vbo = self.prog.ctx.buffer(reserve=buffer_size, dynamic=True)
             self.vbos.append(vbo)
@@ -52,6 +50,7 @@ class DynamicVAO:
         if update_indices:
             if reserve_indices:
                 buffer_size = reserve_indices * self.index_size
+                # print("Reserving indices", reserve_indices, self.index_size, buffer_size)
                 ibo = self.prog.ctx.buffer(reserve=buffer_size, dynamic=True)
                 self.ibo = ibo
             else:
@@ -60,7 +59,8 @@ class DynamicVAO:
         self.vao = self.prog.ctx.vertex_array(self.prog,
                                               [(vbo, fmt, name) for vbo, (fmt, name)
                                                in zip(self.vbos, self.attributes)],
-                                              index_buffer=self.ibo)
+                                              index_buffer=self.ibo,
+                                              skip_errors=False)
 
 
     def release(self, release_indices=True):
@@ -90,6 +90,9 @@ class DynamicVAO:
             self.num_vertices = len(indices)
 
         if resize:
+            # print(('resize:', reserve_vertices, reserve_indices, update_indices))
+            # if indices is not None:
+            #     print(len(indices))
             self.resize(reserve_vertices, reserve_indices, update_indices)
 
         if indices is not None:
@@ -142,9 +145,13 @@ class Renderer:
         self.cur_color = (1.0, 1.0, 1.0, 1.0)
         self.line_width(1.0)
 
-        self.polyline_prog = self.ctx.program(vertex_shader=read_local('shaders/polyline.vert'),
-                                              fragment_shader=read_local('shaders/polyline.frag'),
-                                              geometry_shader=read_local('shaders/polyline.geom'))
+        # self.polyline_prog = self.ctx.program(vertex_shader=read_local('shaders/polyline.vert'),
+        #                                       fragment_shader=read_local('shaders/polyline.frag'),
+        #                                       geometry_shader=read_local('shaders/polyline.geom'))
+
+        self.polyline_prog = self.ctx.program(vertex_shader=read_local('shaders/lines.vert'),
+                                              fragment_shader=read_local('shaders/lines.frag'),
+                                              geometry_shader=read_local('shaders/lines.geom'))
 
         # self.points_prog = self.ctx.program(vertex_shader=read_local('shaders/disk.vert'),
         #                                       fragment_shader=read_local('shaders/disk.frag'))
@@ -204,34 +211,52 @@ class Renderer:
         self.matrix_stack[-1] = self.matrix_stack[-1] @ m
         self.mvp = self.mp @ self.matrix_stack[-1]
 
+    def stroke_shape(self, shape, closed=False):
+        k = 0
+        indices = []
+        for P in shape:
+            I = [[k+i, k+i+1] for i in range(len(P)-1)]
+            if closed:
+                I.append([k+len(P)-1, k])
+            k += len(P)
+            indices += I
+        P = np.vstack(shape)
+        I = sum(indices, [])
+        self.polyline_vao.update([P], I)
+
+        prog = self.polyline_prog
+        prog["linewidth"].value = self._line_width*0.5
+        prog["featherWidth"].value = 1.0
+        prog['color'].value = self.cur_color
+        # prog['textureMatrix0'].write(shader_matrix(np.eye(4)))
+        prog["mvp"].write(shader_matrix(self.mvp))
+        prog["viewport"].value = self.ctx.viewport[2:]
+        prog["viewOffset"].value = self.ctx.viewport[:2]
+        #print('error pre:' , self.ctx.error)
+        #pdb.set_trace()
+        self.polyline_vao.render(mgl.LINES)
+
     def stroke(self, P, closed=False):
-        I = np.arange(len(P) + 2) - 1
-        I[0], I[-1] = 0, len(P) - 1
 
+        I = [[i, i+1] for i in range(len(P)-1)]
         if closed:
-            if np.allclose(P[0], P[1]):
-                I = np.arange(len(P) + 2) - 1
-                I[0], I[-1] = 0, len(P) - 1
-            else:
-                I = np.arange(len(P) + 3) - 1
-                I[0], I[-2], I[-1] = len(P) - 1, 0, 1
-        else:
-            I = np.arange(len(P) + 2) - 1
-            I[0], I[-1] = 0, len(P) - 1
+            I.append([len(P)-1, 0])
 
+        I = sum(I, [])
         self.polyline_vao.update([P], I)
 
         prog = self.polyline_prog
 
-        prog["linewidth"].value = self._line_width
-        prog["viewport"].value = self.ctx.viewport[2:] #size
-        prog["miter_limit"].value = -1.0
+        prog["linewidth"].value = self._line_width*0.5
+        prog["featherWidth"].value = 1.0
         prog['color'].value = self.cur_color
-        prog["antialias"].value = 1.4
-        prog["projection"].write(shader_matrix(self.ortho_projection))
+        # prog['textureMatrix0'].write(shader_matrix(np.eye(4)))
         prog["mvp"].write(shader_matrix(self.mvp))
-
-        self.polyline_vao.render(mgl.LINE_STRIP_ADJACENCY)
+        prog["viewport"].value = self.ctx.viewport[2:]
+        prog["viewOffset"].value = self.ctx.viewport[:2]
+        #print('error pre:' , self.ctx.error)
+        #pdb.set_trace()
+        self.polyline_vao.render(mgl.LINES)
 
     def points(self, P, radius):
         #print(self.ctx.viewport)
