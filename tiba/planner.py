@@ -13,8 +13,11 @@ import pdb
 
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
+from . import trajectory_utils as tu
+from .config import config as cfg
 
 reload(utils)
+reload(tu)
 
 q_min_braccio = [0.0, 0.262, 0.0, 0.0, 0.0]
 q_max_braccio = [np.pi, 2.879, np.pi, np.pi, np.pi]
@@ -24,24 +27,6 @@ q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973]
 q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
 panda_limits = [q_min_panda, q_max_panda]
 
-def linear_approach(x0, x1, n=0,
-                    angular_approach_step=(np.pi/5)/1000,
-                    pos_approach_step=0.1/1000):
-    pose0 = SE3(*x0[:3])*UnitQuaternion(x0[3:]).SE3()
-    pose1 = SE3(*x1[:3])*UnitQuaternion(x1[3:]).SE3()
-    if n==0:
-        angdist = abs(pose0.angdist(pose1))
-        dist = np.linalg.norm(pose0.t - pose1.t)
-        # Compute approach steps based on distance
-        ang_approach_steps = int(angdist/angular_approach_step)
-        pos_approach_steps = int(dist/pos_approach_step)
-        n = max(ang_approach_steps, pos_approach_steps)
-    # Compute appriach keypoints if necessary
-    if n > 0:
-        approach = pose0.interp(pose1, n)
-        approach = [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in approach]
-        return approach
-    return []
 
 def batch_indices(n, batch_size):
     n_batches = n//batch_size + 1
@@ -50,12 +35,13 @@ def batch_indices(n, batch_size):
     I = np.linspace(0, n-1, n_batches).astype(int)
     return [np.array(list(range(a, b+1))) for a, b in zip(I, I[1:])]
 
+def check_limits(q):
+    return np.all(q >= q_min_panda, axis=0) and np.all(q <= q_max_panda, axis=0)
 
 def plan_trajectory(urdf_path,
                     q0,
                     trajectory,
                     batch_size=0,
-                    dt=0.01,
                     num_iter=20,
                     init_phase_length=10,
                     base_frame='tiba_link0',
@@ -113,9 +99,9 @@ def plan_trajectory(urdf_path,
         # print(len(keypoints))
         print('creating system')
         if limits:
-            sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, dt)
+            sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, cfg.dt)
         else:
-            sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, horizon, 1, dt)
+            sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, horizon, 1, cfg.dt)
 
         print('created system')
         planner = ILQRRecursive(sys)
@@ -136,6 +122,11 @@ def plan_trajectory(urdf_path,
         except Exception as e:
             print(e)
 
+    # if not check_limits(Qs):
+    #     print("Warning! Some joint limits were exceeded")
+    #     print("Returning empty joint trajectory")
+    #     return [], []
+
     return sum(Qs, []), sum(dQs, [])
 
 
@@ -144,7 +135,6 @@ def plan_trajectory_constant_orientation(urdf_path,
                                          trajectory,
                                          orient,
                                          subd,
-                                         dt,
                                          q0,
                                          base_frame='tiba_link0',
                                          tip_frame='tiba_pen_tcp',
@@ -186,9 +176,9 @@ def plan_trajectory_constant_orientation(urdf_path,
     #horizon = timesteps[-1]+1
     horizon = min(timesteps[-1]+1, 200)
     if limits:
-        sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, dt)
+        sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, cfg.dt)
     else:
-        sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, horizon, 1, dt)
+        sys = PosOrnPlannerSys(rbt, keypoints, cmd_penalties, horizon, 1, cfg.dt)
 
     planner = ILQRRecursive(sys)
 

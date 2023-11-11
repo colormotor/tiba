@@ -34,6 +34,7 @@ reload(planner)
 from collections import namedtuple
 import swift
 
+np.set_printoptions(suppress=True)
 
 params = {'Seed': (5, {'min': 0, 'max': 100}),
           'Gripper mm': (34.0, {'min': 2, 'max': 200}),
@@ -400,32 +401,14 @@ def exit():
     if has_robot:
         desk.stop_listen()
 
-def rest_trajectory(traj, n):
-    traj = list(traj)
-    for i in range(n):
-        traj.append(np.array(traj[-1]))
-    return traj
-
 def plan_trajectory(q0, trajectory):
      state.Qs, state.dQs = planner.plan_trajectory(robot.urdf_file,
                                                       q0,
-                                                      trajectory,
-                                                      dt=state.dt)
+                                                      trajectory)
+
      utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
      state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
-def horizontal_xy_circle_mm(frame, radius_mm, speed=100):
-    pos = np.array(planner.frame_to_pos(frame))
-    pos, orn = pos[:3], pos[3:]
-
-    n = int((np.pi*2*radius_mm)/(speed*state.dt))
-    print('horz circle with %d steps'%n)
-    radius = radius_mm / 1000
-    print(radius)
-    pts = [pos + [np.cos(t)*radius, np.sin(t)*radius, 0] for t in np.linspace(0, np.pi*2, 800)]
-    return [np.concatenate([pos, orn]) for pos in pts]
-    #print(pts[0:10])
-    #return pts
 
 def gui():
     # changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
@@ -440,37 +423,34 @@ def gui():
         env = swift.Swift()
         env.launch(realtime=True)
         env.add(robot)
+
     if imgui.button('Plan trajectory'):
         cur_pos = robot.pen_tcp_pos(robot.q)
-        q0 = robot.q
         trajectory = [np.concatenate([pos, state.orientation]) for pos in state.trajectory]
-
-        trajectory = rest_trajectory(planner.linear_approach(cur_pos, trajectory[0]), 400) + rest_trajectory(trajectory, 300)
-        trajectory += rest_trajectory(planner.linear_approach(trajectory[-1], cur_pos), 400)
-        for i in range(100):
-            trajectory.append(np.array(trajectory[-1]))
+        trajectory = tu.append_rest(trajectory, 0.5)
+        trajectory = tu.approach_inout(cur_pos, trajectory)
+        trajectory = tu.append_rest(trajectory, 0.5)
 
         plan_trajectory(robot.q, trajectory)
-        # state.Qs, state.dQs = planner.plan_trajectory(robot.urdf_file,
-        #                                               q0,
-        #                                               trajectory,
-        #                                               dt=state.dt)
-        # print('Smoothing velocity')
-        # state.dQs = np.array(state.dQs)
-        # #state.dQs = geom.smoothing_spline(len(state.dQs), state.dQs, smooth_k=20)
-        # print("saving")
-        # utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
-        # print('Computing forward kinematics')
-        # state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
-        # state.Qs, state.dQs = planner.plan_trajectory_constant_orientation(robot.urdf_file,
-        #                                                         cur_pose,
-        #                                                         state.trajectory,
-        #                                                         state.orientation,
-        #                                                         14,
-        #                                                         state.dt,
-        #                                                         q0,
-        #                                                         penalty=1e-6)
+    if imgui.button('Align tip down'):
+        cur_frame = robot.pen_tcp_frame(robot.q)
+        dest_frame = planner.align_frame_z(cur_frame, np.array([0, 0, -1]))
+
+        trajectory = tu.append_rest(tu.gauss_approach(cur_frame,
+                                                      dest_frame), 0.5)
+        plan_trajectory(robot.q, trajectory)
+        print(list(state.Qs[-1]))
+
+    imgui.same_line()
+    if imgui.button('Circle'):
+        cur_frame = robot.pen_tcp_frame(robot.q)
+        dest_frame = planner.align_frame_z(cur_frame, np.array([0, 0, -1]))
+        dest_frame[0,3] -= 0.1 # = planner.align_frame_y(dest_frame, np.array([0, 1, 0]))
+        trajectory = tu.approach_inout(cur_frame,
+            tu.xy_circles_mm(dest_frame, 15, 1.0, 4, ease_duration=1.0))
+
+        plan_trajectory(robot.q, trajectory)
 
     if state.Qs:
         if imgui.button('Simulate trajectory'):
@@ -494,32 +474,6 @@ def gui():
             if imgui.button('Cancel'):
                 imgui.close_current_popup()
             imgui.end_popup()
-
-    if imgui.button('Align tip down'):
-        cur_frame = robot.pen_tcp_frame(robot.q)
-        dest_frame = planner.align_frame_z(cur_frame, np.array([0, 0, -1]))
-        q0 = robot.q
-        trajectory = rest_trajectory(planner.linear_approach(planner.frame_to_pos(cur_frame),
-                                                             planner.frame_to_pos(dest_frame)), 400)
-        plan_trajectory(robot.q, trajectory)
-
-    if imgui.button('Circle'):
-        cur_frame = robot.pen_tcp_frame(robot.q)
-        trajectory = rest_trajectory(horizontal_xy_circle_mm(cur_frame, 15, speed=100), 400)
-        trajectory = rest_trajectory(planner.linear_approach(planner.frame_to_pos(cur_frame),
-                                                             trajectory[0]), 100) + trajectory
-
-        plan_trajectory(robot.q, trajectory)
-        # state.Qs, state.dQs = planner.plan_trajectory(robot.urdf_file,
-        #                                               q0,
-        #                                               trajectory,
-        #                                               dt=state.dt)
-        # #
-        # state.steps, state.fk_points = compute_steps(robot, state.Qs)
-
-        # frame_down = planner.align_frame_z(robot.pen_tcp_frame(robot.q), np.array([0, 0, -1]))
-        # hand_frame_comp = robot.pen_tcp_frame_to_hand(frame_down)
-        # panda.move_to_pose(hand_frame_comp)
 
     if (not state.plane_calibration):
         editor.gui()
@@ -602,7 +556,11 @@ def draw():
     if has_robot:
         q = panda.get_robot().read_once().q # panda.q
     else:
+        #q = np.array([ 4.92532656e-01, -7.48877953e-17,  3.28054421e-01, -0.00000000e+00,
+        #               1.00000000e+00, -1.01393826e-17,  0.00000000e+00])
         q = robot.qr # np.zeros(7)
+        #q= [-2.3774395283420826e-18, -0.2143006546605322, -8.871243762606449e-17, -2.088158222442138, 1.1696396786270597e-16, 1.8738575677821137, 0.7853981633974482]
+
 
 
     # P = editor.robot_polygon(q, viewport=geom.make_rect(0, 0, width, height))
