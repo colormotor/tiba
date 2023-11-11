@@ -45,6 +45,8 @@ def insert_rest(traj, duration):
         return traj
     return [np.array(traj[0])]*n + traj
 
+def rest_inout(traj, duration):
+    return insert_rest(append_rest(traj, duration), duration)
 
 # Trajectory generators
 def xy_circles_mm(pose, radius_mm, cycle_duration, cycles=1, ease_duration=0.5, easing=2):

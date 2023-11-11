@@ -324,7 +324,6 @@ print('rpy: ', pad_pose.rpy())
 print('eul: ', pad_pose.eul())
 
 
-
 #robot = Tiba(45, 11.5) # Molotow
 robot = Tiba(60, 0, 0)
 print(robot.fkine_all(robot.qr))
@@ -409,6 +408,13 @@ def plan_trajectory(q0, trajectory):
      utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
      state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
+def plan_trajectories(q0, trajectories, rest=0.5):
+    ilqr = planner.iLQRPlannerVelocity(robot.urdf_file,
+                                          q0)
+    state.Qs, state.dQs = ilqr.plan(trajectories, rest=rest)
+    utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
+    state.steps, state.fk_points = compute_steps(robot, state.Qs)
+
 
 def gui():
     # changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
@@ -427,11 +433,15 @@ def gui():
     if imgui.button('Plan trajectory'):
         cur_pos = robot.pen_tcp_pos(robot.q)
         trajectory = [np.concatenate([pos, state.orientation]) for pos in state.trajectory]
-        trajectory = tu.append_rest(trajectory, 0.5)
-        trajectory = tu.approach_inout(cur_pos, trajectory)
-        trajectory = tu.append_rest(trajectory, 0.5)
 
-        plan_trajectory(robot.q, trajectory)
+        # trajectory = tu.append_rest(trajectory, 0.5)
+        # trajectory = tu.approach_inout(cur_pos, trajectory)
+        # trajectory = tu.append_rest(trajectory, 0.5)
+
+        trajectories = [trajectory,
+                        tu.gauss_approach(trajectory[-1], cur_pos)]
+        plan_trajectories(robot.q, trajectories)
+        #plan_trajectories(robot.q, trajectory)
 
     if imgui.button('Align tip down'):
         cur_frame = robot.pen_tcp_frame(robot.q)
@@ -439,7 +449,7 @@ def gui():
 
         trajectory = tu.append_rest(tu.gauss_approach(cur_frame,
                                                       dest_frame), 0.5)
-        plan_trajectory(robot.q, trajectory)
+        plan_trajectories(robot.q, trajectory)
         print(list(state.Qs[-1]))
 
     imgui.same_line()
@@ -450,7 +460,7 @@ def gui():
         trajectory = tu.approach_inout(cur_frame,
             tu.xy_circles_mm(dest_frame, 15, 1.0, 4, ease_duration=1.0))
 
-        plan_trajectory(robot.q, trajectory)
+        plan_trajectories(robot.q, trajectory)
 
     if state.Qs:
         if imgui.button('Simulate trajectory'):

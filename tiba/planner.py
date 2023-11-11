@@ -10,6 +10,7 @@ from tqdm import tqdm, trange
 from importlib import reload
 import os, sys
 import pdb
+import numbers
 
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
@@ -18,6 +19,9 @@ from .config import config as cfg
 
 reload(utils)
 reload(tu)
+
+def is_number(x):
+    return isinstance(x, numbers.Number)
 
 q_min_braccio = [0.0, 0.262, 0.0, 0.0, 0.0]
 q_max_braccio = [np.pi, 2.879, np.pi, np.pi, np.pi]
@@ -37,6 +41,81 @@ def batch_indices(n, batch_size):
 
 def check_limits(q):
     return np.all(q >= q_min_panda, axis=0) and np.all(q <= q_max_panda, axis=0)
+
+class iLQRPlannerVelocity:
+    def __init__(self, urdf_path, q0,
+                 base_frame='tiba_link0',
+                 tip_frame='tiba_pen_tcp'):
+        self.q0 = q0
+        self.dq0 = np.zeros(len(q0))
+        self.rbt = KDLRobot(urdf_path, base_frame, tip_frame, self.q0, self.dq0)
+
+    def plan(self, trajectories,
+             num_iter=20,
+             r=1e-5,
+             weights=np.ones(7),
+             rest = 0.0,
+             limits=[]):
+        if (is_number(trajectories[0][0])): # Single trajectory case
+            trajectories = [trajectories]
+        Q = np.diag(weights)
+        trajectories = list(trajectories)
+        # Add approaches between trajectories
+        x0 = np.concatenate([self.rbt.get_ee_pos(), self.rbt.get_ee_orn()])
+        linked_trajectories = []
+        for traj in trajectories:
+            if len(traj) == 0:
+                continue
+            approach = tu.gauss_approach(x0, traj[0])
+            if approach:
+                linked_trajectories.append(approach)
+            if rest > 0.0:
+                traj = tu.rest_inout(traj, rest)
+            linked_trajectories.append(traj)
+            x0 = traj[-1]
+
+        # Plan
+        nb_control_vars = len(self.dq0)
+        Qs = []
+        dQs = []
+        u0_t = np.zeros(nb_control_vars)
+
+        q0 = self.q0
+        dq0 = self.dq0
+        for tindex, states in enumerate(linked_trajectories):
+            print('Planning trajectory %d of %d'%(tindex+1, len(linked_trajectories)))
+            timesteps = list(range(len(states)))
+            self.rbt.set_conf(q0, dq0, True)
+            keypoints = [PosOrnKeypoint(states[ind][:3], states[ind][3:], Q, i) for i, ind in enumerate(timesteps)]
+            horizon = len(timesteps)
+            cmd_penalties = list(r*np.ones(nb_control_vars))
+
+            if limits:
+                sys = PosOrnPlannerSys(self.rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, cfg.dt)
+            else:
+                sys = PosOrnPlannerSys(self.rbt, keypoints, cmd_penalties, horizon, 1, cfg.dt)
+
+            planner = ILQRRecursive(sys)
+
+            u0 = np.tile(u0_t, horizon-1)
+            cb = PythonCallbackMessage()
+
+            try:
+                Qs_batch, _, dQs_batch, _, _ = planner.solve(
+                    u0.reshape((-1, nb_control_vars)),
+                    num_iter,
+                    True, True, cb)
+
+                Qs.append(Qs_batch)
+                dQs.append(dQs_batch)
+                q0 = Qs_batch[-1]
+                dq0 = dQs_batch[-1]
+                #u0_t = np.array(dQs_batch[-1])
+            except Exception as e:
+                print(e)
+
+        print("Finished planning")
+        return sum(Qs, []), sum(dQs, [])
 
 def plan_trajectory(urdf_path,
                     q0,
