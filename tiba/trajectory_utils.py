@@ -5,7 +5,9 @@ from polygonsoup import geom
 from itertools import combinations
 from scipy.special import erf
 from spatialmath import SE3, SO3, UnitQuaternion
+from spatialmath.base import trnorm
 from .config import config as cfg
+import pdb
 
 def to_pos_orn(pose):
     if (type(pose) == list or
@@ -21,8 +23,9 @@ def to_pose(pose):
     if type(pose) == SE3:
         return pose
     if type(pose) == np.ndarray and len(pose.shape) == 2:
-        return SE3(pose)
-    return SE3(*pose[:3])*UnitQuaternion(pose[3:]).SE3()
+        return SE3(pose).norm()
+    pose = SE3(*pose[:3])*(UnitQuaternion(pose[3:])).SE3()
+    return pose.norm()
 
 
 def append_rest(traj, duration):
@@ -114,8 +117,17 @@ def gauss_approach(x0, x1, duration=0,
     angular_approach_step = angular_approach_speed*cfg.dt
     pos_approach_step = cartesian_approach_speed*cfg.dt
     if duration==0:
-        angdist = abs(pose0.angdist(pose1))
+        print(pose0, pose1)
         dist = np.linalg.norm(pose0.t - pose1.t)
+        print(dist)
+        try:
+            angdist = abs(pose0.angdist(pose1))
+        except ValueError as e:
+            print(e)
+            pdb.set_trace()
+            trnorm(pose0)
+            angdist = abs(pose0.angdist(pose1))
+
         # Compute approach steps based on distance
         ang_approach_steps = int(angdist/angular_approach_step)
         pos_approach_steps = int(dist/pos_approach_step)
@@ -135,6 +147,17 @@ def tsp_glyph(n, r1=0.5, r2=1.0, center=[0,0]):
     I = inverse_path_tsp(P)
     return P[I,:]
 
+
+def smooth_strokes_lqt(S, only_pos=True, penups=True, penup_variability=1.0, **kwargs):
+    trajectories = []
+    for P in S:
+        if penups:
+            variability = [1, penup_variability] + [1 for _ in P[1:-1]] + [penup_variability, 1]
+        else:
+            variability = []
+        trajectory = smooth_stroke_lqt(P, variability=variability, **kwargs)
+        trajectories.append(trajectory)
+    return trajectories
 
 def smooth_stroke_lqt(X, only_pos=True, **kwargs):
     import motor.lqt as lqt

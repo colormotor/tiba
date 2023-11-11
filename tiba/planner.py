@@ -515,16 +515,36 @@ class DrawingPad:
         tcp_frame = align_frame_z(tcp_frame, -z)
         return np.array(UnitQuaternion(SE3(tcp_frame)))
 
-    def fit_to_box(self, P, padding=0):
-        ''' Fits an input 2d trajectory to the given 2d box'''
-        return fit_to_box_and_augment(P, self.scaled_box, padding)
+    def augment_with_pen_orientation(self, trajectories, robot, q):
+        ''' Augment 3d trajectories with a fixed pen orientation perpendicular to pad'''
+        orn = self.get_pen_orientation(robot, q)
+        compound = True
+        if not geom.is_compound(trajectories):
+            trajectories = [trajectories]
+        trajectories = [[np.concatenate([pos, orn]) for pos in trajectory]
+                        for trajectory in trajectories]
+        if not compound:
+            return trajectories[0]
+        return trajectories
 
-    def fit_to_frame(self, P, clamp_z=True):
+    def fit_to_box(self, S, padding=0, penup_mm=50.0):
+        ''' Fits an input 2d trajectory to the given 2d box'''
+        res = fit_to_box_and_augment(S, self.scaled_box, padding, penup_mm=penup_mm)
+        return res
+
+    def fit_to_frame(self, S, clamp_z=True):
         ''' Fits a 3d trajectory assumed to lie on the XY plan, to the frame of the drawing pad'''
-        P = np.array(P)
+        compound = True
+        if not geom.is_compound(S):
+            S = [S]
+        S = [np.array(P) for P in S]
         if clamp_z:
-            P[:,2] = np.maximum(P[:,2], 0.0)
-        return fit_to_frame(P, self.frame, self.offset)
+            for P in S:
+                P[:,2] = np.maximum(P[:,2], 0.0)
+        S = fit_to_frame(S, self.frame, self.offset)
+        if not compound:
+            return S[0]
+        return S
 
     def fit_trajectory(self, P, padding=100):
         P = self.fit_to_box(P, padding) #fit_to_box_and_augment(P, self.box, padding)
@@ -607,17 +627,28 @@ def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
     v3d.polyline(P)
 
 
-def fit_to_box_and_augment(P, box, input_padding=10, flip_x=False, flip_y=True):
-    P = np.array(P)
+def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, penup_mm=0.0):
+    compound = True
+    if not geom.is_compound(S):
+        S = [S]
+    S = [np.array(P) for P in S]
     if flip_y:
-        P[:,1] = -P[:,1]
+        S = [P*[1,-1] for P in S]
     if flip_x:
-        P[:,0] = -P[:,0]
-    P = geom.affine_transform(geom.rot_2d(geom.radians(-90)), P)
-    mat = geom.rect_in_rect_transform(geom.bounding_box(P, input_padding), box)
-    P = geom.affine_transform(mat, P)
-    P = np.hstack([P, np.zeros([P.shape[0], 1])])
-    return P
+        S = [P*[-1,1] for P in S]
+    S = geom.affine_transform(geom.rot_2d(geom.radians(-90)), S)
+    mat = geom.rect_in_rect_transform(geom.bounding_box(S, input_padding), box)
+    S = geom.affine_transform(mat, S)
+    S = [np.hstack([P, np.zeros([P.shape[0], 1])]) for P in S]
+    up = np.array([0, 0, 1])
+    if penup_mm > 0.0:
+        S = [np.vstack([P[0] + up*(penup_mm/1000),
+                        P,
+                        P[-1] + up*(penup_mm/1000)]) for P in S]
+
+    if not compound:
+        return S[0]
+    return S
 
 def fit_to_frame(P, frame, offset=0):
     ''' Fit a polyline to a box projected to XY plane defined by a given frame'''

@@ -12,7 +12,7 @@ else:
 from motor import lqt
 reload(lqt)
 import imgui
-from polygonsoup import utils, geom
+from polygonsoup import utils, geom, svg
 import roboticstoolbox as rtb
 import tiba
 import time
@@ -51,7 +51,8 @@ params = {'Seed': (5, {'min': 0, 'max': 100}),
               'Plane dist' : (0.5, {'min': 0, 'max': 1}),
               'Plane height' : (0.3, {'min': 0, 'max': 1}),
               'Plane offset' : (0.0, {'min': -0.1, 'max': 0.1}),
-              'Padding' : (80, {'min':0.0, 'max':450})
+              'Padding' : (80, {'min':0.0, 'max':450}),
+              'Penup mm': (50, {'min':0.0, 'max':200})
           },
           'Tsm': {
               'Dist': (4.0, {'min':0, 'max':10}),
@@ -294,8 +295,8 @@ state.circle = False
 state.grasped = False
 state.q = None
 state.Qs = []
-state.trajectory = []
-state.trajectory_2d = None
+state.trajectories = []
+state.trajectories_2d = []
 state.dt = 0.001
 state.plane_calibration = False
 state.steps = []
@@ -331,6 +332,7 @@ print(robot.q)
 print(robot.qr)
 robot.q = robot.qr
 v3d = None
+glyphs = []
 
 def compute_steps(robot, Qs, max_steps=200):
     n = min(len(Qs), max_steps)
@@ -395,6 +397,11 @@ def setup():
     params = sketch.parameters(params)
     v3d = GlView3d(sketch) #SketchView3d(sketch)
 
+    global glyphs
+    glyphs = svg.load_svg_polylines('tiba.svg')
+    destrect = geom.make_rect(0, height-300, 400, 300)
+    glyphs = geom.transform_to_rect(glyphs, destrect)
+
 def exit():
     print("Exit")
     if has_robot:
@@ -432,16 +439,14 @@ def gui():
 
     if imgui.button('Plan trajectory'):
         cur_pos = robot.pen_tcp_pos(robot.q)
-        trajectory = [np.concatenate([pos, state.orientation]) for pos in state.trajectory]
+        trajectories = pad.augment_with_pen_orientation(state.trajectories, robot, robot.q)
 
         # trajectory = tu.append_rest(trajectory, 0.5)
         # trajectory = tu.approach_inout(cur_pos, trajectory)
         # trajectory = tu.append_rest(trajectory, 0.5)
 
-        trajectories = [trajectory,
-                        tu.gauss_approach(trajectory[-1], cur_pos)]
+        trajectories += [tu.gauss_approach(trajectories[-1][-1], cur_pos)]
         plan_trajectories(robot.q, trajectories)
-        #plan_trajectories(robot.q, trajectory)
 
     if imgui.button('Align tip down'):
         cur_frame = robot.pen_tcp_frame(robot.q)
@@ -540,28 +545,17 @@ def draw():
 
 
 
-    if params_changed('seed', 'drawing.padding') or state.trajectory_2d is None:
+    if params_changed('seed', 'drawing.padding', 'drawing.penup_mm') or not state.trajectories:
         print('update')
-        Q = np.vstack([tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)])
-        Q3d = pad.fit_to_box(Q, padding=params.drawing.padding)
-        #Q3d = pad.fit_trajectory(Q, padding=params.drawing.padding)
-        # Add penups
-        up = np.array([0, 0, 1])
-        Q3d = np.vstack([Q3d[0] + up*(50/1000),
-                         Q3d,
-                         Q3d[-1] + up*(50/1000)])
+        #glyphs = [tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)]
+        #Q = np.vstack([tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)])
+        glyphs_3d = pad.fit_to_box(glyphs, padding=params.drawing.padding, penup_mm=params.drawing.penup_mm)
+        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d, isotropy=0.5, sigma=1, subsample=100, subd=5, angle=50)
 
-        variability = [1, 0.7] + [1 for _ in Q[1:-1]] + [0.3, 1]
-        state.trajectory = tu.smooth_stroke_lqt(Q3d, isotropy=0.5, sigma=1, subsample=100, subd=5, angle=50,
-                                                variability=variability)
-        utils.save_pkl(state.trajectory, 'traj.pkl')
-        state.trajectory = pad.fit_to_frame(state.trajectory)
+        utils.save_pkl(state.trajectories, 'trajs.pkl')
+        state.trajectories = pad.fit_to_frame(state.trajectories)
 
-        #Q = np.random.uniform(-100, 100, (6, 2)) + 100
-        #Q = np.vstack([Q[0], Q, Q[-1]])
-        #trajectory = geom.bspline((len(Q)-1)*900, Q)
-        state.trajectory_2d = Q
-        #state.trajectory_2d = tu.smooth_stroke_lqt(Q, isotropy=0.5, sigma=1, subsample=60, angle=50)
+        state.trajectories_2d = glyphs
 
     if has_robot:
         q = panda.get_robot().read_once().q # panda.q
@@ -582,12 +576,12 @@ def draw():
     state.tcp_pos = robot.pen_tcp_pos(q)
     no_fill()
     stroke(1, 0.5)
-    trajectory = state.trajectory_2d
-    draw_trajectory_2d(trajectory)
+    for trajectory in state.trajectories_2d:
+        draw_trajectory_2d(trajectory)
     fill(255)
     no_stroke()
     text_size(20)
-    text([10, 30], '%d points'%(len(state.trajectory)))
+    text([10, 30], '%d points'%(np.sum([len(P) for P in state.trajectories])))
     text([10, 60], 'tcp pos: [%f %f %f]'%(state.tcp_pos[0], state.tcp_pos[1], state.tcp_pos[2]))
 
     #v3d.sketch_view.text([2,0,0], "2m")
@@ -662,7 +656,8 @@ def draw_gl():
         #state.trajectory = pad.fit_trajectory(trajectory, padding=params.drawing.padding)
 
         v3d.color(1.0)
-        draw_trajectory_3d(v3d, state.trajectory)
+        for trajectory in state.trajectories:
+            draw_trajectory_3d(v3d, trajectory)
         #v3d.polyline(state.trajectory)
 
         #dest = interpolate_poses(SE3(old_frame), SE3(tcp_frame), 0.5)
