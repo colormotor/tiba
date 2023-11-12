@@ -334,7 +334,7 @@ robot.q = robot.qr
 v3d = None
 glyphs = []
 
-def compute_steps(robot, Qs, max_steps=200):
+def compute_steps(robot, Qs, max_steps=500):
     n = min(len(Qs), max_steps)
     I = np.linspace(0, len(Qs)-1, n, dtype=int)
     polylines = []
@@ -415,7 +415,7 @@ def plan_trajectory(q0, trajectory):
      utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
      state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
-def plan_trajectories(q0, trajectories, rest=0.5):
+def plan_trajectories(q0, trajectories, rest=0.15):
     ilqr = planner.iLQRPlannerVelocity(robot.urdf_file,
                                           q0)
     state.Qs, state.dQs = ilqr.plan(trajectories, rest=rest)
@@ -428,7 +428,7 @@ def gui():
     # if changed:
     #     print("Setting teaching mode to:", state.teaching_mode)
     #     damping = np.concatenate([np.ones(5)*2, np.ones(2)*0.5])
-    #     panda.teaching_mode(state.teaching_mode, dampinnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+    #     panda.teaching_mode(state.teaching_mode, dampin
     changed, state.plane_calibration = imgui.checkbox("Plane calibration", state.plane_calibration)
     if imgui.button('Print tcp pos'):
         print(state.tcp_pos[:3])
@@ -550,7 +550,7 @@ def draw():
         #glyphs = [tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)]
         #Q = np.vstack([tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)])
         glyphs_3d = pad.fit_to_box(glyphs, padding=params.drawing.padding, penup_mm=params.drawing.penup_mm)
-        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d, isotropy=0.5, sigma=1, subsample=100, subd=5, angle=50)
+        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d, isotropy=0.9, sigma=2, subsample=100, subd=5, angle=50)
 
         utils.save_pkl(state.trajectories, 'trajs.pkl')
         state.trajectories = pad.fit_to_frame(state.trajectories)
@@ -598,7 +598,8 @@ def draw_gl():
     #def draw_robot(q):
     viewport = geom.make_rect(0, 0, width, height)
     v3d.set_view(viewport, [params.tsm.xoffset, params.tsm.voffset, -params.tsm.dist],
-                 geom.radians(np.array([params.tsm.rotx, params.tsm.roty, params.tsm.rotz])))
+                 geom.radians(np.array([params.tsm.rotx, params.tsm.roty, params.tsm.rotz])),
+                 fov=40)
 
     # no_fill()
     # stroke(1, 0.2)
@@ -613,7 +614,7 @@ def draw_gl():
 
     P, penP = robot.robot_polylines(q)
     v3d.color(0, 0.5, 1.0)
-    v3d.line_width(6)
+    v3d.line_width(8)
     v3d.polyline(P)
 
     #return
@@ -621,17 +622,17 @@ def draw_gl():
     v3d.line_width(2.0)
     penframe = robot.pen_frame(q)
     v3d.frame(penframe, alpha=0.9, scale=0.05)
-    v3d.frame(robot.pen_tcp_frame(q))
+    v3d.frame(robot.pen_tcp_frame(q), scale=0.02)
 
-    hand_frame_real = robot.hand_frame(q)
-    #print('real', hand_frame_real - panda.get_pose())
-    #print('pose', panda.get_pose())
-    v3d.frame(hand_frame_real, scale=0.2)
-    hand_frame_comp = robot.pen_tcp_frame_to_hand(robot.pen_tcp_frame(q))
+    # hand_frame_real = robot.hand_frame(q)
+    # #print('real', hand_frame_real - panda.get_pose())
+    # #print('pose', panda.get_pose())
+    # v3d.frame(hand_frame_real, scale=0.2)
+    # hand_frame_comp = robot.pen_tcp_frame_to_hand(robot.pen_tcp_frame(q))
     # v3d.frame(hand_frame_comp, scale=0.3)
 
-    penframe_down = planner.align_frame_z(robot.pen_tcp_frame(q), np.array([0, 0, -1]))
-    v3d.frame(penframe_down, alpha=0.7)
+    #penframe_down = planner.align_frame_z(robot.pen_tcp_frame(q), np.array([0, 0, -1]))
+    #v3d.frame(penframe_down, alpha=0.7, scale=0.05)
     #hand_frame_comp = robot.pen_tcp_frame_to_hand(penframe_down)
     #v3d.frame(hand_frame_comp, scale=0.3)
 
