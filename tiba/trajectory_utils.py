@@ -15,6 +15,7 @@ def to_pos_orn(pose):
         return pose
         #return pose.t, np.array(UnitQuaternion(pose))
     pose = SE3(pose)
+    pose = pose.norm()
     return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
 
 
