@@ -50,9 +50,12 @@ params = {'Seed': (5, {'min': 0, 'max': 100}),
               'Plane angle': (30, {'min': 0, 'max': 90}),
               'Plane dist' : (0.5, {'min': 0, 'max': 1}),
               'Plane height' : (0.3, {'min': 0, 'max': 1}),
-              'Plane offset' : (0.0, {'min': -0.1, 'max': 0.1}),
+              'Plane offset' : (0.0, {'min':-20,'max': 20}),
               'Padding' : (80, {'min':0.0, 'max':450}),
-              'Penup mm': (50, {'min':0.0, 'max':200})
+              'Penup mm': (50, {'min':0.0, 'max':200}),
+              'Pos offset x': (0.0, {'min': -1, 'max': 1}),
+              'Pos offset y': (0.0, {'min': -1, 'max': 1}),
+
           },
           'Tsm': {
               'Dist': (4.0, {'min':0, 'max':10}),
@@ -325,8 +328,8 @@ print('rpy: ', pad_pose.rpy())
 print('eul: ', pad_pose.eul())
 
 
-#robot = Tiba(45, 11.5) # Molotow
-robot = Tiba(60, 0, 0)
+robot = Tiba(45, 11.5) # Molotow
+#robot = Tiba(60, 0, 0)
 print(robot.fkine_all(robot.qr))
 print(robot.q)
 print(robot.qr)
@@ -530,7 +533,7 @@ def draw():
     np.random.seed(params.seed)
 
     # Udate drawing pad data
-    pad.offset = params.drawing.plane_offset
+    pad.offset = params.drawing.plane_offset / 1000
     pad.update()
 
     if 'guiding' in sketch.gui.changed:
@@ -545,12 +548,14 @@ def draw():
 
 
 
-    if params_changed('seed', 'drawing.padding', 'drawing.penup_mm') or not state.trajectories:
+    if params_changed('seed', 'drawing.padding', 'drawing.penup_mm', 'drawing.pos_offset_x', 'drawing.pos_offset_y') or not state.trajectories:
         print('update')
         #glyphs = [tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)]
         #Q = np.vstack([tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)])
+        pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
+        pad.update()
         glyphs_3d = pad.fit_to_box(glyphs, padding=params.drawing.padding, penup_mm=params.drawing.penup_mm)
-        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d, isotropy=0.9, sigma=2, subsample=100, subd=5, angle=50)
+        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d, isotropy=0.3, sigma=0.6, subsample=90, subd=5, angle=50)
 
         utils.save_pkl(state.trajectories, 'trajs.pkl')
         state.trajectories = pad.fit_to_frame(state.trajectories)

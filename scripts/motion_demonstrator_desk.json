@@ -13,17 +13,20 @@
         "drawing": {
             "plane_angle": 30,
             "plane_dist": 0.453000009059906,
-            "plane_height": 0.30000001192092896,
-            "plane_offset": -0.004000000189989805,
-            "padding": 302
+            "plane_height": -4.0,
+            "plane_offset": -4.0,
+            "padding": 262,
+            "penup_mm": 50,
+            "pos_offset_x": -0.09399999678134918,
+            "pos_offset_y": 0.0
         },
         "tsm": {
-            "dist": 1.5880000591278076,
-            "xoffset": 0.6119999885559082,
+            "dist": 1.4119999408721924,
+            "xoffset": 0.3179999887943268,
             "voffset": -0.42399999499320984,
             "rotx": 284,
             "roty": 0,
-            "rotz": 180
+            "rotz": 131
         }
     },
     "presets": {},
