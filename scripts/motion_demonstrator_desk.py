@@ -46,6 +46,12 @@ params = {'Seed': (5, {'min': 0, 'max': 100}),
               'rot': True,
               'elbow': True
           },
+          'Traj': {
+              'Sigma': (0.5, {'min': 0.1, 'max':3.0}),
+              'Isotropy': (0.5, {'min': 0.1, 'max':1.0}),
+              'Angle': (0.0, {'min': -90, 'max':90}),
+
+              },
           'Drawing': {
               'Plane angle': (30, {'min': 0, 'max': 90}),
               'Plane dist' : (0.5, {'min': 0, 'max': 1}),
@@ -328,14 +334,16 @@ print('rpy: ', pad_pose.rpy())
 print('eul: ', pad_pose.eul())
 
 
-robot = Tiba(45, 11.5) # Molotow
-#robot = Tiba(60, 0, 0)
+#robot = Tiba(45, 11.5) # Molotow
+robot = Tiba(60, 0, 0)
 print(robot.fkine_all(robot.qr))
 print(robot.q)
 print(robot.qr)
 robot.q = robot.qr
 v3d = None
 glyphs = []
+
+cup_pos = np.array([0.1176777, -0.40658198, 0.10431843])
 
 def compute_steps(robot, Qs, max_steps=500):
     n = min(len(Qs), max_steps)
@@ -401,7 +409,7 @@ def setup():
     v3d = GlView3d(sketch) #SketchView3d(sketch)
 
     global glyphs
-    glyphs = svg.load_svg_polylines('tiba.svg')
+    glyphs = svg.load_svg_polylines('ens.svg')
     destrect = geom.make_rect(0, height-300, 400, 300)
     glyphs = geom.transform_to_rect(glyphs, destrect)
 
@@ -463,12 +471,17 @@ def gui():
     imgui.same_line()
     if imgui.button('Circle'):
         cur_frame = robot.pen_tcp_frame(robot.q)
-        dest_frame = planner.align_frame_z(cur_frame, np.array([0, 0, -1]))
-        dest_frame[0,3] -= 0.1 # = planner.align_frame_y(dest_frame, np.array([0, 1, 0]))
-        trajectory = tu.approach_inout(cur_frame,
-            tu.xy_circles_mm(dest_frame, 15, 1.0, 4, ease_duration=1.0))
+        cup_frame = planner.align_frame_z(cur_frame, np.array([0, 0, -1]))
+        cup_frame[:3, 3] = cup_pos
+        start_dip_frame = tu.offset_frame(cup_frame, [0, 0, 70/1000])
+        dip_frame = tu.offset_frame(cup_frame, [0, 0, 10/1000])
+        trajectories = [tu.gauss_approach(cur_frame, start_dip_frame)]
+        trajectories += [tu.gauss_approach(start_dip_frame, dip_frame)]
+        trajectories += [tu.xy_circles_mm(dip_frame, 10, 1.5, 4, ease_duration=1.0)]
+        trajectories += [tu.gauss_approach(dip_frame, start_dip_frame)]
+        trajectories += [tu.gauss_approach(start_dip_frame, cur_frame)]
 
-        plan_trajectories(robot.q, trajectory)
+        plan_trajectories(robot.q, trajectories)
 
     if state.Qs:
         if imgui.button('Simulate trajectory'):
@@ -548,14 +561,16 @@ def draw():
 
 
 
-    if params_changed('seed', 'drawing.padding', 'drawing.penup_mm', 'drawing.pos_offset_x', 'drawing.pos_offset_y') or not state.trajectories:
+    params_to_check = ['seed', 'drawing.padding', 'drawing.penup_mm', 'drawing.pos_offset_x', 'drawing.pos_offset_y',
+                       'traj.sigma', 'traj.isotropy', 'traj.angle']
+    if params_changed(*params_to_check) or not state.trajectories:
         print('update')
         #glyphs = [tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)]
         #Q = np.vstack([tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)])
         pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
         pad.update()
         glyphs_3d = pad.fit_to_box(glyphs, padding=params.drawing.padding, penup_mm=params.drawing.penup_mm)
-        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d, isotropy=0.3, sigma=0.6, subsample=90, subd=5, angle=50)
+        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d, isotropy=params.traj.isotropy, sigma=params.traj.sigma, subsample=100, subd=5, angle=params.traj.angle)
 
         utils.save_pkl(state.trajectories, 'trajs.pkl')
         state.trajectories = pad.fit_to_frame(state.trajectories)
