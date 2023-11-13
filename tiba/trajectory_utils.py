@@ -15,13 +15,14 @@ def to_pos_orn(pose):
         return pose
         #return pose.t, np.array(UnitQuaternion(pose))
     pose = SE3(pose)
+    pose = pose.norm()
     return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
 
 
 def to_pose(pose):
     # TODO Add normalization?
     if type(pose) == SE3:
-        return pose
+        return pose.norm()
     if type(pose) == np.ndarray and len(pose.shape) == 2:
         return SE3(pose).norm()
     pose = SE3(*pose[:3])*(UnitQuaternion(pose[3:])).SE3()
@@ -60,18 +61,24 @@ def xy_circles_mm(pose, radius_mm, cycle_duration, cycles=1, ease_duration=0.5, 
     radius = radius_mm / 1000
     T = gauss_easeinout(0, np.pi*2*cycles, duration, ease_duration, easing=easing)
     pts = [pos + [np.cos(t)*radius, np.sin(t)*radius, 0] for t in T]
-    return [np.concatenate([pos, orn]) for pos in pts]
+    return approach_inout(pose, [np.concatenate([pos, orn]) for pos in pts],
+                          cartesian_approach_speed=cfg.default_cartesian_approach_speed*0.5)
 
+def offset_frame(frame, d):
+    print(frame)
+    frame = np.array(frame)
+    frame[:3, 3] = frame[:3, 3] + d
+    return frame
 
-def approach_inout(q, trajectory, kind='gauss', **args):
+def approach_inout(x, trajectory, kind='gauss', **args):
     if kind=='linear':
         approach = linear_appoach
     else:
         approach = gauss_approach
 
-    return (approach(q, trajectory[0], **args) +
+    return (approach(x, trajectory[0], **args) +
             list(trajectory) +
-            approach(trajectory[-1], q, **args))
+            approach(trajectory[-1], x, **args))
 
 
 def linear_approach(x0, x1, duration=0,
@@ -124,9 +131,7 @@ def gauss_approach(x0, x1, duration=0,
             angdist = abs(pose0.angdist(pose1))
         except ValueError as e:
             print(e)
-            pdb.set_trace()
-            trnorm(pose0)
-            angdist = abs(pose0.angdist(pose1))
+            angdist = 0
 
         # Compute approach steps based on distance
         ang_approach_steps = int(angdist/angular_approach_step)
@@ -148,7 +153,7 @@ def tsp_glyph(n, r1=0.5, r2=1.0, center=[0,0]):
     return P[I,:]
 
 
-def smooth_strokes_lqt(S, only_pos=True, penups=True, penup_variability=1.0, **kwargs):
+def smooth_strokes_lqt(S, only_pos=True, penups=True, penup_variability=0.4, **kwargs):
     trajectories = []
     for P in S:
         if penups:
