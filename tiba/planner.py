@@ -654,3 +654,66 @@ def fit_to_frame(P, frame, offset=0):
     ''' Fit a polyline to a box projected to XY plane defined by a given frame'''
     frame = get_offset_frame(frame, offset)
     return geom.affine_transform(frame, P)
+
+def plot_trajectory_stats(Qs, dQs, trajectory, figsize=(13, 13), dpi=92, filename=''):
+    import matplotlib
+    from matplotlib.gridspec import GridSpec
+    import platform, subprocess
+
+    # plt.figure(figsize=(25,5))
+    # plt.plot(np.sin(np.linspace(0, 10, 100)))
+    # plt.show(block=False)
+    # return
+
+    #matplotlib.interactive(True)
+    Qs = np.array(Qs)
+    dQs = np.array(dQs)
+    #gs = GridSpec(4, 4)
+    plt.figure(figsize=figsize, dpi=dpi)
+    # Plot joint positions
+    plt.subplot(221)
+    plt.title('joint positions (rad)')
+    # Speed is in radians/sec
+    for i in range(7):
+        q = Qs[:, i]
+        #dq = np.diff(Qs[:,i])
+        plt.plot(q, color=plut.default_color(i), label='q%d'%i)
+    plt.legend(loc='right')
+
+    # Plot joint speeds
+    plt.subplot(222)
+    plt.title('joint speed deg/sec')
+    # Speed is in radians/sec
+    for i in range(7):
+        dq = dQs[:, i]
+        #dq = np.diff(Qs[:,i])
+        plt.plot(geom.degrees(dq), color=plut.default_color(i), label='q%d'%i)
+    plt.legend(loc='best')
+
+    plt.subplot(223)
+    # Joint limit graph
+    plt.title('Joints min/max')
+    for i in range(7):
+        w = 2
+        lim_rect = [np.array([i*w, q_min_panda[i]]),
+                    np.array([i*w+w, q_max_panda[i]])]
+        plut.fill_rect(lim_rect, plut.default_color(i), alpha=0.5)
+        qmin = np.min(Qs[:,i])
+        qmax = np.max(Qs[:,i])
+        pad = w*0.1
+        lim_rect = [np.array([i*w+pad, qmin]),
+                    np.array([i*w+w-pad, qmax])]
+        plut.fill_rect(lim_rect, plut.default_color(i))
+        plut.setup()
+    plt.tight_layout()
+    if filename:
+        plt.savefig(filename)
+        if platform.system() == 'Darwin':
+            subprocess.run(['open', filename])
+        else:
+            subprocess.run(['xdg-open', filename])
+
+        #plt.close()
+    else:
+        print('Showing')
+        plt.show() #block=False)

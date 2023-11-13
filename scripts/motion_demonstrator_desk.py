@@ -33,6 +33,7 @@ import roboticstoolbox as rtb
 reload(planner)
 from collections import namedtuple
 import swift
+import matplotlib
 
 np.set_printoptions(suppress=True)
 
@@ -422,6 +423,10 @@ def plan_trajectories(q0, trajectories, rest=0.15):
     utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
     state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
+    planner.plot_trajectory_stats(state.Qs, state.dQs, trajectories, filename='plot.png')
+
+
+    
 
 def gui():
     # changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
@@ -439,7 +444,7 @@ def gui():
 
     if imgui.button('Plan trajectory'):
         cur_pos = robot.pen_tcp_pos(robot.q)
-        trajectories = pad.augment_with_pen_orientation(state.trajectories, robot, robot.q)
+        trajectories = pad.augment_with_pen_orientation(state.trajectories[:1], robot, robot.q)
 
         # trajectory = tu.append_rest(trajectory, 0.5)
         # trajectory = tu.approach_inout(cur_pos, trajectory)
