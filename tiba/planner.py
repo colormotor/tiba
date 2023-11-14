@@ -45,10 +45,12 @@ def check_limits(q):
 class iLQRPlannerVelocity:
     def __init__(self, urdf_path, q0,
                  base_frame='tiba_link0',
-                 tip_frame='tiba_pen_tcp'):
+                 tip_frame='tiba_pen_tcp',
+                 subsample=10):
         self.q0 = q0
         self.dq0 = np.zeros(len(q0))
         self.rbt = KDLRobot(urdf_path, base_frame, tip_frame, self.q0, self.dq0)
+        self.subsample = subsample
 
     def plan(self, trajectories,
              num_iter=20,
@@ -107,15 +109,22 @@ class iLQRPlannerVelocity:
                     True, True, cb)
 
                 Qs.append(Qs_batch)
-                dQs.append(dQs_batch)
+                # Add velocities appended to first control command
+                dQs.append([np.zeros(nb_control_vars)] + dQs_batch)
                 q0 = Qs_batch[-1]
-                dq0 = dQs_batch[-1]
-                #u0_t = np.array(dQs_batch[-1])
+
             except Exception as e:
                 print(e)
 
-        print("Finished planning")
-        return sum(Qs, []), sum(dQs, [])
+        Qs = sum(Qs, [])
+        dQs = sum(dQs, [])
+
+        if self.subsample > 1:
+            n = len(Qs)
+            Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=[0, 1], duration=(n-1)*cfg.dt)
+            print('Splined shapes', Qs.shape, dQs.shape)
+
+        return list(Qs), list(dQs)
 
 def plan_trajectory(urdf_path,
                     q0,
@@ -655,7 +664,7 @@ def fit_to_frame(P, frame, offset=0):
     frame = get_offset_frame(frame, offset)
     return geom.affine_transform(frame, P)
 
-def plot_trajectory_stats(Qs, dQs, trajectory, figsize=(13, 13), dpi=92, filename=''):
+def plot_trajectory_stats(Qs, dQs, figsize=(13, 13), dpi=92, filename=''):
     import matplotlib
     from matplotlib.gridspec import GridSpec
     import platform, subprocess
@@ -705,6 +714,7 @@ def plot_trajectory_stats(Qs, dQs, trajectory, figsize=(13, 13), dpi=92, filenam
                     np.array([i*w+w-pad, qmax])]
         plut.fill_rect(lim_rect, plut.default_color(i))
         plut.setup()
+
     plt.tight_layout()
     if filename:
         plt.savefig(filename)

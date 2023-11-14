@@ -22,7 +22,7 @@ reload(tiba.draw)
 reload(tiba.robot)
 from tiba.robot import Tiba
 from tiba.draw import View3d, SketchView3d, GlView3d
-from tiba import planner
+from tiba import planner, cfg
 import tiba.trajectory_utils as tu
 import tiba.gfx.renderer as renderer
 reload(renderer)
@@ -307,7 +307,6 @@ state.q = None
 state.Qs = []
 state.trajectories = []
 state.trajectories_2d = []
-state.dt = 0.001
 state.plane_calibration = False
 state.steps = []
 state.tcp_pos = np.zeros(7)
@@ -427,17 +426,16 @@ def plan_trajectory(q0, trajectory):
      utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
      state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
-def plan_trajectories(q0, trajectories, rest=0.15):
+def plan_trajectories(q0, trajectories, rest=0.05): #15):
+    #trajectories = trajectories[-1:]
     ilqr = planner.iLQRPlannerVelocity(robot.urdf_file,
-                                          q0)
+                                       q0,
+                                       subsample=int(cfg.dt/robot.dt))
     state.Qs, state.dQs = ilqr.plan(trajectories, rest=rest)
     utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
     state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
-    planner.plot_trajectory_stats(state.Qs, state.dQs, trajectories, filename='plot.png')
-
-
-    
+    planner.plot_trajectory_stats(state.Qs, state.dQs, filename='plot.png')
 
 def gui():
     # changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
@@ -455,13 +453,13 @@ def gui():
 
     if imgui.button('Plan trajectory'):
         cur_pos = robot.pen_tcp_pos(robot.q)
-        trajectories = pad.augment_with_pen_orientation(state.trajectories[:1], robot, robot.q)
+        trajectories = pad.augment_with_pen_orientation(state.trajectories, robot, robot.q)
 
         # trajectory = tu.append_rest(trajectory, 0.5)
         # trajectory = tu.approach_inout(cur_pos, trajectory)
         # trajectory = tu.append_rest(trajectory, 0.5)
 
-        trajectories += [tu.gauss_approach(trajectories[-1][-1], cur_pos)]
+        trajectories += [tu.gauss_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
         plan_trajectories(robot.q, trajectories)
 
     if imgui.button('Align tip down'):
@@ -476,15 +474,25 @@ def gui():
     imgui.same_line()
     if imgui.button('Circle'):
         cur_frame = robot.pen_tcp_frame(robot.q)
+
+        # Go to point above cup
         cup_frame = planner.align_frame_z(cur_frame, np.array([0, 0, -1]))
         cup_frame[:3, 3] = cup_pos
-        start_dip_frame = tu.offset_frame(cup_frame, [0, 0, 70/1000])
+        start_dip_frame = tu.offset_frame(cup_frame, [0, 0, 120/1000])
+        trajectories = [tu.trapezoidal_approach(cur_frame, start_dip_frame)]
+
+        # Go to dipped position
         dip_frame = tu.offset_frame(cup_frame, [0, 0, 10/1000])
-        trajectories = [tu.gauss_approach(cur_frame, start_dip_frame)]
-        trajectories += [tu.gauss_approach(start_dip_frame, dip_frame)]
+        trajectories += [tu.trapezoidal_approach(start_dip_frame, dip_frame, debug=True)]
+
+        # Perform swirly motion (this approaches the side of circle)
         trajectories += [tu.xy_circles_mm(dip_frame, 10, 1.5, 4, ease_duration=1.0)]
-        trajectories += [tu.gauss_approach(dip_frame, start_dip_frame)]
-        trajectories += [tu.gauss_approach(start_dip_frame, cur_frame)]
+
+        # Get back to point above cup
+        trajectories += [tu.trapezoidal_approach(dip_frame, start_dip_frame)]
+
+        # And back to original position
+        trajectories += [tu.trapezoidal_approach(start_dip_frame, cur_frame)]
 
         plan_trajectories(robot.q, trajectories)
 
@@ -497,7 +505,7 @@ def gui():
             for q in state.Qs: #dQs:
                 #print(dq)
                 robot.q = q
-                env.step(state.dt)
+                env.step(robot.dt)
         if imgui.button("Execute trajectory"):
             imgui.open_popup('Execute')
 
@@ -575,7 +583,12 @@ def draw():
         pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
         pad.update()
         glyphs_3d = pad.fit_to_box(glyphs, padding=params.drawing.padding, penup_mm=params.drawing.penup_mm)
-        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d, isotropy=params.traj.isotropy, sigma=params.traj.sigma, subsample=100, subd=5, angle=params.traj.angle)
+        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d,
+                                                   isotropy=params.traj.isotropy,
+                                                   sigma=params.traj.sigma,
+                                                   subsample=int(cfg.dt/robot.dt),
+                                                   subd=5,
+                                                   angle=params.traj.angle)
 
         utils.save_pkl(state.trajectories, 'trajs.pkl')
         state.trajectories = pad.fit_to_frame(state.trajectories)

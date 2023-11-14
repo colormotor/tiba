@@ -65,6 +65,8 @@ class Tiba(Robot):
             urdf_filepath=urdf_filepath,
         )
 
+        self.dt = 0.001
+
 
 
         #self.grippers[0].tool = SE3(0, 0, 0.1034)
