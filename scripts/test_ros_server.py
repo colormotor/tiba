@@ -8,8 +8,11 @@ def msg_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Msg: %s", data.data)
 
 def jtraj_callback(data):
-    rospy.loginfo(rospy.get_caller_id() + "Joint trajectory")
-    print(data.data)
+    rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
+    Qs = [[p.positions for p in data.points]]
+    dQs = [[p.velocities for p in data.points]]
+    print(Qs)
+    print(dQs)
 
 def listener():
 
