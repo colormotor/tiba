@@ -41,10 +41,14 @@ rosloader = importlib.find_loader('rospy')
 if rosloader is not None:
     import rospy
     from std_msgs.msg import String
+    from trajectory_msgs.msg import JointTrajectory
+    from trajectory_msgs.msg import JointTrajectoryPoint
+
     has_ros = True
 
-    pub = rospy.Publisher('chatter', String, queue_size=10)
-    rospy.init_node('talker', anonymous=True)
+    msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
+    jtraj_pub = rospy.Publisher('/tiba/jtrajectory', JointTrajectory, queue_size=10)
+    rospy.init_node('motion_editor', anonymous=True)
 else:
     has_ros = False
 
@@ -221,6 +225,21 @@ def plan_trajectories(trajectories, rest=0.05): #15):
     itiba.plan_trajectories(trajectories, rest)
     state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
+def send_joint_trajectory(Qs, dQs):
+    jtraj = JointTrajectory()
+    jtraj.header = Header()
+    jtraj.header.stamp = rospy.Time.now()
+    jtraj.joint_names = ['panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6',
+                              'panda_joint7']
+    for i, (q, dq) in enumerate(zip(Qs[:100], dQs)):
+        p = JointTrajectoryPoint()
+        p.positions = q
+        p.velocities = dq
+        p.time_from_start = cfg.robot_dt*i
+        jtraj.points.append(p)
+    jtraj_pub.publish(jtraj)
+    rospy.loginfo("Sent joint trajectory")
+
 def gui():
     # changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
     # if changed:
@@ -231,7 +250,10 @@ def gui():
 
     if has_ros:
         if imgui.button('Test ros'):
-            pub.publish('Hello world')
+            if itiba.Qs:
+                send_joint_trajectory(itiba.Qs, itiba.dQs)
+            else:
+                msg_pub.publish('No joint trajectory')
 
     if imgui.button('Print tcp pos'):
         print(state.tcp_pos[:3])

@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 import rospy
 from std_msgs.msg import String
+from trajectory_msgs.msg import JointTrajectory
+from trajectory_msgs.msg import JointTrajectoryPoint
 
-def callback(data):
-    rospy.loginfo(rospy.get_caller_id() + "I heard %s", data.data)
+def msg_callback(data):
+    rospy.loginfo(rospy.get_caller_id() + "Msg: %s", data.data)
+
+def jtraj_callback(data):
+    rospy.loginfo(rospy.get_caller_id() + "Joint trajectory")
+    print(data.data)
 
 def listener():
 
@@ -14,7 +20,8 @@ def listener():
     # run simultaneously.
     rospy.init_node('listener', anonymous=True)
 
-    rospy.Subscriber("chatter", String, callback)
+    rospy.Subscriber("/tiba/msg", String, msg_callback)
+    rospy.Subscriber("/tiba/jtraj", JointTrajectory, jtraj_callback)
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()

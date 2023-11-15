@@ -1,2 +1,2 @@
 #!/usr/bin/env sh
-export ROS_MASTER_URI=http://cgs-pcl-36282:11311/
+export ROS_MASTER_URI=https://horribly-next-shark.ngrok-free.app
