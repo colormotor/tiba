@@ -38,7 +38,7 @@ def xacro_to_urdf(xacro_file, urdf_file, tld=None, mappings={}):
     out.close()
 
 
-class Tiba(Robot):
+class TibaRobot(Robot):
     """
     Class that imports a Arduino Braccio URDF model
     """
@@ -64,9 +64,6 @@ class Tiba(Robot):
             urdf_string=urdf_string,
             urdf_filepath=urdf_filepath,
         )
-
-        self.dt = 0.001
-
 
 
         #self.grippers[0].tool = SE3(0, 0, 0.1034)

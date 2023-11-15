@@ -7,4 +7,4 @@ from . import config as config
 
 reload(config)
 
-cfg = config.config
+cfg = config.cfg

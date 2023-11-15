@@ -20,7 +20,7 @@ from importlib import reload
 reload(tiba)
 reload(tiba.draw)
 reload(tiba.robot)
-from tiba.robot import Tiba
+from tiba.robot import TibaRobot
 from tiba.draw import View3d, SketchView3d, GlView3d
 from tiba import planner, cfg
 import tiba.trajectory_utils as tu
@@ -202,6 +202,22 @@ class MotionEditor:
                 imgui.close_current_popup()
             imgui.end_popup()
 
+    def get_cur_motion_trajectory(self, q0):
+        motion = self.get_cur_motion()
+        if not motion:
+            print('No motion')
+        Qs = []
+        dQs = []
+
+        for step in motion['steps']:
+            if step['kind'] == 'q':
+                Qs_batch, dQs_batch = tu.joint_approach(q0, step['q'])
+                q0 = step['q']
+                Qs.append(Qs_batch)
+                dQs.append(dQs_batch)
+
+        return list(np.vstack(Qs)), list(np.vstack(dQs))
+
     def play_cur_motion(self):
         print("Playing (2 sec delay)")
         # panda.teaching_mode(False) #
@@ -334,8 +350,8 @@ print('rpy: ', pad_pose.rpy())
 print('eul: ', pad_pose.eul())
 
 
-#robot = Tiba(45, 11.5) # Molotow
-robot = Tiba(60, 0, 0)
+robot = TibaRobot(45, 11.5) # Molotow
+#robot = TibaRobot(60, 0, 0)
 print(robot.fkine_all(robot.qr))
 print(robot.q)
 print(robot.qr)
@@ -430,12 +446,12 @@ def plan_trajectories(q0, trajectories, rest=0.05): #15):
     #trajectories = trajectories[-1:]
     ilqr = planner.iLQRPlannerVelocity(robot.urdf_file,
                                        q0,
-                                       subsample=int(cfg.dt/robot.dt))
+                                       subsample=int(cfg.dt/cfg.robot_dt))
     state.Qs, state.dQs = ilqr.plan(trajectories, rest=rest)
     utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
     state.steps, state.fk_points = compute_steps(robot, state.Qs)
 
-    planner.plot_trajectory_stats(state.Qs, state.dQs, filename='plot.png')
+    planner.plot_trajectory_stats(robot, state.Qs, state.dQs, trajectories=trajectories, filename='plot.png')
 
 def gui():
     # changed, state.teaching_mode = imgui.checkbox('Teaching mode', state.teaching_mode)
@@ -450,6 +466,12 @@ def gui():
         env = swift.Swift()
         env.launch(realtime=True)
         env.add(robot)
+
+    if imgui.button('Plan recorded motion'):
+        state.Qs, state.dQs = editor.get_cur_motion_trajectory(robot.q)
+        utils.save_pkl([state.Qs, state.dQs], 'trajectory.pkl')
+        state.steps, state.fk_points = compute_steps(robot, state.Qs)
+        planner.plot_trajectory_stats(robot, state.Qs, state.dQs, filename='plot.png')
 
     if imgui.button('Plan trajectory'):
         cur_pos = robot.pen_tcp_pos(robot.q)
@@ -505,7 +527,7 @@ def gui():
             for q in state.Qs: #dQs:
                 #print(dq)
                 robot.q = q
-                env.step(robot.dt)
+                env.step(cfg.robot_dt)
         if imgui.button("Execute trajectory"):
             imgui.open_popup('Execute')
 
@@ -554,7 +576,6 @@ def params_changed(*args):
     return False
 
 def draw():
-
     background(0)
     np.random.seed(params.seed)
 
@@ -586,7 +607,7 @@ def draw():
         state.trajectories = tu.smooth_strokes_lqt(glyphs_3d,
                                                    isotropy=params.traj.isotropy,
                                                    sigma=params.traj.sigma,
-                                                   subsample=int(cfg.dt/robot.dt),
+                                                   subsample=int(cfg.dt/cfg.robot_dt),
                                                    subd=5,
                                                    angle=params.traj.angle)
 

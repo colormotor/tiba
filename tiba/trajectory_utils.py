@@ -12,7 +12,7 @@ from roboticstoolbox.tools.trajectory import ctraj, trapezoidal_func, trapezoida
 from . import trapezoidal
 reload(trapezoidal)
 
-from .config import config as cfg
+from .config import cfg
 import numbers
 import pdb
 
@@ -97,6 +97,36 @@ def approach_inout(x, trajectory, kind='trapezoidal', **args):
             approach(trajectory[-1], x, **args))
 
 
+def joint_approach(q0, q1, speed=None):
+    if speed is None:
+        speed = cfg.default_joint_approach_speed
+
+    q0 = np.array(q0)
+    q1 = np.array(q1)
+
+    dof = len(q0)
+    dq = np.abs(q1-q0)
+    d = np.max(dq)
+    v_max = geom.radians(speed) / d
+    a_max = v_max/cfg.acceleration_time
+    dt = cfg.robot_dt
+    tr = trapezoidal.trapezoidal_profile([0], [1],
+                                         [0], [0],
+                                         [v_max],
+                                         [a_max])
+
+
+    timesteps = int(tr.time / dt)
+    print('timesteps', timesteps)
+    print('time', tr.time)
+    time = np.linspace(0, tr.time, timesteps)
+    ts = [tr(t)[0][2] for t in time]
+    dts = [tr(t)[0][1] for t in time]
+    Qs = [q0 + (q1-q0)*t for t in ts]
+    dQs = [dq*dt for dt in dts]
+    return Qs, dQs
+
+
 def duration_from_distance(x0, x1, angular_approach_speed=None,
                                    cartesian_approach_speed=None):
     pose0 = to_pose(x0)
@@ -116,6 +146,7 @@ def duration_from_distance(x0, x1, angular_approach_speed=None,
     duration = max(angdist/angular_approach_speed, dist/cartesian_approach_speed)
     print('fitts comp', duration, duration*fitts_id(duration))
     return duration * (1+fitts_id(duration)) # max(cfg.min_approach_duration, duration+fitts_id(duration))
+
 
 def linear_approach(x0, x1, duration=0,
                     angular_approach_speed=None,

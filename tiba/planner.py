@@ -15,7 +15,7 @@ import numbers
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
 from . import trajectory_utils as tu
-from .config import config as cfg
+from .config import cfg
 
 reload(utils)
 reload(tu)
@@ -664,7 +664,7 @@ def fit_to_frame(P, frame, offset=0):
     frame = get_offset_frame(frame, offset)
     return geom.affine_transform(frame, P)
 
-def plot_trajectory_stats(Qs, dQs, figsize=(13, 13), dpi=92, filename=''):
+def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi=92, max_segments=200, filename=''):
     import matplotlib
     from matplotlib.gridspec import GridSpec
     import platform, subprocess
@@ -678,7 +678,7 @@ def plot_trajectory_stats(Qs, dQs, figsize=(13, 13), dpi=92, filename=''):
     Qs = np.array(Qs)
     dQs = np.array(dQs)
     #gs = GridSpec(4, 4)
-    plt.figure(figsize=figsize, dpi=dpi)
+    fig = plt.figure(figsize=figsize, dpi=dpi)
     # Plot joint positions
     plt.subplot(221)
     plt.title('joint positions (rad)')
@@ -714,6 +714,23 @@ def plot_trajectory_stats(Qs, dQs, figsize=(13, 13), dpi=92, filename=''):
                     np.array([i*w+w-pad, qmax])]
         plut.fill_rect(lim_rect, plut.default_color(i))
         plut.setup()
+
+    ax = fig.add_subplot(224, projection="3d")
+    ax.view_init(10, 120)
+    pts = np.array([robot.pen_tcp_pos(q)[:3] for q in Qs])
+    if trajectories:
+        for trajectory in trajectories:
+            trajectory = np.array(trajectory)
+            plt.plot(trajectory[:,0], trajectory[:,1], trajectory[:,2], 'r', lw=2, alpha=1)
+    plt.plot(pts[:,0], pts[:,1], pts[:,2], 'b', lw=2, alpha=0.7)
+
+
+    I = np.linspace(0, len(pts)-1, max_segments).astype(int)
+    for i in I:
+        q = Qs[i]
+        P, penP = robot.robot_polylines(q)
+        P = np.array(P)
+        plt.plot(*P.T, 'c', alpha=0.1)
 
     plt.tight_layout()
     if filename:
