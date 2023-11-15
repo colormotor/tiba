@@ -273,17 +273,27 @@ class TibaInterface:
         i = 0
         print('Starting control loop')
         ctrl = controllers.JointPosition()
-        self.panda.start_controller(ctrl)
-        with self.panda.create_context(frequency=1000) as ctx:
-            while ctx.ok() and i < len(dQ):
-                ctrl.set_control(Q[i], dQ[i])
-                i += 1
-            ctrl.set_control(Q[-1], np.zeros(7))
-            #while ctx.state
+        panda = self.panda
+        dq_thresh = 0.001
+        dq0 = np.zeros(7)
+
+        panda.start_controller(ctrl)
+        with panda.create_context(frequency=1000) as ctx:
+            while ctx.ok():
+                if i < len(dQ):
+                    ctrl.set_control(Q[i], dQ[i])
+                    i += 1
+                else:
+                    ctrl.set_control(Q[-1], dq0)
+                    dq = panda.get_state().dq
+                    if abs(np.max(dq)) < dq_thresh:
+                        break
+            q = panda.q
         print('Stopping controller')
         self.panda.stop_controller()
         #time.sleep(0.5)
         print('Finished motion')
+        return q
 
     def play_cur_motion(self, delay=2.0):
         motion = self.editor.get_cur_motion()
@@ -300,13 +310,16 @@ class TibaInterface:
         for step in motion['steps']:
             if step['kind'] == 'q':
                 Qs_batch, dQs_batch = tu.joint_approach(self.robot.q, step['q'])
+                Qs_batch = [Qs_batch[0]]*10 + Qs_batch + [Qs_batch[-1]]*10
+                dQs_batch = [dQs_batch[0]]*10 + dQs_batch + [dQs_batch[-1]]*10
+
                 self.plan_joint_trajectory(Qs_batch, dQs_batch)
-                self.execute(0.0)
-                self.robot.q = step['q']
-                #panda.move_to_joint_position(np.array(step['q']))
+                self.robot.q = self.execute(0.0)
+                #self.robot.q = step['q']
+                #self.panda.move_to_joint_position(np.array(step['q']))
             elif step['kind'] == 'grip':
                 mm = step['mm']
-                if True: #not state.grasped:
+                if True: #not state.graspedt
                     self.grasp(mm)
                     #state.grasped = True
 
