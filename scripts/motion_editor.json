@@ -1,0 +1,36 @@
+{
+    "params": {
+        "seed": 18,
+        "gripper_mm": 34.0,
+        "gripper_state": false,
+        "guiding": {
+            "x": true,
+            "y": true,
+            "z": true,
+            "rot": true,
+            "elbow": true
+        },
+        "traj": {
+            "sigma": 0.5,
+            "isotropy": 0.5,
+            "angle": 0.0
+        },
+        "drawing": {
+            "plane_offset": 0.0,
+            "padding": 80,
+            "penup_mm": 50,
+            "pos_offset_x": 0.0,
+            "pos_offset_y": 0.0
+        },
+        "tsm": {
+            "dist": 0.8820000290870667,
+            "xoffset": 0.0,
+            "voffset": 0.0,
+            "rotx": 275,
+            "roty": 0,
+            "rotz": 138
+        }
+    },
+    "presets": {},
+    "aux": {}
+}

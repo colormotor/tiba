@@ -146,6 +146,10 @@ class SketchView3d:
             return
         self.set_viewport(self.saved_viewport)
 
+    def get_polylines(self, S):
+        S = geom.view_3d(S, self.mv, self.proj, viewport=self.viewport)
+        return S
+
     def polyline(self, P, closed=False):
         self.sketch.canvas.stroke_weight(self._line_width)
         self.sketch.canvas.no_fill()
@@ -300,6 +304,9 @@ class GlView3d:
         P = np.array(P)
         self.rend.stroke(P, closed)
 
+    def get_polylines(self, S):
+        return self.sketch_view.get_polylines(S)
+
     # def arrow(self, a, b):
     #     self.sketch.canvas.stroke_weight(self._line_width)
     #     self.sketch.canvas.no_fill()
@@ -334,6 +341,14 @@ class GlView3d:
 
     def points(self, P, radius=2):
         self.rend.points(np.array(P), radius)
+
+    def get_robot_configuration_polylines(self, rob, Q):
+        S = []
+        for q in Q:
+            T = rob.fkine_all(rob.q)
+            P = np.array([x.t for x in T])[2:-6]
+            S.append(P)
+        return S
 
     def robot(self, rob):
         T = rob.fkine_all(rob.q)

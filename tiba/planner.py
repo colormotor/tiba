@@ -15,7 +15,7 @@ import numbers
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
 from . import trajectory_utils as tu
-from .config import config as cfg
+from .config import cfg
 
 reload(utils)
 reload(tu)
@@ -45,10 +45,12 @@ def check_limits(q):
 class iLQRPlannerVelocity:
     def __init__(self, urdf_path, q0,
                  base_frame='tiba_link0',
-                 tip_frame='tiba_pen_tcp'):
+                 tip_frame='tiba_pen_tcp',
+                 subsample=10):
         self.q0 = q0
         self.dq0 = np.zeros(len(q0))
         self.rbt = KDLRobot(urdf_path, base_frame, tip_frame, self.q0, self.dq0)
+        self.subsample = subsample
 
     def plan(self, trajectories,
              num_iter=20,
@@ -107,15 +109,22 @@ class iLQRPlannerVelocity:
                     True, True, cb)
 
                 Qs.append(Qs_batch)
-                dQs.append(dQs_batch)
+                # Add velocities appended to first control command
+                dQs.append([np.zeros(nb_control_vars)] + dQs_batch)
                 q0 = Qs_batch[-1]
-                dq0 = dQs_batch[-1]
-                #u0_t = np.array(dQs_batch[-1])
+
             except Exception as e:
                 print(e)
 
-        print("Finished planning")
-        return sum(Qs, []), sum(dQs, [])
+        Qs = sum(Qs, [])
+        dQs = sum(dQs, [])
+
+        if self.subsample > 1:
+            n = len(Qs)
+            Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=[0, 1], duration=(n-1)*cfg.dt)
+            print('Splined shapes', Qs.shape, dQs.shape)
+
+        return list(Qs), list(dQs)
 
 def plan_trajectory(urdf_path,
                     q0,
@@ -654,3 +663,84 @@ def fit_to_frame(P, frame, offset=0):
     ''' Fit a polyline to a box projected to XY plane defined by a given frame'''
     frame = get_offset_frame(frame, offset)
     return geom.affine_transform(frame, P)
+
+def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi=92, max_segments=200, filename=''):
+    import matplotlib
+    from matplotlib.gridspec import GridSpec
+    import platform, subprocess
+
+    # plt.figure(figsize=(25,5))
+    # plt.plot(np.sin(np.linspace(0, 10, 100)))
+    # plt.show(block=False)
+    # return
+
+    #matplotlib.interactive(True)
+    Qs = np.array(Qs)
+    dQs = np.array(dQs)
+    #gs = GridSpec(4, 4)
+    fig = plt.figure(figsize=figsize, dpi=dpi)
+    # Plot joint positions
+    plt.subplot(221)
+    plt.title('joint positions (rad)')
+    # Speed is in radians/sec
+    for i in range(7):
+        q = Qs[:, i]
+        #dq = np.diff(Qs[:,i])
+        plt.plot(q, color=plut.default_color(i), label='q%d'%i)
+    plt.legend(loc='right')
+
+    # Plot joint speeds
+    plt.subplot(222)
+    plt.title('joint speed deg/sec')
+    # Speed is in radians/sec
+    for i in range(7):
+        dq = dQs[:, i]
+        #dq = np.diff(Qs[:,i])
+        plt.plot(geom.degrees(dq), color=plut.default_color(i), label='q%d'%i)
+    plt.legend(loc='best')
+
+    plt.subplot(223)
+    # Joint limit graph
+    plt.title('Joints min/max')
+    for i in range(7):
+        w = 2
+        lim_rect = [np.array([i*w, q_min_panda[i]]),
+                    np.array([i*w+w, q_max_panda[i]])]
+        plut.fill_rect(lim_rect, plut.default_color(i), alpha=0.5)
+        qmin = np.min(Qs[:,i])
+        qmax = np.max(Qs[:,i])
+        pad = w*0.1
+        lim_rect = [np.array([i*w+pad, qmin]),
+                    np.array([i*w+w-pad, qmax])]
+        plut.fill_rect(lim_rect, plut.default_color(i))
+        plut.setup()
+
+    ax = fig.add_subplot(224, projection="3d")
+    ax.view_init(10, 120)
+    pts = np.array([robot.pen_tcp_pos(q)[:3] for q in Qs])
+    if trajectories:
+        for trajectory in trajectories:
+            trajectory = np.array(trajectory)
+            plt.plot(trajectory[:,0], trajectory[:,1], trajectory[:,2], 'r', lw=2, alpha=1)
+    plt.plot(pts[:,0], pts[:,1], pts[:,2], 'b', lw=2, alpha=0.7)
+
+
+    I = np.linspace(0, len(pts)-1, max_segments).astype(int)
+    for i in I:
+        q = Qs[i]
+        P, penP = robot.robot_polylines(q)
+        P = np.array(P)
+        plt.plot(*P.T, 'c', alpha=0.1)
+
+    plt.tight_layout()
+    if filename:
+        plt.savefig(filename)
+        if platform.system() == 'Darwin':
+            subprocess.run(['open', filename])
+        else:
+            subprocess.run(['xdg-open', filename])
+
+        #plt.close()
+    else:
+        print('Showing')
+        plt.show() #block=False)
