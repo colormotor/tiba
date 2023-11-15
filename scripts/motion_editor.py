@@ -43,11 +43,14 @@ if rosloader is not None:
     from std_msgs.msg import String
     from trajectory_msgs.msg import JointTrajectory
     from trajectory_msgs.msg import JointTrajectoryPoint
-
+    from std_msgs.msg import Float64MultiArray
+    from std_msgs.msg import Time
+    from std_msgs.msg import Header
+    from std_msgs.msg import Duration
     has_ros = True
 
     msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
-    jtraj_pub = rospy.Publisher('/tiba/jtrajectory', JointTrajectory, queue_size=10)
+    jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
     rospy.init_node('motion_editor', anonymous=True)
 else:
     has_ros = False
@@ -235,7 +238,7 @@ def send_joint_trajectory(Qs, dQs):
         p = JointTrajectoryPoint()
         p.positions = q
         p.velocities = dq
-        p.time_from_start = cfg.robot_dt*i
+        #p.time_from_start = Duration(0, int(1e+9*cfg.robot_dt*i))
         jtraj.points.append(p)
     jtraj_pub.publish(jtraj)
     rospy.loginfo("Sent joint trajectory")
