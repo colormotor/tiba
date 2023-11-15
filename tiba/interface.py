@@ -98,7 +98,7 @@ class MotionEditor:
         else:
             print("Motion does not exist")
 
-    def gui(self, imgui):
+    def gui(self, imgui, itiba):
         names = list(self.motions.keys())
         if self.cur_motion >= len(names):
             self.cur_motion = -1
@@ -128,10 +128,10 @@ class MotionEditor:
                 self.delete_motion(names[self.cur_motion])
             if self.get_cur_motion():
                 imgui.text(names[self.cur_motion])
-                self.motion_gui(imgui, names[self.cur_motion])
+                self.motion_gui(imgui, itiba, names[self.cur_motion])
 
 
-    def motion_gui(self, imgui, key):
+    def motion_gui(self, imgui, itiba, key):
         motion = self.motions[key]
         names = []
         for i, step in enumerate(motion['steps']):
@@ -148,7 +148,7 @@ class MotionEditor:
         if imgui.begin_popup_modal('Play motion').opened:
             imgui.text('Are you sure?')
             if imgui.button('OK'):
-                self.play_cur_motion()
+                itiba.play_cur_motion()
                 imgui.close_current_popup()
             imgui.same_line()
             if imgui.button('Cancel'):
@@ -250,9 +250,12 @@ class TibaInterface:
             env.step(cfg.robot_dt)
 
     def delay(self, delay):
-        if amt > 0:
+        if delay > 0:
             print('%f second delay'%delay)
             time.sleep(delay)
+
+    def motion_gui(self, imgui):
+        self.editor.gui(imgui, self)
 
     def execute(self, delay=2.0):
         if self.panda is None:
@@ -275,12 +278,14 @@ class TibaInterface:
             while ctx.ok() and i < len(dQ):
                 ctrl.set_control(Q[i], dQ[i])
                 i += 1
+            ctrl.set_control(Q[-1], np.zeros(7))
+            #while ctx.state
         print('Stopping controller')
         self.panda.stop_controller()
         #time.sleep(0.5)
         print('Finished motion')
 
-    def play_cur_motion(self, delay):
+    def play_cur_motion(self, delay=2.0):
         motion = self.editor.get_cur_motion()
         if not motion:
             print('No motion')
@@ -297,7 +302,7 @@ class TibaInterface:
                 Qs_batch, dQs_batch = tu.joint_approach(self.robot.q, step['q'])
                 self.plan_joint_trajectory(Qs_batch, dQs_batch)
                 self.execute(0.0)
-
+                self.robot.q = step['q']
                 #panda.move_to_joint_position(np.array(step['q']))
             elif step['kind'] == 'grip':
                 mm = step['mm']

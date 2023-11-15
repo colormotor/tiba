@@ -38,7 +38,7 @@ import swift
 import matplotlib
 
 rosloader = importlib.find_loader('rospy')
-if rosloader is not None:
+if rosloader is not None and False:
     import rospy
     from std_msgs.msg import String
     from trajectory_msgs.msg import JointTrajectory
@@ -210,7 +210,7 @@ def setup():
     v3d = GlView3d(sketch) #SketchView3d(sketch)
 
     global glyphs
-    glyphs = svg.load_svg_polylines('ens.svg')
+    glyphs = svg.load_svg_polylines('ha.svg')
     destrect = geom.make_rect(0, height-300, 400, 300)
     glyphs = geom.transform_to_rect(glyphs, destrect)
 
@@ -269,6 +269,7 @@ def gui():
     if imgui.button('Plan trajectory'):
         cur_pos = robot.pen_tcp_pos(robot.q)
         trajectories = pad.augment_with_pen_orientation(state.trajectories, robot, robot.qr)
+        # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
         trajectories += [tu.gauss_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
         itiba.plan_task_trajectories(trajectories)
         state.steps, state.fk_points = compute_steps(robot, itiba.Qs)
@@ -326,7 +327,7 @@ def gui():
             imgui.end_popup()
 
     if (not state.plane_calibration):
-        editor.gui(imgui)
+        itiba.motion_gui(imgui)
     else:
         if imgui.button('Clear points'):
             pad.clear()

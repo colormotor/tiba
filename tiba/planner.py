@@ -68,7 +68,7 @@ class iLQRPlannerVelocity:
         for traj in trajectories:
             if len(traj) == 0:
                 continue
-            approach = tu.gauss_approach(x0, traj[0])
+            approach = tu.trapezoidal_approach(x0, traj[0])
             if approach:
                 linked_trajectories.append(approach)
             if rest > 0.0:
@@ -121,7 +121,7 @@ class iLQRPlannerVelocity:
 
         if self.subsample > 1:
             n = len(Qs)
-            Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=[0, 1], duration=(n-1)*cfg.dt)
+            Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=1, duration=(n-1)*cfg.dt)
             print('Splined shapes', Qs.shape, dQs.shape)
 
         return list(Qs), list(dQs)
