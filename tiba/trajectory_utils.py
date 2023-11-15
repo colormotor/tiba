@@ -7,7 +7,7 @@ from itertools import combinations
 from scipy.special import erf
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
-from scipy.interpolate import interp1d, splprep, splev
+from scipy.interpolate import interp1d, splprep, splev, make_interp_spline
 from roboticstoolbox.tools.trajectory import ctraj, trapezoidal_func, trapezoidal
 from . import trapezoidal
 reload(trapezoidal)
@@ -124,6 +124,7 @@ def joint_approach(q0, q1, speed=None):
     dts = [tr(t)[0][1] for t in time]
     Qs = [q0 + (q1-q0)*t for t in ts]
     dQs = [dq*dt for dt in dts]
+    print(dQs[0], dQs[-1])
     return Qs, dQs
 
 
@@ -369,7 +370,7 @@ def gauss_easeinout(a, b, duration, ease_duration=0.25, easing=5):
     t = t/np.max(t)
     return a + (b - a)*t
 
-def bspline(n, pts, closed=False, alpha=1, degree=2, smooth_k=0, w=None, der=0, duration=1.0):
+def bspline(n, pts, closed=False, alpha=1, degree=3, smooth_k=0, w=None, der=0, duration=1.0, clamped=True):
     pts = np.array(pts)
     if closed:
         pts = np.vstack([pts, pts[0]])
@@ -384,16 +385,29 @@ def bspline(n, pts, closed=False, alpha=1, degree=2, smooth_k=0, w=None, der=0, 
     u = np.linspace(0, duration, pts.shape[0])
     print('dt_pre:', u[1] - u[0])
     degree = min(degree, pts.shape[0]-1)
-    tck, _ = splprep(pts.T, u=u, k=degree, per=closed, s=smooth_k, w=w)
+    if clamped:
+        bc_type=([(1, np.zeros(dim))], [(1, np.zeros(dim))])
+    else:
+        # Natural
+        bc_type=([(2, 0.0)], [(2, 0.0)])
+    spl = make_interp_spline(u, pts, k=degree, bc_type=bc_type)
+    #tck, _ = splprep(pts.T, u=u, k=degree, per=closed, s=smooth_k, w=w)
 
     t = np.linspace(0, duration, n)
-    print(t[1] - t[0])
-    print('dt_post:', t[1] - t[0])
-    if type(der) == list:
-        res = []
-        for d in der:
-            res.append(np.vstack(splev(t, tck, der=d)).T)
-        return res
+    res = [spl(t)]
 
-    res = splev(t, tck, der=der)
-    return np.vstack(res).T
+    #print(t[1] - t[0])
+    #print('dt_post:', t[1] - t[0])
+    for i in range(der):
+        spl = spl.derivative()
+        res.append(spl(t))
+    return res
+
+    # if type(der) == list:
+    #     res = []
+    #     for d in der:
+    #         res.append(np.vstack(splev(t, tck, der=d)).T)
+    #     return res
+
+    # res = splev(t, tck, der=der)
+    # return np.vstack(res).T

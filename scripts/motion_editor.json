@@ -17,18 +17,18 @@
         },
         "drawing": {
             "plane_offset": 0.0,
-            "padding": 80,
-            "penup_mm": 50,
+            "padding": 429,
+            "penup_mm": 55,
             "pos_offset_x": 0.0,
             "pos_offset_y": 0.0
         },
         "tsm": {
-            "dist": 0.8820000290870667,
+            "dist": 2.3529999256134033,
             "xoffset": 0.0,
-            "voffset": 0.0,
-            "rotx": 275,
+            "voffset": -0.23499999940395355,
+            "rotx": 286,
             "roty": 0,
-            "rotz": 138
+            "rotz": 119
         }
     },
     "presets": {},
