@@ -78,6 +78,7 @@ class TibaSketch:
             self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
             self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
             rospy.init_node('motion_generator', anonymous=True)
+            self.msg_pub.publish('Tiba sketch connecting')
 
     def init(self, sketch, robot, callback, panda=None, gripper=None):
         self.itiba = TibaInterface(robot, panda=panda, gripper=gripper)
@@ -205,6 +206,15 @@ class TibaSketch:
 
         if imgui.button('Compute trajectories'):
             self.compute_trajectories()
+
+        if imgui.button('Home'):
+            self.msg_pub.publish('exec:Home')
+
+        if imgui.button('Pick Tool'):
+            self.msg_pub.publish('exec:Pick')
+        imgui.same_line()
+        if imgui.button('Release Tool'):
+            self.msg_pub.publish('exec:Release')
 
         if self.trajectories_computed and imgui.button('Plan trajectories'):
             cur_pos = self.robot.pen_tcp_pos(self.robot.q)
