@@ -47,7 +47,7 @@ def setup():
     load_svg()
 
 def load_svg():
-    draft = svg.load_svg_bezier_chains('Untitled.svg')
+    draft = svg.load_svg_bezier_chains('tibafont.svg')
     dest_rect = geom.make_rect(0, 0, width, height)
     draft_in = geom.transform_to_rect(draft, dest_rect)
     draft = []
