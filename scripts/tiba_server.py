@@ -36,6 +36,12 @@ robot.q = robot.qr
 
 def msg_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Msg: %s", data.data)
+    if 'exec:' in data.data:
+        cmd = data.data.split(':')[1]
+        print('Executing command: ', cmd)
+        if itiba.editor.set_cur_motion(cmd):
+            itiba.play_cur_motion()
+
 
 def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
@@ -58,6 +64,7 @@ def jtraj_callback(data):
         print('Simulating')
         itiba.simulate()
         print('Simulation done')
+
 
 def main():
     print('TIBA server v0.1')
