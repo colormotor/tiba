@@ -1,0 +1,27 @@
+{
+    "params": {
+        "seed": 5,
+        "traj": {
+            "sigma": 0.5,
+            "isotropy": 0.5,
+            "angle": 0.0
+        },
+        "drawing": {
+            "plane_offset": 0.0,
+            "padding": 127,
+            "penup_mm": 26,
+            "pos_offset_x": 0.05900000035762787,
+            "pos_offset_y": 0.0
+        },
+        "tsm": {
+            "dist": 1.059000015258789,
+            "xoffset": 0.16500000655651093,
+            "voffset": -0.37599998712539673,
+            "rotx": 260,
+            "roty": 0,
+            "rotz": 258
+        }
+    },
+    "presets": {},
+    "aux": {}
+}

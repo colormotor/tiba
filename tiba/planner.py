@@ -11,6 +11,8 @@ from importlib import reload
 import os, sys
 import pdb
 import numbers
+import platform, subprocess
+
 
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
@@ -65,16 +67,52 @@ class iLQRPlannerVelocity:
         # Add approaches between trajectories
         x0 = np.concatenate([self.rbt.get_ee_pos(), self.rbt.get_ee_orn()])
         linked_trajectories = []
-        for traj in trajectories:
-            if len(traj) == 0:
+        for i, traj in enumerate(trajectories):
+            if len(traj) < 2:
                 continue
             approach = tu.trapezoidal_approach(x0, traj[0])
-            if approach:
+            if len(approach) > 1:
                 linked_trajectories.append(approach)
             if rest > 0.0:
+                # traj = np.array(traj)
+                # otraj = traj
+                # odx = np.diff(traj, axis=0)/cfg.dt
+                # xx = np.array(odx)
+                # ospeed = np.sqrt(odx[:,0]**2 + odx[:,1]**2)
+                # if np.max(ospeed) > 2:
+                #     pdb.set_trace()
+                #     print('Oh shit')
                 traj = tu.rest_inout(traj, rest)
+                dX = np.diff(traj, axis=0)/cfg.dt
+                speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
+                try:
+                    if np.max(speed) > 2:
+                        pdb.set_trace()
+                        print('Oh shit')
+                except:
+                    pdb.set_trace()
+                    print('ooooo')
             linked_trajectories.append(traj)
             x0 = traj[-1]
+
+        all_trajs = np.vstack(linked_trajectories)
+        plt.figure(figsize=(5,5))
+        t = 0.0
+        for traj in linked_trajectories:
+            dX = np.diff(traj, axis=0)/cfg.dt
+            speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
+            if np.max(speed) > 2:
+                pdb.set_trace()
+            T = np.linspace(0, len(speed)*cfg.dt, len(speed)) + t
+            plt.plot(T, speed)
+            t = T[-1]
+
+        #dX = np.diff(all_trajs, axis=0)/cfg.dt
+        #speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
+
+        plt.title('Cartesian speed')
+        plt.tight_layout()
+        show_open('cartesian.pdf')
 
         # Plan
         nb_control_vars = len(self.dq0)
@@ -118,12 +156,43 @@ class iLQRPlannerVelocity:
 
         Qs = sum(Qs, [])
         dQs = sum(dQs, [])
+        Qs_1 = np.array(Qs)
+        dQs_1= np.array(dQs)
 
         if self.subsample > 1:
             n = len(Qs)
             Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=1, duration=(n-1)*cfg.dt)
             print('Splined shapes', Qs.shape, dQs.shape)
 
+        Qs = np.array(Qs)
+        dQs = np.array(dQs)
+        print(len(Qs), len(Qs_1))
+
+        x = np.linspace(0, 1, len(Qs))
+        x1 = np.linspace(0, 1, len(Qs_1))
+        plt.figure(figsize=(12,12))
+        plt.subplot(211)
+        #plt.cla()
+        print(Qs.shape, Qs_1.shape)
+        for i in range(7):
+            plt.plot(x1, Qs_1[:, i], color=plut.default_color(i), ls=':', lw=2)
+            plt.plot(x, Qs[:, i], color=plut.default_color(i), label='q%d'%(i+1))
+
+        plt.subplot(212)
+        # plt.cla()
+        print('dQ1', dQs_1[0], dQs_1[-1])
+
+        print('dQ', dQs[0], dQs[-1])
+
+        for i in range(7):
+            x = np.linspace(0, 1, len(dQs_1))
+            plt.plot(x, dQs_1[:, i], color=plut.default_color(i), ls=':', lw=2)
+            x = np.linspace(0, 1, len(dQs))
+            plt.plot(x, dQs[:, i], color=plut.default_color(i)) #, label='q%d'%(i+1))
+
+        plt.tight_layout()
+        show_open('spline.pdf')
+        #plt.savefig('spline.png')
         return list(Qs), list(dQs)
 
 def plan_trajectory(urdf_path,
@@ -542,7 +611,7 @@ class DrawingPad:
         return res
 
     def fit_to_frame(self, S, clamp_z=True):
-        ''' Fits a 3d trajectory assumed to lie on the XY plan, to the frame of the drawing pad'''
+        ''' Fits a 3d trajectory assumed to lie on the XY plane, to the frame of the drawing pad'''
         compound = True
         if not geom.is_compound(S):
             S = [S]
@@ -648,9 +717,10 @@ def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, 
     S = geom.affine_transform(geom.rot_2d(geom.radians(-90)), S)
     mat = geom.rect_in_rect_transform(geom.bounding_box(S, input_padding), box)
     S = geom.affine_transform(mat, S)
-    S = [np.hstack([P, np.zeros([P.shape[0], 1])]) for P in S]
-    up = np.array([0, 0, 1])
+
     if penup_mm > 0.0:
+        S = [np.hstack([P, np.zeros([P.shape[0], 1])]) for P in S]
+        up = np.array([0, 0, 1])
         S = [np.vstack([P[0] + up*(penup_mm/1000),
                         P,
                         P[-1] + up*(penup_mm/1000)]) for P in S]
@@ -667,8 +737,7 @@ def fit_to_frame(P, frame, offset=0):
 def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi=92, max_segments=200, filename=''):
     import matplotlib
     from matplotlib.gridspec import GridSpec
-    import platform, subprocess
-
+    # return
     # plt.figure(figsize=(25,5))
     # plt.plot(np.sin(np.linspace(0, 10, 100)))
     # plt.show(block=False)
@@ -734,13 +803,21 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
 
     plt.tight_layout()
     if filename:
-        plt.savefig(filename)
-        if platform.system() == 'Darwin':
-            subprocess.run(['open', filename])
-        else:
-            subprocess.run(['xdg-open', filename])
+        show_open(filename)
+        # plt.savefig(filename)
+        # if platform.system() == 'Darwin':
+        #     subprocess.run(['open', filename])
+        # else:
+        #     subprocess.run(['xdg-open', filename])
 
         #plt.close()
     else:
         print('Showing')
         plt.show() #block=False)
+
+def show_open(filename):
+    plt.savefig(filename)
+    if platform.system() == 'Darwin':
+        subprocess.run(['open', filename])
+    else:
+        subprocess.run(['xdg-open', filename])

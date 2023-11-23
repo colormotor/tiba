@@ -136,7 +136,7 @@ def trapezoidal_profile(x, y, v0, a0, v_max, a_max):
             params = minimum_time_planner(x[i], y[i], v0[i],
                                           a0[i], v_max[i], a_max[i])
         except PlanningError:
-            print("Failed to plan minimum time profile")
+            print("Failed to plan minimum time profile using trapezoidal planner")
             params = trapezoidal_planner(x[i], y[i], v0[i],
                                          a0[i], v_max[i], a_max[i])
 

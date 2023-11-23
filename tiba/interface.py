@@ -344,14 +344,15 @@ class TibaInterface:
         self.gripper.stop()
         self.gripper.move(100.0/1000, 0.2)
 
-    def plan_joint_trajectory(self, Qs, Qd, task_trajectories=[]):
+    def plan_joint_trajectory(self, Qs, Qd, plot=True, task_trajectories=[]):
         self.Qs, self.dQs = Qs, Qd
         utils.save_pkl([self.Qs, self.dQs], 'trajectory.pkl')
-        planner.plot_trajectory_stats(self.robot,
-                                      self.Qs,
-                                      self.dQs,
-                                      trajectories=task_trajectories,
-                                      filename=self.plot_path)
+        if plot:
+            planner.plot_trajectory_stats(self.robot,
+                                        self.Qs,
+                                        self.dQs,
+                                        trajectories=task_trajectories,
+                                        filename=self.plot_path)
 
     def plan_pad_trajectories(self, trajectories, rest=0.05):
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
