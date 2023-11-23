@@ -313,10 +313,10 @@ class TibaInterface:
                 Qs_batch = [Qs_batch[0]]*10 + Qs_batch + [Qs_batch[-1]]*10
                 dQs_batch = [dQs_batch[0]]*10 + dQs_batch + [dQs_batch[-1]]*10
 
-                self.plan_joint_trajectory(Qs_batch, dQs_batch)
-                self.robot.q = self.execute(0.0)
-                #self.robot.q = step['q']
-                #self.panda.move_to_joint_position(np.array(step['q']))
+                # self.plan_joint_trajectory(Qs_batch, dQs_batch)
+                # self.robot.q = self.execute(0.0)
+                self.robot.q = step['q']
+                self.panda.move_to_joint_position(np.array(step['q']))
             elif step['kind'] == 'grip':
                 mm = step['mm']
                 if True: #not state.graspedt
