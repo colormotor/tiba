@@ -98,6 +98,15 @@ class MotionEditor:
         else:
             print("Motion does not exist")
 
+    def set_cur_motion(self, name):
+        if name not in self.motions.keys():
+            print("Motion %s does not exist"%name)
+            self.cur_motion = -1
+            return False
+        self.cur_motion = list(self.motions.keys()).index(name)
+        print('Cur motion set to %s'%list(self.motions.keys())[self.cur_motion])
+        True
+
     def gui(self, imgui, itiba):
         names = list(self.motions.keys())
         if self.cur_motion >= len(names):
