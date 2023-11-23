@@ -43,11 +43,14 @@ if rosloader is not None and False:
     from std_msgs.msg import String
     from trajectory_msgs.msg import JointTrajectory
     from trajectory_msgs.msg import JointTrajectoryPoint
-
+    from std_msgs.msg import Float64MultiArray
+    from std_msgs.msg import Time
+    from std_msgs.msg import Header
+    from std_msgs.msg import Duration
     has_ros = True
 
     msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
-    jtraj_pub = rospy.Publisher('/tiba/jtrajectory', JointTrajectory, queue_size=10)
+    jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
     rospy.init_node('motion_editor', anonymous=True)
 else:
     has_ros = False
@@ -210,7 +213,7 @@ def setup():
     v3d = GlView3d(sketch) #SketchView3d(sketch)
 
     global glyphs
-    glyphs = svg.load_svg_polylines('ha.svg')
+    glyphs = svg.load_svg_polylines('ens.svg')
     destrect = geom.make_rect(0, height-300, 400, 300)
     glyphs = geom.transform_to_rect(glyphs, destrect)
 
@@ -235,7 +238,7 @@ def send_joint_trajectory(Qs, dQs):
         p = JointTrajectoryPoint()
         p.positions = q
         p.velocities = dq
-        p.time_from_start = cfg.robot_dt*i
+        #p.time_from_start = Duration(0, int(1e+9*cfg.robot_dt*i))
         jtraj.points.append(p)
     jtraj_pub.publish(jtraj)
     rospy.loginfo("Sent joint trajectory")
@@ -270,7 +273,7 @@ def gui():
         cur_pos = robot.pen_tcp_pos(robot.q)
         trajectories = pad.augment_with_pen_orientation(state.trajectories, robot, robot.qr)
         # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
-        trajectories += [tu.gauss_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
+        trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
         itiba.plan_task_trajectories(trajectories)
         state.steps, state.fk_points = compute_steps(robot, itiba.Qs)
 
@@ -278,7 +281,7 @@ def gui():
         cur_frame = robot.pen_tcp_frame(robot.q)
         dest_frame = planner.align_frame_z(cur_frame, np.array([0, 0, -1]))
 
-        trajectory = tu.append_rest(tu.gauss_approach(cur_frame,
+        trajectory = tu.append_rest(tu.trapezoidal_approach(cur_frame,
                                                       dest_frame), 0.5)
         itiba.plan_task_trajectories([trajectory])
         state.steps, state.fk_points = compute_steps(robot, itiba.Qs)

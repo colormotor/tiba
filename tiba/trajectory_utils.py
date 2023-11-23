@@ -2,15 +2,16 @@
 from importlib import reload
 import numpy as np
 import networkx as nx
-from polygonsoup import geom
+from polygonsoup import geom, bezier, simplify
 from itertools import combinations
 from scipy.special import erf
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
-from scipy.interpolate import interp1d, splprep, splev, make_interp_spline
+from scipy.interpolate import interp1d, splprep, splev, make_interp_spline, CubicSpline, BPoly
 from roboticstoolbox.tools.trajectory import ctraj, trapezoidal_func, trapezoidal
-from . import trapezoidal
+from . import trapezoidal, todorov
 reload(trapezoidal)
+from .fitCurves.fitCurves import fitCurve
 
 from .config import cfg
 import numbers
@@ -27,7 +28,6 @@ def to_pos_orn(pose):
     pose = SE3(pose)
     pose = pose.norm()
     return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
-
 
 def to_pose(pose):
     # TODO Add normalization?
@@ -62,10 +62,11 @@ def insert_rest(traj, duration):
     return [np.array(traj[0])]*n + traj
 
 def rest_inout(traj, duration):
-    traj = insert_rest(traj, duration)
-    traj = append_rest(traj, duration)
-    return traj
-    #return insert_rest(append_rest(traj, duration), duration)
+    traj = list(traj)
+    n = int(duration/cfg.dt)
+    if not n:
+        return traj
+    return [traj[0]]*n + traj + [traj[-1]]*n
 
 # Trajectory generators
 def xy_circles_mm(pose, radius_mm, cycle_duration, cycles=1, ease_duration=0.5, easing=2):
@@ -215,7 +216,7 @@ def trapezoidal_approach(x0, x1,
     time = np.linspace(0, tr.time, timesteps)
     ts = [tr(t)[0][2]/d for t in time]
     approach = [pose0.interp(pose1, t) for t in ts]
-    print('approach with ', len(approach))
+    print('approach with ', len(approach), ' steps')
     return pose_traj_to_posorn(approach)
 
 def approach(a, b, *args, **kwargs):
@@ -274,6 +275,150 @@ def gauss_approach(x0, x1, duration=-1,
         return pose_traj_to_posorn(approach)
     return []
 
+
+def split_chain(chain, tol=10): #1e-1):
+    tol = geom.radians(tol)
+    #return [chain]
+    beziers = bezier.chain_to_beziers(chain)
+    chunks = [[beziers[0]]]
+    bez = beziers[0]
+    prev = bez[-1] - bez[-2]
+    for bez in beziers[1:]:
+        next = bez[1] - bez[0]
+        theta = abs(geom.angle_between(prev, next))
+        #print(theta)
+        if theta > tol:
+            #if np.linalg.norm(bez[0] - bez[1]) < tol:
+            chunks.append([bez])
+        else:
+            chunks[-1].append(bez)
+        prev = bez[-1] - bez[-2]
+    return [bezier.beziers_to_chain(chunk) for chunk in chunks]
+
+def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5, angle_tolerance=10, subd=3, maxiter=300, tol=0.0):
+    '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
+    with a given maximum speed and max acceleration time
+    '''
+    trajectories = []
+    for chain in chains:
+        chunk_traj = []
+        for chunk in split_chain(chain, angle_tolerance):
+            #if tol > 0:
+            #    pts = bezier.bezier_piecewise(chunk, subd=20)
+            #    beziers = fitCurve(pts, tol)
+            traj = plan_bezier_chain_jerk(chunk, max_speed, max_accel_time, subd, maxiter)
+            chunk_traj.append(traj)
+        trajectories.append(np.vstack(chunk_traj))
+        #trajectories += chunk_traj
+    return trajectories
+
+
+def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=5, maxiter=300):
+    '''Given a (2d) cubic Bezier chain, compute a minimum jerk trajectory that tracks the curve
+    with a given maximum speed and max acceleration time
+    '''
+    # Compute points along curve
+    dt = cfg.dt
+    chain = np.array(chain)
+    dim = chain.shape[1]
+    P = bezier.bezier_piecewise(chain, subd=subd)
+    #P = simplify.dce(P, 0.001)
+    # Ps = P
+    # #Ps = simplify.dce(P, simplify_tol)
+    # #Ps = simplify.dp_simplify(P, simplify_tol*10)
+
+    # if len(Ps) > 2:
+    #     P = Ps
+    # else:
+    #     P = np.vstack([P[0], (P[0] + P[-1])/2, P[-1]])
+    # Path-constrained minimum jerk according to Todorov and Jordan
+    # we use this to get passage times, velocity and acceleration that minimize jerk
+    n = len(chain)*10 # Pretty arbitrary
+    Q, psg, dQ, ddQ = todorov.min_jerk_todorov(P, n, get_vel_acc=True, maxiter=maxiter)
+    opsg = psg
+    # Check that passage times are strictly increasing
+    dpsg = np.maximum(np.diff(psg), 1e-3)
+    if np.any(dpsg < 0):
+        print("Negative delta-time")
+    psg = np.cumsum(np.concatenate([[psg[0]], dpsg]))
+    if psg[-1] > n:
+        print("Passage times exceed total time")
+        psg = psg/psg[-1]*(n-1e-3)
+
+    # Add zero boundary conditions and initial and final time
+    dQ = np.vstack([np.zeros(dim), dQ, np.zeros(dim)])
+    ddQ = np.vstack([np.zeros(dim), ddQ, np.zeros(dim)])
+    T = np.concatenate([[0], psg, [n]])
+
+    # Use passage times, velocity and acceleration to compute piecewise polynomial
+    derivs = np.dstack([P, dQ, ddQ])
+    try:
+        bpx = BPoly.from_derivatives(T, np.vstack([derivs[:,0, i] for i in range(3)]).T)
+        bpy = BPoly.from_derivatives(T, np.vstack([derivs[:,1, i] for i in range(3)]).T)
+    except ValueError as e:
+        print(e)
+        print('T', T)
+        pdb.set_trace()
+
+    dbpx = bpx.derivative()
+    dbpy = bpy.derivative()
+    ddbpx = dbpx.derivative()
+    ddbpy = dbpy.derivative()
+
+    # Estimate maximum speed and acceleration
+    x_test = np.linspace(0, T[-1], n)
+    Y = np.vstack([bpx(x_test), bpy(x_test)]).T
+    dY = np.vstack([dbpx(x_test), dbpy(x_test)]).T
+    ddY = np.vstack([ddbpx(x_test), ddbpy(x_test)]).T
+    smax = np.max(colnorm(dY))
+    amax = np.max(colnorm(ddY))
+
+    # Compute time step that satisfies max speed and acceleration bounds
+    max_accel = max_speed/max_accel_time
+    div_s = max_speed/smax
+    div_a = np.sqrt(max_accel/amax)
+    div = min(div_s, div_a)
+    #print('smax, amax', smax, amax)
+    #print('div', div_s, div_a)
+
+    x = np.arange(0, T[-1], dt*div)
+    # Compute trajectory
+    Y = np.vstack([bpx(x), bpy(x)]).T
+    if len(Y)==2:
+        pdb.set_trace()
+    return Y
+
+def colnorm(dP):
+    return np.sqrt(dP[:,0]**2 + dP[:,1]**2)
+
+def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
+    ''' Create a pen lifting motion between two points assumed to lie on the XY plane'''
+    dt = cfg.dt
+    a = np.array(a)
+    b = np.array(b)
+    d = b-a
+    up = [0, 0, height]
+    P = np.array([a,  a+d*(1/3)+up, b-d*(1/3)+up, b])
+    u = geom.cum_chord_lengths(P)
+    u = u/u[-1]
+    bc_type='clamped'
+    spl = CubicSpline(u, P, bc_type=bc_type)
+    dspl = spl.derivative()
+    ddspl = dspl.derivative()
+    x_test = np.linspace(0, 1, 100)
+    Y = spl(x_test)
+    dY = dspl(x_test)
+    ddY = ddspl(x_test)
+    smax = np.max(colnorm(dY))
+    amax = np.max(colnorm(ddY))
+    max_accel = max_speed/max_accel_time
+    div_s = max_speed/smax
+    div_a = np.sqrt(max_accel/amax)
+    div = min(div_s, div_a)
+    t = np.arange(0, 1, dt*div)
+    if len(t) <= 2:
+        pdb.set_trace()
+    return spl(t)
 
 
 def tsp_glyph(n, r1=0.5, r2=1.0, center=[0,0]):
@@ -370,6 +515,38 @@ def gauss_easeinout(a, b, duration, ease_duration=0.25, easing=5):
     t = t/np.max(t)
     return a + (b - a)*t
 
+def bspline2(n, pts, closed=False, alpha=1, degree=3, smooth_k=0, w=None, der=0, duration=1.0, clamped=True):
+    pts = np.array(pts)
+    if closed:
+        pts = np.vstack([pts, pts[0]])
+    if w is None:
+        w = np.ones(len(pts))
+    elif is_number(w):
+        w = np.ones(len(pts))*w
+        if closed:
+            w = np.concatenate([w, [w[0]]])
+
+    dim = pts.shape[1]
+    u = np.linspace(0, duration, pts.shape[0])
+    print('dt_pre:', u[1] - u[0])
+    degree = min(degree, pts.shape[0]-1)
+    # if clamped:
+    #     bc_type=([(1, np.zeros(dim))], [(1, np.zeros(dim))])
+    # else:
+    #     # Natural
+    #     bc_type=([(2, 0.0)], [(2, 0.0)])
+    #spl = make_interp_spline(u, pts, k=degree) #, bc_type=bc_type)
+    tck, _ = splprep(pts.T, u=u, k=degree, per=closed, s=smooth_k, w=w)
+
+    t = np.linspace(0, duration, n)
+    res = [np.vstack(splev(t, tck)).T]
+
+    #print(t[1] - t[0])
+    #print('dt_post:', t[1] - t[0])
+    for i in range(der):
+        res += [np.vstack(splev(t, tck, der=i+1)).T]
+    return res
+
 def bspline(n, pts, closed=False, alpha=1, degree=3, smooth_k=0, w=None, der=0, duration=1.0, clamped=True):
     pts = np.array(pts)
     if closed:
@@ -388,9 +565,10 @@ def bspline(n, pts, closed=False, alpha=1, degree=3, smooth_k=0, w=None, der=0, 
     if clamped:
         bc_type=([(1, np.zeros(dim))], [(1, np.zeros(dim))])
     else:
+        pass
         # Natural
-        bc_type=([(2, 0.0)], [(2, 0.0)])
-    spl = make_interp_spline(u, pts, k=degree, bc_type=bc_type)
+    #bc_type=([(2, 0.0)], [(2, 0.0)])
+    spl = make_interp_spline(u, pts, k=degree) #, bc_type=bc_type)
     #tck, _ = splprep(pts.T, u=u, k=degree, per=closed, s=smooth_k, w=w)
 
     t = np.linspace(0, duration, n)
