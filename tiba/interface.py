@@ -105,7 +105,7 @@ class MotionEditor:
             return False
         self.cur_motion = list(self.motions.keys()).index(name)
         print('Cur motion set to %s'%list(self.motions.keys())[self.cur_motion])
-        True
+        return True
 
     def gui(self, imgui, itiba):
         names = list(self.motions.keys())
@@ -234,6 +234,7 @@ class TibaInterface:
         self.pad.update()
 
         self.robot = robot
+        self.grasped = False
 
         self.plot_path = plot_path
         self.panda = panda
@@ -265,6 +266,15 @@ class TibaInterface:
 
     def motion_gui(self, imgui):
         self.editor.gui(imgui, self)
+
+    def read_states(self):
+        if self.panda is None:
+            self.robot.q = self.robot.qr
+            print("No panda, can't read states")
+            return
+
+        self.robot.q = self.panda.get_robot().read_once().q # panda.q
+        self.grasped = self.gripper.read_once().is_grasped
 
     def execute(self, delay=2.0):
         if self.panda is None:
@@ -325,15 +335,21 @@ class TibaInterface:
                 # self.plan_joint_trajectory(Qs_batch, dQs_batch)
                 # self.robot.q = self.execute(0.0)
                 self.robot.q = step['q']
-                self.panda.move_to_joint_position(np.array(step['q']))
+                if self.panda is not None:
+                    self.panda.move_to_joint_position(np.array(step['q']))
             elif step['kind'] == 'grip':
                 mm = step['mm']
-                if True: #not state.graspedt
-                    self.grasp(mm)
+                if self.panda is not None:
+                    self.read_states()
+                    if not self.grasped: #not state.graspedt
+                        self.grasp(mm)
                     #state.grasped = True
 
             elif step['kind'] == 'ungrip':
-                self.ungrasp()
+                if self.panda is not None:
+                    self.read_states()
+                    if self.grasped:
+                        self.ungrasp()
                 # if state.grasped:
                 #     gripper.stop()
                 #     gripper.move(100.0/1000, 0.2)
