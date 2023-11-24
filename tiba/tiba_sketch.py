@@ -28,8 +28,13 @@ from collections import namedtuple
 import swift
 import matplotlib
 
+state = lambda: None
+state.has_ros = False
+
 rosloader = importlib.find_loader('rospy')
+
 if rosloader is not None:
+    print("Loading ros")
     import rospy
     from std_msgs.msg import String
     from trajectory_msgs.msg import JointTrajectory
@@ -38,9 +43,7 @@ if rosloader is not None:
     from std_msgs.msg import Time
     from std_msgs.msg import Header
     from std_msgs.msg import Duration
-    has_ros = True
-else:
-    has_ros = False
+    state.has_ros = True
 
 def plan_bezier(draft, max_speed, accel_time, penup_distance):
     print(draft)
@@ -74,11 +77,15 @@ class TibaSketch:
             'traj.angle'
         ]
 
-        if has_ros:
-            self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
-            self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
-            rospy.init_node('motion_generator', anonymous=True)
-            self.msg_pub.publish('Tiba sketch connecting')
+        if state.has_ros:
+            try:
+                self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
+                self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
+                rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
+                self.msg_pub.publish('Tiba sketch connecting')
+            except rospy.exceptions.ROSException as e:
+                state.has_ros = False
+
 
     def init(self, sketch, robot, callback, panda=None, gripper=None):
         self.itiba = TibaInterface(robot, panda=panda, gripper=gripper)
@@ -204,17 +211,20 @@ class TibaSketch:
         if imgui.button('Launch Swift'):
             self.itiba.launch_simulator()
 
-        if imgui.button('Compute trajectories'):
-            self.compute_trajectories()
-
         if imgui.button('Home'):
             self.msg_pub.publish('exec:Home')
 
+        if imgui.button('Say hello'):
+            self.msg_pub.publish('hello!!!')
         if imgui.button('Pick Tool'):
             self.msg_pub.publish('exec:Pick')
         imgui.same_line()
         if imgui.button('Release Tool'):
             self.msg_pub.publish('exec:Release')
+
+        if imgui.button('Compute trajectories'):
+            self.compute_trajectories()
+
 
         if self.trajectories_computed and imgui.button('Plan trajectories'):
             cur_pos = self.robot.pen_tcp_pos(self.robot.q)
@@ -228,7 +238,7 @@ class TibaSketch:
             if imgui.button('Simulate trajectory'):
                 self.itiba.simulate()
 
-            if has_ros and self.itiba.Qs:
+            if state.has_ros and self.itiba.Qs:
                 if imgui.button("Execute trajectory"):
                     imgui.open_popup('Execute')
 
