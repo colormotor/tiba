@@ -40,6 +40,7 @@ def msg_callback(data):
         cmd = data.data.split(':')[1]
         print('Executing command: ', cmd)
         if itiba.editor.set_cur_motion(cmd):
+            itiba.read_states()
             itiba.play_cur_motion()
 
 
@@ -47,11 +48,13 @@ def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
     Qs = [p.positions for p in data.points]
     dQs = [p.velocities for p in data.points]
-    if has_robot:
-        print('Reading robot joint configuration')
-        robot.q = panda.get_robot().read_once().q # panda.q
-    else:
-        robot.q = robot.qr
+    itiba.read_states()
+
+    # if has_robot:
+    #     print('Reading robot joint configuration')
+    #     robot.q = panda.get_robot().read_once().q # panda.q
+    # else:
+    #     robot.q = robot.qr
 
     print('Planning')
     itiba.plan_joint_trajectory(Qs, dQs, plot=False)

@@ -384,6 +384,7 @@ def draw():
 
         state.trajectories_2d = glyphs
 
+
     if has_robot:
         q = panda.get_robot().read_once().q # panda.q
     else:
@@ -393,12 +394,13 @@ def draw():
         #q= [-2.3774395283420826e-18, -0.2143006546605322, -8.871243762606449e-17, -2.088158222442138, 1.1696396786270597e-16, 1.8738575677821137, 0.7853981633974482]
 
 
-
+    itiba.read_states()
+    q = robot.q
     # P = editor.robot_polygon(q, viewport=geom.make_rect(0, 0, width, height))
     # stroke(255)
     # no_fill()
     # polyline(P, closed=False)
-    robot.q = q
+    #robot.q = q
     state.tcp_pos = robot.pen_tcp_pos(q)
     no_fill()
     stroke(1, 0.5)
@@ -409,7 +411,7 @@ def draw():
     text_size(20)
     text([10, 30], '%d points'%(np.sum([len(P) for P in state.trajectories])))
     text([10, 60], 'tcp pos: [%f %f %f]'%(state.tcp_pos[0], state.tcp_pos[1], state.tcp_pos[2]))
-
+    text([10, 90], 'Grasped: [%d]'%(int(itiba.grasped)))
     #v3d.sketch_view.text([2,0,0], "2m")
 
     #draw_robot()
