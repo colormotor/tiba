@@ -40,7 +40,9 @@ def msg_callback(data):
         cmd = data.data.split(':')[1]
         print('Executing command: ', cmd)
         if itiba.editor.set_cur_motion(cmd):
+            print('Reading states')
             itiba.read_states()
+            print('Playing motion')
             itiba.play_cur_motion()
 
 
