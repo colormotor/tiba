@@ -34,6 +34,8 @@ robot = TibaRobot(45, 11.5) # Molotow
 itiba = TibaInterface(robot, panda, gripper)
 robot.q = robot.qr
 
+qpub = None
+
 def msg_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Msg: %s", data.data)
     if 'exec:' in data.data:
@@ -44,7 +46,7 @@ def msg_callback(data):
             itiba.read_states()
             print('Playing motion')
             itiba.play_cur_motion()
-
+    send_joint_state()
 
 def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
@@ -70,15 +72,26 @@ def jtraj_callback(data):
         itiba.simulate()
         print('Simulation done')
 
+    send_joint_state()
+
+def send_joint_state():
+    itiba.read_states()
+    p = JointTrajectoryPoint()
+    p.positions = itiba.robot.q
+    qpub.publish(p)
 
 def main():
     print('TIBA server v0.1')
     print('Waiting for data...')
 
+    global qpub
+
     rospy.init_node('tiba_server', anonymous=True)
     rospy.Subscriber("/tiba/msg", String, msg_callback)
     rospy.Subscriber("/tiba/jtraj", JointTrajectory, jtraj_callback)
+    qpub = rospy.Publisher("/tiba/q", JointTrajectoryPoint, queue_size=10)
 
+    send_joint_state()
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
 

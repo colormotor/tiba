@@ -372,7 +372,7 @@ class TibaInterface:
 
     def plan_joint_trajectory(self, Qs, Qd, plot=True, task_trajectories=[]):
         self.read_states()
-        Qapproach, dQapproach = tu.joint_approach(self.robot.q, Qs[0])
+        Qapproach, dQapproach = [], [] # tu.joint_approach(self.robot.q, Qs[0])
 
         self.Qs, self.dQs = Qapproach + Qs, dQapproach + Qd
 
