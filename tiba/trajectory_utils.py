@@ -9,6 +9,9 @@ from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 from scipy.interpolate import interp1d, splprep, splev, make_interp_spline, CubicSpline, BPoly
 from roboticstoolbox.tools.trajectory import ctraj, trapezoidal_func, trapezoidal
+from collections import defaultdict
+from math import hypot
+
 from . import trapezoidal, todorov
 reload(trapezoidal)
 from .fitCurves.fitCurves import fitCurve
@@ -391,6 +394,14 @@ def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=5, maxiter=300
 def colnorm(dP):
     return np.sqrt(dP[:,0]**2 + dP[:,1]**2)
 
+def compute_speed(X, dt):
+    D = np.diff(X, axis=0)
+    return colnorm(D)/dt
+
+def compute_accel(X, dt):
+    D = np.diff(X, axis=0, n=2)
+    return colnorm(D)/(dt**2)
+
 def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
     ''' Create a pen lifting motion between two points assumed to lie on the XY plane'''
     dt = cfg.dt
@@ -418,6 +429,15 @@ def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
     t = np.arange(0, 1, dt*div)
     if len(t) <= 2:
         pdb.set_trace()
+    X = spl(t)
+    speed = compute_speed(X, dt)
+    accel = compute_accel(X, dt)
+    if np.max(speed) > max_speed:
+        print("Exceeding max speed")
+        pdb.set_trace()
+    if np.max(accel) > max_accel:
+        print("Exceeding max accel")
+        pdb.set_trace()
     return spl(t)
 
 
@@ -437,6 +457,7 @@ def smooth_strokes_lqt(S, only_pos=True, penups=True, penup_variability=0.4, **k
         trajectory = smooth_stroke_lqt(P, variability=variability, **kwargs)
         trajectories.append(trajectory)
     return trajectories
+
 
 def smooth_stroke_lqt(X, only_pos=True, **kwargs):
     import motor.lqt as lqt
@@ -589,3 +610,117 @@ def bspline(n, pts, closed=False, alpha=1, degree=3, smooth_k=0, w=None, der=0, 
 
     # res = splev(t, tck, der=der)
     # return np.vstack(res).T
+
+
+def saturate_speed(trajectory, max_speed, dt):
+    Xsat = []
+    for a, b in zip(trajectory, trajectory[1:]):
+        d = b - a
+        speed = np.linalg.norm(d) / dt
+        if speed > max_speed:
+            nk = int(np.round(speed/max_speed))
+            Xsat += [a + d*t for t in np.linspace(0, 1, nk+1)[:-1]]
+        else:
+            Xsat.append(a)
+
+    Xsat.append(trajectory[-1])
+    return np.array(Xsat)
+
+
+class Index(object):
+    def __init__(self, points, n=100):
+        self.n = n
+        self.x1 = min(p[0] for p in points)
+        self.x2 = max(p[0] for p in points)
+        self.y1 = min(p[1] for p in points)
+        self.y2 = max(p[1] for p in points)
+        self.bins = defaultdict(list)
+        self.size = 0
+        for point in points:
+            self.insert(point)
+
+    def normalize(self, x, y):
+        px = (x - self.x1) / (self.x2 - self.x1)
+        py = (y - self.y1) / (self.y2 - self.y1)
+        i = int(px * self.n)
+        j = int(py * self.n)
+        return (i, j)
+
+    def insert(self, point):
+        x, y = point[:2]
+        i, j = self.normalize(x, y)
+        self.bins[(i, j)].append(point)
+        self.size += 1
+
+    def remove(self, point):
+        x, y = point[:2]
+        i, j = self.normalize(x, y)
+        self.bins[(i, j)].remove(point)
+        self.size -= 1
+
+    def nearest(self, point):
+        x, y = point[:2]
+        i, j = self.normalize(x, y)
+        points = []
+        r = 0
+        while not points:
+            points.extend(self.ring(i, j, r))
+            r += 1
+        points.extend(self.ring(i, j, r))
+        return min(points,
+            key=lambda p: (hypot(x - p[0], y - p[1]), p[1], p[0]))
+
+    def ring(self, i, j, r):
+        if r == 0:
+            return self.bins[(i, j)]
+        result = []
+        for p in range(i - r, i + r + 1):
+            result.extend(self.bins[(p, j - r)])
+            result.extend(self.bins[(p, j + r)])
+        for q in range(j - r + 1, j + r):
+            result.extend(self.bins[(i - r, q)])
+            result.extend(self.bins[(i + r, q)])
+        return result
+
+def sort_paths(paths, reversable=True, join_thresh=0):
+    paths = [[tuple(p) for p in P] for P in paths]
+    first = paths[0]
+    paths.remove(first)
+    result = [first]
+    points = []
+    print('adding paths')
+    for path in paths:
+        x1, y1 = path[0]
+        x2, y2 = path[-1]
+        points.append((x1, y1, path, False))
+        if reversable:
+            points.append((x2, y2, path, True))
+    print('%d paths'%len(paths))
+
+    index = Index(points)
+    print('sorting')
+    while index.size > 0:
+        x, y, path, reverse = index.nearest(result[-1][-1])
+        x1, y1 = path[0]
+        x2, y2 = path[-1]
+        index.remove((x1, y1, path, False))
+        if reversable:
+            index.remove((x2, y2, path, True))
+        if reverse:
+            result.append(list(reversed(path)))
+        else:
+            result.append(path)
+
+    if join_thresh > 0 and result:
+        print('joining')
+        joined = [result[0]]
+        p = joined[-1][-1]
+        for P in result[1:]:
+            x, y = P[0]
+            if hypot(x - p[0], y - p[1]) < join_thresh:
+                joined[-1] += P
+            else:
+                joined.append(P)
+            p = joined[-1][-1]
+        result = joined
+    return [np.array(P) for P in result]
