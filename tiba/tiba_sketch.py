@@ -96,14 +96,6 @@ class TibaSketch:
             'traj.angle'
         ]
 
-        if state.has_ros:
-            try:
-                self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
-                self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
-                rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
-                self.msg_pub.publish('Tiba sketch connecting')
-            except rospy.exceptions.ROSException as e:
-                state.has_ros = False
 
 
     def init(self, sketch, robot, callback, panda=None, gripper=None):
@@ -117,6 +109,24 @@ class TibaSketch:
 
         self.trajectory_callback = callback
         self.robot.q = self.robot.qr
+
+        if state.has_ros:
+            try:
+                self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
+                self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
+                rospy.Subscriber('/tiba/q', JointTrajectoryPoint, self.state_callback)
+                rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
+                self.msg_pub.publish('Tiba sketch connecting')
+            except rospy.exceptions.ROSException as e:
+                state.has_ros = False
+
+    def state_callback(self, data):
+        print("Received state")
+        self.robot.q = np.array(data.positions)
+        self.itiba.Qs = []
+        self.steps, self.fk_points = [], []
+        #self.trajectories_computed = False
+        #self.trajectories = []
 
     @staticmethod
     def add_parameters(params_to_update):
@@ -208,7 +218,7 @@ class TibaSketch:
         self.clear()
         self.draft = draft
 
-    def compute_trajectories(self, max_speed=200/1000, accel_time=0.3):
+    def compute_trajectories(self, max_speed=200/1000, accel_time=0.4):
         params = self.sketch.params.params
         if not self.draft:
             print("No draft")
@@ -284,6 +294,9 @@ class TibaSketch:
             self.trajectories = self.pad.fit_to_frame(paths)
             self.trajectories_computed = False
             self.dirty = False
+
+        #if state.has_ros:
+        #    rospy.spin_once()
 
     def draw_gl(self):
         params = self.sketch.params.params
