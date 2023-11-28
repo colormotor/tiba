@@ -289,6 +289,7 @@ class TibaInterface:
         dQ = self.dQs
         print('Moving to initial position')
         self.panda.move_to_joint_position(Q[0])
+        self.delay(0.5)
         i = 0
         print('Starting control loop')
         ctrl = controllers.JointPosition()
@@ -328,9 +329,9 @@ class TibaInterface:
 
         for step in motion['steps']:
             if step['kind'] == 'q':
-                Qs_batch, dQs_batch = tu.joint_approach(self.robot.q, step['q'])
-                Qs_batch = [Qs_batch[0]]*10 + Qs_batch + [Qs_batch[-1]]*10
-                dQs_batch = [dQs_batch[0]]*10 + dQs_batch + [dQs_batch[-1]]*10
+                #Qs_batch, dQs_batch = tu.joint_approach(self.robot.q, step['q'])
+                #Qs_batch = [Qs_batch[0]]*10 + Qs_batch + [Qs_batch[-1]]*10
+                #dQs_batch = [dQs_batch[0]]*10 + dQs_batch + [dQs_batch[-1]]*10
 
                 # self.plan_joint_trajectory(Qs_batch, dQs_batch)
                 # self.robot.q = self.execute(0.0)
@@ -370,7 +371,11 @@ class TibaInterface:
         self.gripper.move(100.0/1000, 0.2)
 
     def plan_joint_trajectory(self, Qs, Qd, plot=True, task_trajectories=[]):
-        self.Qs, self.dQs = Qs, Qd
+        self.read_states()
+        Qapproach, dQapproach = [], [] # tu.joint_approach(self.robot.q, Qs[0])
+
+        self.Qs, self.dQs = Qapproach + Qs, dQapproach + Qd
+
         utils.save_pkl([self.Qs, self.dQs], 'trajectory.pkl')
         if plot:
             planner.plot_trajectory_stats(self.robot,
