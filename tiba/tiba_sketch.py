@@ -24,7 +24,7 @@ from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
 from collections import namedtuple
-
+import matplotlib.pyplot as plt
 import swift
 import matplotlib
 
@@ -45,7 +45,7 @@ if rosloader is not None:
     from std_msgs.msg import Duration
     state.has_ros = True
 
-def plan_bezier(draft, max_speed, accel_time, penup_distance):
+def plan_bezier(draft, max_speed, accel_time, penup_distance, debug=True):
     print(draft)
     print(max_speed)
     print(accel_time)
@@ -53,12 +53,31 @@ def plan_bezier(draft, max_speed, accel_time, penup_distance):
 
     paths = tu.plan_bezier_chains_jerk(draft, max_speed=max_speed, max_accel_time=accel_time, maxiter=300)
     paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
+    lifts = [False]
     trajectories = [paths[0]]
     if len(paths) > 1:
         for P1, P2 in zip(paths, paths[1:]):
             if geom.distance(P1[-1], P2[0]) > 2e-3:
+                lifts.append(True)
                 trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=1.0))
+            lifts.append(False)
             trajectories.append(P2)
+
+    if debug:
+        fig = plt.figure(figsize=((12, 4)))
+        plt.subplot(121)
+        T = 0.0
+        for X, lift in zip(trajectories, lifts):
+            speed = tu.compute_speed(X, cfg.dt)
+            t = np.linspace(0, len(speed)*cfg.dt, len(speed)) + T
+            clr = 'c' if lift else 'r'
+            plt.plot(t, speed, clr, lw=1)
+            T = t[-1] + cfg.dt
+        ax = fig.add_subplot(224, projection='3d')
+        for i, X in enumerate(trajectories):
+            plt.plot(X[:,0], X[:,1], X[:,2], color=plut.default_color(i), lw=1, alpha=1)
+        plt.tight_layout()
+        planner.show_open('cart.pdf')
     return trajectories
 
 class TibaSketch:
