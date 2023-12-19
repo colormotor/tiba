@@ -80,6 +80,11 @@ def plan_bezier(draft, max_speed, accel_time, penup_distance, debug=True):
         planner.show_open('cart.pdf')
     return trajectories
 
+dip_pos = np.array([0.11812825731443674, -0.407704314564537, 0.10439764358100054,
+                    -0.008107937414934388, 0.8524478856525898, -0.5214394134973193, -0.036983802520516196])
+
+#  [-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134]
+#
 class TibaSketch:
     def __init__(self):
 
@@ -121,10 +126,10 @@ class TibaSketch:
                 state.has_ros = False
 
     def state_callback(self, data):
-        print("Received state")
+        # print("Received state")
         self.robot.q = np.array(data.positions)
-        self.itiba.Qs = []
-        self.steps, self.fk_points = [], []
+        #self.itiba.Qs = []
+        #self.steps, self.fk_points = [], []
         #self.trajectories_computed = False
         #self.trajectories = []
 
@@ -218,6 +223,26 @@ class TibaSketch:
         self.clear()
         self.draft = draft
 
+    def dip_trajectory(self):
+        up = np.array([0, 0, 1, 0, 0, 0, 0])
+        start_offset = 70/1000
+        dip_start = dip_pos + up*start_offset
+        print(dip_start)
+        dip_start = planner.align_pos_z(dip_start, np.array([0, 0, -1]))
+        dip_next = dip_start - up*start_offset #planner.align_frame_z(dip_start, np.array([0, 0, -1]))
+        print(tu.to_pose(dip_start), tu.to_pose(dip_next))
+
+        cur_pos = self.robot.pen_tcp_pos(self.robot.q)
+        trajectories = [tu.trapezoidal_approach(cur_pos, dip_start),
+                        tu.trapezoidal_approach(dip_start, dip_next),
+                        tu.xy_circles_mm(dip_next, 10, 1.5, 4, ease_duration=1.0),
+                        tu.trapezoidal_approach(dip_next, dip_start)]
+
+        self.itiba.plan_task_trajectories(trajectories)
+        self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+        self.trajectories_computed = True
+        print('Dip trajectory')
+
     def compute_trajectories(self, max_speed=200/1000, accel_time=0.4):
         params = self.sketch.params.params
         if not self.draft:
@@ -254,6 +279,14 @@ class TibaSketch:
         if imgui.button('Compute trajectories'):
             self.compute_trajectories()
 
+        if imgui.button('Try dip'):
+            self.dip_trajectory()
+
+        if imgui.button('Print configuration'):
+           tcp = self.robot.pen_tcp_pos(self.robot.q)
+           q = self.robot.q
+           print('TCP: ', list(tcp))
+           print('q: ', list(q))
 
         if self.trajectories_computed and imgui.button('Plan trajectories'):
             cur_pos = self.robot.pen_tcp_pos(self.robot.q)

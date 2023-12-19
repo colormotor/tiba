@@ -675,6 +675,11 @@ def frame_to_pos(frame):
     pose = SE3(frame)
     return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
 
+def align_pos_z(pose, z):
+    pose = tu.to_pose(pose)
+    pose = align_frame_z(pose, z)
+    return tu.to_pos_orn(pose)
+
 def align_frame_z(frame, z):
     z = np.array(z)
     frame = np.array(frame)

@@ -133,6 +133,8 @@ def joint_approach(q0, q1, speed=None):
     print(dQs[0], dQs[-1])
     return Qs, dQs
 
+def angdistance(a, b):
+    return a.angdist(b, metric=3)*2
 
 def duration_from_distance(x0, x1, angular_approach_speed=None,
                                    cartesian_approach_speed=None):
@@ -144,7 +146,7 @@ def duration_from_distance(x0, x1, angular_approach_speed=None,
     if cartesian_approach_speed is None:
         cartesian_approach_speed = cfg.default_cartesian_approach_speed
 
-    angdist = abs(pose0.angdist(pose1))
+    angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
     dist = np.linalg.norm(pose0.t - pose1.t)
 
     def fitts_id(d, w=1):
@@ -200,7 +202,7 @@ def trapezoidal_approach(x0, x1,
     pose0 = to_pose(x0)
     pose1 = to_pose(x1)
 
-    angdist = abs(pose0.angdist(pose1))
+    angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
     dist = np.linalg.norm(pose0.t - pose1.t)
 
     if angular_approach_speed is None:
