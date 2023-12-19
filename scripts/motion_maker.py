@@ -35,7 +35,9 @@ params = sketch.parameters(params)
 def random_q():
     return list(np.random.uniform(-np.pi, np.pi, 7))
 
-robot = TibaRobot(45, 11.5) # Molotow
+#robot = TibaRobot(45, 11.5, 15) # Molotow
+#robot = TibaRobot(60, 0, 0) # Molotow
+robot = TibaRobot(74, 0, 15) # Small brush
 tsketch = TibaSketch()
 
 def setup():
