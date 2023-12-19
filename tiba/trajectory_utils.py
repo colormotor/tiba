@@ -24,6 +24,7 @@ def is_number(x):
     return isinstance(x, numbers.Number)
 
 def to_pos_orn(pose):
+    ''' Convert a pose to 7d vector: 3d position and quaternion orientation'''
     if (type(pose) == list or
         (type(pose) == np.ndarray and len(pose.shape) == 1)):
         return pose
@@ -33,7 +34,7 @@ def to_pos_orn(pose):
     return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
 
 def to_pose(pose):
-    # TODO Add normalization?
+    ''' Convert input to a SE3 pose'''
     if type(pose) == SE3:
         return pose.norm()
     if type(pose) == np.ndarray and len(pose.shape) == 2:
@@ -41,8 +42,8 @@ def to_pose(pose):
     pose = SE3(*pose[:3])*(UnitQuaternion(pose[3:])).SE3()
     return pose.norm()
 
-
 def append_rest(traj, duration):
+    ''' Append rest to trajectory for a given duration'''
     traj = list(traj)
     n = int(duration/cfg.dt)
     if not n:
@@ -54,6 +55,7 @@ def append_rest(traj, duration):
     return traj + [np.array(traj[-1])]*n
 
 def insert_rest(traj, duration):
+    ''' Insert rest at beginning of trajectory for a given duration'''
     traj = list(traj)
     n = int(duration/cfg.dt)
     if not n:
@@ -65,6 +67,7 @@ def insert_rest(traj, duration):
     return [np.array(traj[0])]*n + traj
 
 def rest_inout(traj, duration):
+    ''' Insert and append rest'''
     traj = list(traj)
     n = int(duration/cfg.dt)
     if not n:
@@ -83,7 +86,6 @@ def xy_circles_mm(pose, radius_mm, cycle_duration, cycles=1, ease_duration=0.5, 
     return approach_inout(pose, [np.concatenate([pos, orn]) for pos in pts])
 
 def offset_frame(frame, d):
-    print(frame)
     frame = np.array(frame)
     frame[:3, 3] = frame[:3, 3] + d
     return frame
@@ -156,6 +158,8 @@ def duration_from_distance(x0, x1, angular_approach_speed=None,
 def linear_approach(x0, x1, duration=0,
                     angular_approach_speed=None,
                     cartesian_approach_speed=None):
+    ''' Approach trajectory in task space using a constant speed'''
+
     pose0 = to_pose(x0)
     pose1 = to_pose(x1)
 
@@ -191,7 +195,7 @@ def trapezoidal_approach(x0, x1,
                          angular_approach_speed=None,
                          cartesian_approach_speed=None,
                          debug=False):
-
+    ''' Approach trajectory in task space using a trapezoidal speed profile'''
 
     pose0 = to_pose(x0)
     pose1 = to_pose(x1)
@@ -226,6 +230,7 @@ def approach(a, b, *args, **kwargs):
     return trapezoidal_approach(a, b, *args, **kwargs)
 
 def pose_traj_to_posorn(trajectory):
+    ''' Convert a trajectory made of SE3 poses to pos+quaternions'''
     return [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in trajectory]
 
 def gauss_approach(x0, x1, duration=-1,
@@ -279,9 +284,8 @@ def gauss_approach(x0, x1, duration=-1,
     return []
 
 
-def split_chain(chain, tol=10): #1e-1):
+def split_chain(chain, tol=10):
     tol = geom.radians(tol)
-    #return [chain]
     beziers = bezier.chain_to_beziers(chain)
     chunks = [[beziers[0]]]
     bez = beziers[0]
