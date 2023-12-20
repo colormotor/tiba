@@ -231,6 +231,12 @@ def trapezoidal_approach(x0, x1,
 def approach(a, b, *args, **kwargs):
     return trapezoidal_approach(a, b, *args, **kwargs)
 
+def approach_sequence(seq, *args, **kwargs):
+    traj = []
+    for a, b in zip(seq, seq[1:]):
+        traj += approach(a, b, *args, **kwargs)
+    return traj
+
 def pose_traj_to_posorn(trajectory):
     ''' Convert a trajectory made of SE3 poses to pos+quaternions'''
     return [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in trajectory]

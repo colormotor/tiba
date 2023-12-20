@@ -114,6 +114,8 @@ class TibaSketch:
 
         self.trajectory_callback = callback
         self.robot.q = self.robot.qr
+        self.robot.q = np.array([-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134])
+        self.robot.q = self.robot.home
 
         if state.has_ros:
             try:
@@ -123,6 +125,7 @@ class TibaSketch:
                 rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
                 self.msg_pub.publish('Tiba sketch connecting')
             except rospy.exceptions.ROSException as e:
+                print("Ros issue")
                 state.has_ros = False
 
     def state_callback(self, data):
@@ -233,10 +236,13 @@ class TibaSketch:
         print(tu.to_pose(dip_start), tu.to_pose(dip_next))
 
         cur_pos = self.robot.pen_tcp_pos(self.robot.q)
-        trajectories = [tu.trapezoidal_approach(cur_pos, dip_start),
-                        tu.trapezoidal_approach(dip_start, dip_next),
-                        tu.xy_circles_mm(dip_next, 10, 1.5, 4, ease_duration=1.0),
-                        tu.trapezoidal_approach(dip_next, dip_start)]
+        trajectories = [tu.approach_sequence([cur_pos, dip_start, dip_next])]
+        trajectories += [tu.xy_circles_mm(dip_next, 10, 1.5, 4, ease_duration=1.0)]
+        trajectories += [tu.approach_sequence([trajectories[-1][-1], dip_start, cur_pos])]
+        # trajectories = [tu.trapezoidal_approach(cur_pos, dip_start),
+        #                 tu.trapezoidal_approach(dip_start, dip_next),
+        #                 tu.xy_circles_mm(dip_next, 10, 1.5, 4, ease_duration=1.0),
+        #                 tu.trapezoidal_approach(dip_next, dip_start)]
 
         self.itiba.plan_task_trajectories(trajectories)
         self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)

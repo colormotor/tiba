@@ -255,10 +255,12 @@ class TibaInterface:
         env.launch(realtime=True)
         env.add(self.robot)
 
+        q_old = self.robot.q
         for q in self.Qs:
             self.robot.q = q
             env.step(cfg.robot_dt)
-
+        # Reset robot after simulation
+        self.robot.q = q_old
     def delay(self, delay):
         if delay > 0:
             print('%f second delay'%delay)
@@ -269,7 +271,7 @@ class TibaInterface:
 
     def read_states(self):
         if self.panda is None:
-            self.robot.q = self.robot.qr
+            # self.robot.q = self.robot.qr
             print("No panda, can't read states")
             return
 
