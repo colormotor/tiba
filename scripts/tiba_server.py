@@ -53,7 +53,9 @@ def msg_callback(data):
             state.executing = True
             itiba.play_cur_motion()
             state.executing = False
-    send_joint_state()
+    if 'start:' in data.data:
+        itiba.read_states()
+        send_joint_state()
 
 def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
@@ -87,6 +89,7 @@ def send_joint_state():
     itiba.read_states()
     p = JointTrajectoryPoint()
     p.positions = itiba.robot.q
+    print('Sending joint state')
     qpub.publish(p)
 
 def joint_pos_sender_thread():
@@ -108,8 +111,8 @@ def main():
 
     send_joint_state()
 
-    thread = threading.Thread(target=joint_pos_sender_thread)
-    thread.start()
+    #thread = threading.Thread(target=joint_pos_sender_thread)
+    #thread.start()
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
     state.running = False
