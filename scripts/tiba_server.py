@@ -5,7 +5,8 @@ from trajectory_msgs.msg import JointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 import numpy as np
-import importlib
+import importlib, time, threading
+
 panda_loader = importlib.find_loader('panda_py')
 if panda_loader is not None:
     import panda_py
@@ -34,6 +35,10 @@ robot = TibaRobot(45, 11.5) # Molotow
 itiba = TibaInterface(robot, panda, gripper)
 robot.q = robot.qr
 
+state = lambda: None
+state.running = True
+state.executing = False
+
 qpub = None
 
 def msg_callback(data):
@@ -45,8 +50,12 @@ def msg_callback(data):
             print('Reading states')
             itiba.read_states()
             print('Playing motion')
+            state.executing = True
             itiba.play_cur_motion()
-    send_joint_state()
+            state.executing = False
+    if 'start:' in data.data:
+        itiba.read_states()
+        send_joint_state()
 
 def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
@@ -65,7 +74,9 @@ def jtraj_callback(data):
 
     if has_robot:
         print('Executing')
+        state.executing = True
         itiba.execute()
+        state.executing = False
         print('Execution done')
     else:
         print('Simulating')
@@ -78,7 +89,14 @@ def send_joint_state():
     itiba.read_states()
     p = JointTrajectoryPoint()
     p.positions = itiba.robot.q
+    print('Sending joint state')
     qpub.publish(p)
+
+def joint_pos_sender_thread():
+    while state.running:
+        if not state.executing:
+            send_joint_state()
+        time.sleep(0.1)
 
 def main():
     print('TIBA server v0.1')
@@ -92,8 +110,12 @@ def main():
     qpub = rospy.Publisher("/tiba/q", JointTrajectoryPoint, queue_size=10)
 
     send_joint_state()
+
+    #thread = threading.Thread(target=joint_pos_sender_thread)
+    #thread.start()
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
+    state.running = False
 
 if __name__ == '__main__':
     main()
