@@ -75,14 +75,14 @@ def rest_inout(traj, duration):
     return [traj[0]]*n + traj + [traj[-1]]*n
 
 # Trajectory generators
-def xy_circles_mm(pose, radius_mm, cycle_duration, cycles=1, ease_duration=0.5, easing=2):
+def xy_circles_mm(pose, radius_mm, cycle_duration, cycles=1, ease_duration=0.5, easing=2, sign=1):
     pose = to_pos_orn(pose)
     pos, orn = pose[:3], pose[3:]
 
     duration = cycle_duration*cycles
     radius = radius_mm / 1000
     T = gauss_easeinout(0, np.pi*2*cycles, duration, ease_duration, easing=easing)
-    pts = [pos + [np.cos(t)*radius, np.sin(t)*radius, 0] for t in T]
+    pts = [pos + [np.cos(t*sign)*radius, np.sin(t*sign)*radius, 0] for t in T]
     return approach_inout(pose, [np.concatenate([pos, orn]) for pos in pts])
 
 def offset_frame(frame, d):
@@ -327,8 +327,96 @@ def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5, angle_toleran
         #trajectories += chunk_traj
     return trajectories
 
+def plan_polylines_jerk(polylines, simp, max_speed, max_accel_time=0.5, angle_tolerance=10, subd=3, maxiter=300, tol=0.0):
+    '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
+    with a given maximum speed and max acceleration time
+    '''
+    trajectories = []
+    for P in polylines:
+        chunk_traj = []
+        for chunk in [P]: #split_chain(chain, angle_tolerance):
+            #if tol > 0:
+            #    pts = bezier.bezier_piecewise(chunk, subd=20)
+            #    beziers = fitCurve(pts, tol)
+            traj = plan_jerk(chunk, simp, max_speed, max_accel_time, subd, maxiter)
+            chunk_traj.append(traj)
+        trajectories.append(np.vstack(chunk_traj))
+        #trajectories += chunk_traj
+    return trajectories
 
-def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=5, maxiter=300):
+
+def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
+    # Compute points along curve
+    P = np.array(P)
+    dt = cfg.dt
+    dim = P.shape[1]
+    P = simplify.dce(P, simp)
+    # Ps = P
+    # #Ps = simplify.dce(P, simplify_tol)
+    # #Ps = simplify.dp_simplify(P, simplify_tol*10)
+
+    # if len(Ps) > 2:
+    #     P = Ps
+    # else:
+    #     P = np.vstack([P[0], (P[0] + P[-1])/2, P[-1]])
+    # Path-constrained minimum jerk according to Todorov and Jordan
+    # we use this to get passage times, velocity and acceleration that minimize jerk
+    n = len(P)*2 #chain)* #10 # Pretty arbitrary
+    Q, psg, dQ, ddQ = todorov.min_jerk_todorov(P, n, get_vel_acc=True, maxiter=maxiter)
+    opsg = psg
+    # Check that passage times are strictly increasing
+    dpsg = np.maximum(np.diff(psg), 1e-3)
+    if np.any(dpsg < 0):
+        print("Negative delta-time")
+    psg = np.cumsum(np.concatenate([[psg[0]], dpsg]))
+    if psg[-1] > n:
+        print("Passage times exceed total time")
+        psg = psg/psg[-1]*(n-1e-3)
+
+    # Add zero boundary conditions and initial and final time
+    dQ = np.vstack([np.zeros(dim), dQ, np.zeros(dim)])
+    ddQ = np.vstack([np.zeros(dim), ddQ, np.zeros(dim)])
+    T = np.concatenate([[0], psg, [n]])
+
+    # Use passage times, velocity and acceleration to compute piecewise polynomial
+    derivs = np.dstack([P, dQ, ddQ])
+    try:
+        bpx = BPoly.from_derivatives(T, np.vstack([derivs[:,0, i] for i in range(3)]).T)
+        bpy = BPoly.from_derivatives(T, np.vstack([derivs[:,1, i] for i in range(3)]).T)
+    except ValueError as e:
+        print(e)
+        print('T', T)
+        pdb.set_trace()
+
+    dbpx = bpx.derivative()
+    dbpy = bpy.derivative()
+    ddbpx = dbpx.derivative()
+    ddbpy = dbpy.derivative()
+
+    # Estimate maximum speed and acceleration
+    x_test = np.linspace(0, T[-1], n)
+    Y = np.vstack([bpx(x_test), bpy(x_test)]).T
+    dY = np.vstack([dbpx(x_test), dbpy(x_test)]).T
+    ddY = np.vstack([ddbpx(x_test), ddbpy(x_test)]).T
+    smax = np.max(colnorm(dY))
+    amax = np.max(colnorm(ddY))
+
+    # Compute time step that satisfies max speed and acceleration bounds
+    max_accel = max_speed/max_accel_time
+    div_s = max_speed/smax
+    div_a = np.sqrt(max_accel/amax)
+    div = min(div_s, div_a)
+    #print('smax, amax', smax, amax)
+    #print('div', div_s, div_a)
+
+    x = np.arange(0, T[-1], dt*div)
+    # Compute trajectory
+    Y = np.vstack([bpx(x), bpy(x)]).T
+    if len(Y)==2:
+        pdb.set_trace()
+    return Y
+
+def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300):
     '''Given a (2d) cubic Bezier chain, compute a minimum jerk trajectory that tracks the curve
     with a given maximum speed and max acceleration time
     '''
@@ -348,7 +436,7 @@ def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=5, maxiter=300
     #     P = np.vstack([P[0], (P[0] + P[-1])/2, P[-1]])
     # Path-constrained minimum jerk according to Todorov and Jordan
     # we use this to get passage times, velocity and acceleration that minimize jerk
-    n = len(chain)*10 # Pretty arbitrary
+    n = len(P)*2 #chain)* #10 # Pretty arbitrary
     Q, psg, dQ, ddQ = todorov.min_jerk_todorov(P, n, get_vel_acc=True, maxiter=maxiter)
     opsg = psg
     # Check that passage times are strictly increasing

@@ -45,6 +45,41 @@ if rosloader is not None:
     from std_msgs.msg import Duration
     state.has_ros = True
 
+def plan_samples(draft, max_speed, accel_time, penup_distance, debug=True):
+    print(draft)
+    print(max_speed)
+    print(accel_time)
+    print(penup_distance)
+
+    paths = tu.plan_polylines_jerk(draft, 0.1, max_speed=max_speed, max_accel_time=accel_time, maxiter=300)
+    paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
+    lifts = [False]
+    trajectories = [paths[0]]
+    if len(paths) > 1:
+        for P1, P2 in zip(paths, paths[1:]):
+            if geom.distance(P1[-1], P2[0]) > 2e-3:
+                lifts.append(True)
+                trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=1.0))
+            lifts.append(False)
+            trajectories.append(P2)
+
+    if debug:
+        fig = plt.figure(figsize=((12, 4)))
+        plt.subplot(121)
+        T = 0.0
+        for X, lift in zip(trajectories, lifts):
+            speed = tu.compute_speed(X, cfg.dt)
+            t = np.linspace(0, len(speed)*cfg.dt, len(speed)) + T
+            clr = 'c' if lift else 'r'
+            plt.plot(t, speed, clr, lw=1)
+            T = t[-1] + cfg.dt
+        ax = fig.add_subplot(224, projection='3d')
+        for i, X in enumerate(trajectories):
+            plt.plot(X[:,0], X[:,1], X[:,2], color=plut.default_color(i), lw=1, alpha=1)
+        plt.tight_layout()
+        planner.show_open('cart.pdf')
+    return trajectories
+
 def plan_bezier(draft, max_speed, accel_time, penup_distance, debug=True):
     print(draft)
     print(max_speed)
@@ -101,8 +136,6 @@ class TibaSketch:
             'traj.angle'
         ]
 
-
-
     def init(self, sketch, robot, callback, panda=None, gripper=None):
         self.itiba = TibaInterface(robot, panda=panda, gripper=gripper)
         self.v3d = GlView3d(sketch)
@@ -113,8 +146,8 @@ class TibaSketch:
         self.sketch = sketch
 
         self.trajectory_callback = callback
-        self.robot.q = self.robot.qr
-        self.robot.q = np.array([-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134])
+        # self.robot.q = self.robot.qr
+        # self.robot.q = np.array([-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134])
         self.robot.q = self.robot.home
 
         if state.has_ros:
@@ -123,13 +156,13 @@ class TibaSketch:
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
                 rospy.Subscriber('/tiba/q', JointTrajectoryPoint, self.state_callback)
                 rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
-                self.msg_pub.publish('Tiba sketch connecting')
+                self.msg_pub.publish('start: Tiba sketch connecting')
             except rospy.exceptions.ROSException as e:
                 print("Ros issue")
                 state.has_ros = False
 
     def state_callback(self, data):
-        # print("Received state")
+        print("Received state")
         self.robot.q = np.array(data.positions)
         #self.itiba.Qs = []
         #self.steps, self.fk_points = [], []
@@ -229,16 +262,21 @@ class TibaSketch:
     def dip_trajectory(self):
         up = np.array([0, 0, 1, 0, 0, 0, 0])
         start_offset = 70/1000
+        dip_offset = 35/1000
+        clean_offset = 10/1000
         dip_start = dip_pos + up*start_offset
+
         print(dip_start)
         dip_start = planner.align_pos_z(dip_start, np.array([0, 0, -1]))
-        dip_next = dip_start - up*start_offset #planner.align_frame_z(dip_start, np.array([0, 0, -1]))
-        print(tu.to_pose(dip_start), tu.to_pose(dip_next))
-
+        dip_rim = dip_start - up*start_offset
+        dip_in = dip_rim - up*dip_offset #planner.align_frame_z(dip_start, np.array([0, 0, -1]))
+        dip_clean = dip_rim - up*clean_offset
         cur_pos = self.robot.pen_tcp_pos(self.robot.q)
-        trajectories = [tu.approach_sequence([cur_pos, dip_start, dip_next])]
-        trajectories += [tu.xy_circles_mm(dip_next, 10, 1.5, 4, ease_duration=1.0)]
-        trajectories += [tu.approach_sequence([trajectories[-1][-1], dip_start, cur_pos])]
+        trajectories = [tu.approach_sequence([cur_pos, dip_start, dip_in])]
+        trajectories += [tu.xy_circles_mm(dip_in, 7.5, 1.5, 4, ease_duration=1.0)]
+        trajectories += [tu.approach_sequence([trajectories[-1][-1], dip_clean])] #, cur_pos])]
+        trajectories += [tu.xy_circles_mm(dip_clean, 14, 1.5, 4, ease_duration=1.0)]
+        trajectories += [tu.approach_sequence([trajectories[-1][-1], dip_start])] #, cur_pos])]
         # trajectories = [tu.trapezoidal_approach(cur_pos, dip_start),
         #                 tu.trapezoidal_approach(dip_start, dip_next),
         #                 tu.xy_circles_mm(dip_next, 10, 1.5, 4, ease_duration=1.0),
@@ -249,7 +287,7 @@ class TibaSketch:
         self.trajectories_computed = True
         print('Dip trajectory')
 
-    def compute_trajectories(self, max_speed=200/1000, accel_time=0.4):
+    def compute_trajectories(self, max_speed=250/1000, accel_time=0.4):
         params = self.sketch.params.params
         if not self.draft:
             print("No draft")
@@ -259,6 +297,10 @@ class TibaSketch:
         if type(callback)==str:
             if callback=='bezier':
                 callback = plan_bezier
+            elif callback=='samples':
+                callback = plan_samples
+            elif callback=='lqt':
+                callback = plan_lqt
             else:
                 raise ValueError('Unknown callback')
         draft = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=0.0)

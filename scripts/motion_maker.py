@@ -45,25 +45,32 @@ def setup():
     create_canvas(700, 600) #, 300)
     set_color_scale(1.0)
 
-    tsketch.init(sketch, robot, 'bezier')
+    tsketch.init(sketch, robot, 'samples') #'bezier')
     load_svg()
 
 def load_svg():
-    draft = svg.load_svg_bezier_chains('Untitled.svg')
+    draft = svg.load_svg_polylines('Untitled.svg') #bezier_chains('Untitled.svg')
     dest_rect = geom.make_rect(0, 0, width, height)
     draft_in = geom.transform_to_rect(draft, dest_rect)
-    draft = []
-    for chain in draft_in[:]:
-        chunks = tu.split_chain(chain, 10)
-        chunk_beziers = []
-        for chunk in chunks:
-            pts = bezier.bezier_piecewise(chunk, 10)
-            beziers = fitCurve(pts, 5)
-            chunk_beziers += beziers #.append(beziers)
-        draft.append(bezier.beziers_to_chain(chunk_beziers))
-            #draft.append(bezier.beziers_to_chain(beziers))
-
+    draft = draft_in
     tsketch.set_draft(draft)
+
+# def load_svg():
+#     draft = svg.load_svg_bezier_chains('Untitled.svg')
+#     dest_rect = geom.make_rect(0, 0, width, height)
+#     draft_in = geom.transform_to_rect(draft, dest_rect)
+#     draft = []
+#     for chain in draft_in[:]:
+#         chunks = tu.split_chain(chain, 10)
+#         chunk_beziers = []
+#         for chunk in chunks:
+#             pts = bezier.bezier_piecewise(chunk, 10)
+#             beziers = fitCurve(pts, 10)
+#             chunk_beziers += beziers #.append(beziers)
+#         draft.append(bezier.beziers_to_chain(chunk_beziers))
+#             #draft.append(bezier.beziers_to_chain(beziers))
+
+#     tsketch.set_draft(draft)
 
 def exit():
     print("Exit")
@@ -83,7 +90,8 @@ def draw():
     no_fill()
     for i, P in enumerate(tsketch.draft):
         stroke(*plut.default_color(i), 0.2)
-        polyline(bezier.bezier_piecewise(P)) # + np.random.uniform(-30, 30, 2), 3))
+        polyline(P)
+        #polyline(bezier.bezier_piecewise(P)) # + np.random.uniform(-30, 30, 2), 3))
 
 
 def draw_gl():
