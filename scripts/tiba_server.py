@@ -21,6 +21,26 @@ from tiba.robot import TibaRobot
 from tiba.draw import View3d, SketchView3d, GlView3d
 from tiba import planner, cfg
 
+import os, socket
+
+def get_ip():
+    # From https://stackoverflow.com/a/28950776
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.254.254.254', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
+# Turns out we need to tell the node what is the IP to reach this computer
+# The trick above seems to do it
+os.environ['ROS_IP'] = get_ip()
+
 
 if has_robot:
     hostname = '172.16.0.2'
@@ -40,6 +60,7 @@ state.running = True
 state.executing = False
 
 qpub = None
+respub = None
 
 def msg_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Msg: %s", data.data)
@@ -56,6 +77,7 @@ def msg_callback(data):
     if 'start:' in data.data:
         itiba.read_states()
         send_joint_state()
+    respub.publish("Received message")
 
 def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
@@ -85,34 +107,41 @@ def jtraj_callback(data):
 
     send_joint_state()
 
-def send_joint_state():
+def send_joint_state(verbose=False):
     itiba.read_states()
     p = JointTrajectoryPoint()
     p.positions = itiba.robot.q
-    print('Sending joint state')
+    if verbose:
+        print('Sending joint state')
     qpub.publish(p)
 
 def joint_pos_sender_thread():
+    time.sleep(0.5);
     while state.running:
+        #respub.publish("YO")
         if not state.executing:
-            send_joint_state()
+            send_joint_state(False)
         time.sleep(0.1)
 
 def main():
     print('TIBA server v0.1')
     print('Waiting for data...')
 
-    global qpub
+    global qpub, respub
 
     rospy.init_node('tiba_server', anonymous=True)
     rospy.Subscriber("/tiba/msg", String, msg_callback)
     rospy.Subscriber("/tiba/jtraj", JointTrajectory, jtraj_callback)
     qpub = rospy.Publisher("/tiba/q", JointTrajectoryPoint, queue_size=10)
+    respub = rospy.Publisher("/tiba/response", String, queue_size=10)
+
+    print("Publishing")
+    respub.publish("Server started")
 
     send_joint_state()
 
-    #thread = threading.Thread(target=joint_pos_sender_thread)
-    #thread.start()
+    thread = threading.Thread(target=joint_pos_sender_thread)
+    thread.start()
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
     state.running = False
