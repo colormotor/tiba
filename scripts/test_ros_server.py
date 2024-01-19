@@ -3,9 +3,16 @@ import rospy
 from std_msgs.msg import String
 from trajectory_msgs.msg import JointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
+import importlib, time, threading
 
-def msg_callback(data):
-    rospy.loginfo(rospy.get_caller_id() + "Msg: %s", data.data)
+state = lambda: None
+state.running = True
+
+msg_pub = None
+
+def response_callback(data):
+    print("Got response")
+    rospy.loginfo(rospy.get_caller_id() + "Response: %s", data.data)
 
 def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
@@ -13,6 +20,11 @@ def jtraj_callback(data):
     dQs = [[p.velocities for p in data.points]]
     print(Qs)
     print(dQs)
+
+def hello_thread():
+    while state.running:
+        msg_pub.publish("hello")
+        time.sleep(1)
 
 def listener():
 
@@ -23,11 +35,20 @@ def listener():
     # run simultaneously.
     rospy.init_node('listener', anonymous=True)
 
-    rospy.Subscriber("/tiba/msg", String, msg_callback)
+    rospy.Subscriber("/tiba/response", String, response_callback)
     rospy.Subscriber("/tiba/jtraj", JointTrajectory, jtraj_callback)
+    global msg_pub
+    msg_pub = rospy.Publisher("/tiba/msg", String, queue_size=10)
+
+    print("Running")
+    thread = threading.Thread(target=hello_thread)
+    thread.start()
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
+
+    print("Stopping")
+    state.running = False
 
 if __name__ == '__main__':
     listener()

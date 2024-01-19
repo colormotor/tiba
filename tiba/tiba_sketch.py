@@ -155,11 +155,20 @@ class TibaSketch:
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
                 rospy.Subscriber('/tiba/q', JointTrajectoryPoint, self.state_callback)
+                rospy.Subscriber('/tiba/response', String, self.response_callback)
                 rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
-                self.msg_pub.publish('start: Tiba sketch connecting')
+                self.send_msg('start: Tiba sketch connecting')
             except rospy.exceptions.ROSException as e:
                 print("Ros issue")
                 state.has_ros = False
+
+    def send_msg(self, data):
+        print("Sending msg", data)
+        self.msg_pub.publish(data)
+
+
+    def response_callback(self, data):
+        print("Received response: ", data.data)
 
     def state_callback(self, data):
         print("Received state")
@@ -317,7 +326,7 @@ class TibaSketch:
             self.msg_pub.publish('exec:Home')
 
         if imgui.button('Say hello'):
-            self.msg_pub.publish('hello!!!')
+            self.send_msg('hello!!!')
         if imgui.button('Pick Tool'):
             self.msg_pub.publish('exec:Pick')
         imgui.same_line()
