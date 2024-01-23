@@ -4,6 +4,10 @@
 
 * Setup
 ** Robot control laptop
+*** Desk setup
+- Open desk at https://172.16.0.2/desk/
+- Unlock joints and make sure gripper is initialized
+- Activate FCI
 *** Network setup
 **** Server setup
 The machine currently cannot run the GPU, which makes graphics apps pretty slow. First run ~ngrok~ to open out a http tunnel with:
@@ -32,3 +36,7 @@ source rosmaster.sh
 
 
 
+* Tests
+#+BEGIN_SRC jupyter-python :session py
+print("hello")
+#+END_SRC

@@ -41,6 +41,8 @@ def get_ip():
 # The trick above seems to do it
 os.environ['ROS_IP'] = get_ip()
 
+print("Running server on: ", os.environ['ROS_IP'])
+print("Make sure this is reflected in rosmaster.sh")
 
 if has_robot:
     hostname = '172.16.0.2'
@@ -74,6 +76,8 @@ def msg_callback(data):
             state.executing = True
             itiba.play_cur_motion()
             state.executing = False
+            send_joint_state()
+
     if 'start:' in data.data:
         itiba.read_states()
         send_joint_state()
