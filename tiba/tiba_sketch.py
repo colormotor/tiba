@@ -166,12 +166,11 @@ class TibaSketch:
         print("Sending msg", data)
         self.msg_pub.publish(data)
 
-
     def response_callback(self, data):
         print("Received response: ", data.data)
 
     def state_callback(self, data):
-        print("Received state")
+        # print("Received state")
         self.robot.q = np.array(data.positions)
         #self.itiba.Qs = []
         #self.steps, self.fk_points = [], []
