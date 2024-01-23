@@ -4,6 +4,25 @@ from std_msgs.msg import String
 from trajectory_msgs.msg import JointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
 import importlib, time, threading
+import os, socket
+
+def get_ip():
+    # From https://stackoverflow.com/a/28950776
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.254.254.254', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
+# Turns out we need to tell the node what is the IP to reach this computer
+# The trick above seems to do it
+os.environ['ROS_IP'] = get_ip()
 
 state = lambda: None
 state.running = True
@@ -23,6 +42,7 @@ def jtraj_callback(data):
 
 def hello_thread():
     while state.running:
+        print("Publish hello")
         msg_pub.publish("hello")
         time.sleep(1)
 
@@ -33,10 +53,10 @@ def listener():
     # anonymous=True flag means that rospy will choose a unique
     # name for our 'listener' node so that multiple listeners can
     # run simultaneously.
-    rospy.init_node('listener', anonymous=True)
+    rospy.init_node('listener', anonymous=False)
 
-    rospy.Subscriber("/tiba/response", String, response_callback)
-    rospy.Subscriber("/tiba/jtraj", JointTrajectory, jtraj_callback)
+    #rospy.Subscriber("/tiba/response", String, response_callback)
+    #rospy.Subscriber("/tiba/jtraj", JointTrajectory, jtraj_callback)
     global msg_pub
     msg_pub = rospy.Publisher("/tiba/msg", String, queue_size=10)
 
