@@ -1,10 +1,22 @@
-#!/usr/bin/env python3
+'''
+o-O-o o-O-o o--o    O
+  |     |   |   |  / \
+  |     |   O--o  o---o
+  |     |   |   | |   |
+  o   o-O-o o--o  o   o
+
+Painting robot utils.
+© Daniel Berio (@colormotor) 2023 - ...
+
+interface - Abstracts the interface with the Franka Emika robot
+Uses PandaPy (https://github.com/JeanElsner/panda-py) as a layer on top of libfranka
+'''
+
 import importlib
 
 import numpy as np
 import os, sys, time
 
-from polygonsoup import utils, geom
 
 import roboticstoolbox as rtb
 from spatialmath import SE3, SO3, UnitQuaternion
@@ -13,12 +25,15 @@ from spatialmath.base import trnorm
 from collections import namedtuple
 import swift
 
-from . import planner, config
+from . import ilqr, config, drawing_pad
 from . import trajectory_utils as tu
+from . import utils, geom
+
 
 cfg = config.cfg
 
 class FrankaButton:
+
     def __init__(self, button='circle'):
         self.button = button
         self.state = False
@@ -229,7 +244,7 @@ class TibaInterface:
                  pad_path='pad.pkl',
                  plot_path='trajectory.png'):
         self.editor = MotionEditor(motion_path)
-        self.pad = planner.DrawingPad(pad_path)
+        self.pad = drawing_pad.DrawingPad(pad_path)
         self.pad.load()
         self.pad.update()
 
@@ -279,6 +294,7 @@ class TibaInterface:
         self.grasped = self.gripper.read_once().is_grasped
 
     def execute(self, delay=2.0):
+
         if self.panda is None:
             print("No panda, can't execute")
             return
@@ -318,6 +334,7 @@ class TibaInterface:
         return q
 
     def play_cur_motion(self, delay=2.0):
+        ''' Play the currently selected motion'''
         motion = self.editor.get_cur_motion()
         if not motion:
             print('No motion')
@@ -325,6 +342,7 @@ class TibaInterface:
         self.play_motion(motion, delay)
 
     def play_motion(self, motion, delay=2.0):
+        ''' Play a pre-recorded motion'''
         self.delay(delay)
 
         print('Playing')
@@ -362,11 +380,13 @@ class TibaInterface:
 
 
     def grasp(self, mm):
+        ''' Grasp with a width specified in mm'''
         if self.gripper is None:
             print('No gripper!')
         self.gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04)
 
     def ungrasp(self):
+        ''' Release the gripper'''
         if self.gripper is None:
             print('No gripper!')
         self.gripper.stop()
@@ -380,7 +400,7 @@ class TibaInterface:
 
         utils.save_pkl([self.Qs, self.dQs], 'trajectory.pkl')
         if plot:
-            planner.plot_trajectory_stats(self.robot,
+            ilqr.plot_trajectory_stats(self.robot,
                                         self.Qs,
                                         self.dQs,
                                         trajectories=task_trajectories,
@@ -391,8 +411,13 @@ class TibaInterface:
         self.plan_task_trajectories(trajectories, rest)
 
     def plan_task_trajectories(self, trajectories, rest=0.05):
-        ilqr = planner.iLQRPlannerVelocity(self.robot.urdf_file,
+        ''' Plan trajectories for the robot given in task space as
+        a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
+        The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
+        The result is a joint trajectory sampled at (1.0 / cfg.robot_dt) Hz
+        '''
+        planner = ilqr.iLQRPlannerVelocity(self.robot.urdf_file,
                                            self.robot.q,
                                            subsample=int(cfg.dt/cfg.robot_dt))
-        Qs, dQs = ilqr.plan(trajectories, rest=rest)
+        Qs, dQs = planner.plan(trajectories, rest=rest)
         self.plan_joint_trajectory(Qs, dQs, trajectories)

@@ -1,4 +1,17 @@
-#!/usr/bin/env python3
+'''
+o-O-o o-O-o o--o    O
+  |     |   |   |  / \
+  |     |   O--o  o---o
+  |     |   |   | |   |
+  o   o-O-o o--o  o   o
+
+Painting robot utils.
+© Daniel Berio (@colormotor) 2023 - ...
+
+trajectory_utils - Trajectory generation utilities
+'''
+
+
 from importlib import reload
 import numpy as np
 import networkx as nx
@@ -17,6 +30,7 @@ reload(trapezoidal)
 from .fitCurves.fitCurves import fitCurve
 
 from .config import cfg
+
 import numbers
 import pdb
 
@@ -34,7 +48,7 @@ def to_pos_orn(pose):
     return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
 
 def to_pose(pose):
-    ''' Convert input to a SE3 pose'''
+    ''' Convert input (SE3 or matrix) to a SE3 pose'''
     if type(pose) == SE3:
         return pose.norm()
     if type(pose) == np.ndarray and len(pose.shape) == 2:
@@ -310,6 +324,62 @@ def split_chain(chain, tol=10):
         prev = bez[-1] - bez[-2]
     return [bezier.beziers_to_chain(chunk) for chunk in chunks]
 
+def plan_polylines_smooth(polylines, max_speed, accel_time, tol=10/1000.0):
+    from trajectory_smoothing import TrajectorySmoother
+    dof = len(polylines[0][0])
+
+    max_accel = max_speed / accel_time
+    # Max velocity and acceleration combined along unit vector
+    # Note that otherwise we would get higher max speed and acceleration maginitude
+    max_velocity = geom.normalize(np.ones(dof, dtype=np.float32)) * max_speed
+    max_acceleration = geom.normalize(np.ones(dof, dtype=np.float32)) * max_accel
+
+    smoother = TrajectorySmoother(
+        dof, max_velocity, max_acceleration, tol
+    )
+
+    trajectories = []
+    velocities = []
+    accelerations = []
+    for P in polylines:
+        # Traj dt used for computations
+        result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
+        if not result.success:
+            print('Smoothing failed in trajectory smoothing')
+        else:
+            trajectories.append(result.position)
+            velocities.append(result.velocity)
+            accelerations.append(result.acceleration)
+    return trajectories, velocities, accelerations
+
+
+def plan_polylines_trapezoidal(polylines, max_speed, max_accel_time, tol=0.1):
+    from . import axi_planner
+    reload(axi_planner)
+    dof = len(polylines[0][0])
+    max_speed = max_speed*1000
+    accel = max_speed / max_accel_time
+    print('max accel', accel)
+    planner = axi_planner.Planner(accel, max_speed, tol, cfg.dt)
+    trajs = []
+    velocities = []
+    accelerations = []
+    for P in polylines:
+        Pp, Vv, Aa = planner.plan_polylines([np.array(P)*1000])
+        trajs.append(np.array(Pp[0])/1000)
+        velocities.append(np.array(Vv[0])/1000)
+        accelerations.append(np.array(Aa[0]/1000))
+    return trajs, velocities, accelerations
+    #return [P/1000  for P in planner.plan_polylines([np.array(P)*1000 for P in polylines])[0]]
+    # trajectories = []
+    # for P in polylines:
+    #     result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=cfg.dt)
+    #     if not result.success:
+    #         print('Smoothing failed in trajectory smoothing')
+    #     else:
+    #         trajectories.append(result.position)
+    # return trajectories
+
 def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5, angle_tolerance=10, subd=3, maxiter=300, tol=0.0):
     '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
     with a given maximum speed and max acceleration time
@@ -398,8 +468,8 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     Y = np.vstack([bpx(x_test), bpy(x_test)]).T
     dY = np.vstack([dbpx(x_test), dbpy(x_test)]).T
     ddY = np.vstack([ddbpx(x_test), ddbpy(x_test)]).T
-    smax = np.max(colnorm(dY))
-    amax = np.max(colnorm(ddY))
+    smax = np.max(rownorm(dY))
+    amax = np.max(rownorm(ddY))
 
     # Compute time step that satisfies max speed and acceleration bounds
     max_accel = max_speed/max_accel_time
@@ -473,8 +543,8 @@ def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300
     Y = np.vstack([bpx(x_test), bpy(x_test)]).T
     dY = np.vstack([dbpx(x_test), dbpy(x_test)]).T
     ddY = np.vstack([ddbpx(x_test), ddbpy(x_test)]).T
-    smax = np.max(colnorm(dY))
-    amax = np.max(colnorm(ddY))
+    smax = np.max(rownorm(dY))
+    amax = np.max(rownorm(ddY))
 
     # Compute time step that satisfies max speed and acceleration bounds
     max_accel = max_speed/max_accel_time
@@ -491,16 +561,16 @@ def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300
         pdb.set_trace()
     return Y
 
-def colnorm(dP):
+def rownorm(dP):
     return np.sqrt(dP[:,0]**2 + dP[:,1]**2)
 
 def compute_speed(X, dt):
-    D = np.diff(X, axis=0)
-    return colnorm(D)/dt
+    D = np.diff(X, axis=0)/dt
+    return rownorm(D)
 
 def compute_accel(X, dt):
-    D = np.diff(X, axis=0, n=2)
-    return colnorm(D)/(dt**2)
+    D = np.diff(X, axis=0, n=2)/(dt**2)
+    return rownorm(D)
 
 def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
     ''' Create a pen lifting motion between two points assumed to lie on the XY plane'''
@@ -515,13 +585,14 @@ def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
     bc_type='clamped'
     spl = CubicSpline(u, P, bc_type=bc_type)
     dspl = spl.derivative()
-    ddspl = dspl.derivative()
+    ddspl = spl.derivative(2)
     x_test = np.linspace(0, 1, 100)
     Y = spl(x_test)
     dY = dspl(x_test)
     ddY = ddspl(x_test)
-    smax = np.max(colnorm(dY))
-    amax = np.max(colnorm(ddY))
+    smax = np.max(rownorm(dY))
+    amax = np.max(rownorm(ddY))
+    print('amax', amax)
     max_accel = max_speed/max_accel_time
     div_s = max_speed/smax
     div_a = np.sqrt(max_accel/amax)
@@ -532,12 +603,16 @@ def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
     X = spl(t)
     speed = compute_speed(X, dt)
     accel = compute_accel(X, dt)
+    dY = spl.derivative()(x_test)
+    ddY = spl.derivative(2)(x_test)
+    A = np.diff(X, n=2, axis=0)/(dt**2)
+    print("max accel", np.max(accel), 'a', np.abs(np.max(A)), 'da', np.abs(np.max(ddY)), 'vs', max_accel)
     if np.max(speed) > max_speed:
-        print("Exceeding max speed")
-        pdb.set_trace()
+        print("Exceeding max speed", np.max(speed), max_speed)
+        #pdb.set_trace()
     if np.max(accel) > max_accel:
-        print("Exceeding max accel")
-        pdb.set_trace()
+        print("Exceeding max accel", np.max(accel), max_accel)
+        #pdb.set_trace()
     return spl(t)
 
 

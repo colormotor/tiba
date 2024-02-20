@@ -9,6 +9,12 @@ import roboticstoolbox as rtb
 import numbers
 import pdb
 
+import plotly.graph_objects as go
+import plotly.io as pio
+from plotly.subplots import make_subplots
+pio.renderers.default = "browser" #browser"
+
+
 reload(geom)
 
 def is_number(x):
@@ -411,3 +417,148 @@ class GlView3d:
         pts = geom.view_3d([pos], self.mv, self.proj, viewport=self.viewport, pointcloud=True, clip=True)
         if pts:
             self.sketch.canvas.text(pts[0][0], text, center=center)
+
+def plotly_plot(entries, title='', legend_names=[]):
+    def categorical(i, alpha=1.0):
+        return 'rgba(%.3f, %.3f, %.3f, %.3f)'%tuple([v*255 for v in plut.default_color(i)] + [alpha*255])
+
+    def plotly_color(clr):
+        if type(clr) is str:
+            return clr
+        if len(clr)==3:
+            return 'rgb(%.3f, %.3f, %.3f)'%tuple([v*255 for v in clr])
+        elif len(clr)==4:
+            return 'rgba(%.3f, %.3f, %.3f, %.3f)'%tuple([v*255 for v in clr])
+
+    if type(entries[0]) is not list:
+        entries = [entries]
+    rows = len(entries)
+    cols = int(np.max([len(e) for e in entries]))
+    print('Cols', cols)
+    specs = []
+    titles = []
+
+    for i in range(rows):
+        specs.append([])
+        for j in range(cols):
+
+            spec = {}
+            entry = entries[i][j]
+
+            if entry is None or not entry:
+                #titles.append('')
+                specs[-1].append(None)
+            else:
+                if 'type' in entry:
+                    tp = entry['type']
+                    if tp == 'limits':
+                        tp = 'bar'
+                    spec['type'] = tp #entry['type']
+                if 'colspan' in entry:
+                    spec['colspan'] = entry['colspan']
+                    if 'title' in entry:
+                        titles.append(entry['title'])
+                    else:
+                        titles.append('')
+                specs[-1].append(spec)
+
+    print(specs)
+    print('Cols', cols)
+    fig = make_subplots(rows=rows, cols=cols, specs=specs, subplot_titles=titles)
+    firstlegend = True
+    for i in range(rows):
+        for j in range(cols):
+            spec = {}
+            entry = entries[i][j]
+            if not entry or entry is None:
+                continue
+            if 'type' not in entry or entry['type'] == 'scatter':
+                values = entry['values']
+                for k, value in enumerate(values):
+                    if k < len(legend_names):
+                        name = legend_names[k]
+                    else:
+                        name = None
+                    value = np.array(value)
+                    print('nnn', len(value.shape))
+                    if len(value.shape) == 1:
+                        fig.add_trace(go.Scatter(y=value, marker_color=categorical(k),
+                                                 legendgroup = '1',
+                                                 showlegend=firstlegend,
+                                                 name=name),
+                                      row=i+1, col=j+1)
+                    else:
+                        fig.add_trace(go.Scatter(x=value[0], y=value[1],
+                                                 marker_color=categorical(k),
+                                                 legendgroup = '1',
+                                                 showlegend=firstlegend,
+                                                 name=name),
+                                      row=i+1, col=j+1)
+                firstlegend = False
+            elif entry['type'] == 'surface':
+                values = entry['values']
+                if 'colors' in entry:
+                    colors = entry['colors']
+                else:
+                    colors = [None for k in range(len(values))]
+                if 'marker_size' in entry:
+                    marker_sizes = np.ones(len(values))*entry['marker_size']
+                else:
+                    marker_sizes = [0 for k in range(len(values))]
+                if 'line_width' in entry:
+                    line_width = np.ones(len(values))*entry['line_width']
+                else:
+                    line_width = np.ones(len(values))*1.0
+
+                for k, (color, X) in enumerate(zip(colors, values)):
+                    if color is None:
+                        color = categorical(k)
+                    else:
+                        color = plotly_color(color)
+
+                    if k < len(legend_names):
+                        name = legend_names[k]
+                    else:
+                        name = None
+                    X = np.array(X)
+
+                    marker_size = marker_sizes[k]
+                    if True: #marker_size > 0:
+                        marker = dict(
+                            size=marker_size,
+                            color=color, #categorical(k), #X[:,2],
+                            #colorscale='Viridis',
+                        )
+                    else:
+                        marker = None
+
+                    fig.add_trace(go.Scatter3d(
+                        x=X[:,0], y=X[:,1], z=X[:,2],
+                        marker=marker,
+                        line=dict(
+                            color=color,
+                            width=line_width[k]
+                        ),
+                        legendgroup = '1',
+                        showlegend=firstlegend,
+                        name=name),
+                        row=i+1, col=j+1)
+                firstlegend = False
+            elif entry['type'] == 'limits': # Plot joint limits
+                X = entry['X']
+                min_ref = np.array(entry['min'])
+                n = len(min_ref)
+                max_ref = np.array(entry['max'])
+                min = np.array([np.min(X[:,i]) for i in range(n)])
+                max = np.array([np.max(X[:,i]) for i in range(n)])
+                colors = [categorical(i) for i in range(n)]
+                limit_colors = [categorical(i, 0.5) for i in range(n)]
+                x = np.linspace(0, n-1, n)
+                fig.add_trace(go.Bar(x=x, y=max_ref-min_ref, base=min_ref, marker_color=limit_colors),
+                                      row=i+1, col=j+1)
+                fig.add_trace(go.Bar(x=x, y=max-min, base=min, marker_color=colors, showlegend=False),
+                                      row=i+1, col=j+1)
+                firstlegend = False
+
+    fig.layout.update(title=title, showlegend=True, barmode='relative')
+    fig.show()

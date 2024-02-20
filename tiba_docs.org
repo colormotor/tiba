@@ -1,8 +1,47 @@
-#+title: Tiba Docs
+#+title: Tiba-robot package
 
-* Module install
+* Package install
+The dependency installation procedure depends on the [[https://docs.conda.io/en/latest/][conda package mananger]]. One ideal way to install conda is to use the reduced [[https://github.com/conda-forge/miniforge][miniforge]] installer. To speed up installation, it is recommended to install mamba alongside conda (since "vanilla" conda is written in Python and can be extremely slow). To install mamba use:
+```
+conda install conda-forge::mamba
+```
+With mamba installed, create a conda environment for the dependencies and install [[https://www.ros.org][ROS]] through [[https://github.com/RoboStack/ros-noetic][RoboStack]] with:
+```
+mamba create -n ros_env
+mamba activate ros_env
 
+# this adds the conda-forge channel to the new created environment configuration
+conda config --env --add channels conda-forge
+# and the robostack channel
+conda config --env --add channels robostack-staging
+# remove the defaults channel just in case, this might return an error if it is not in the list which is ok
+conda config --env --remove channels defaults
+```
+And then install ROS1 with
+```
+mamba install ros-noetic-desktop
+```
+Then deactivate and reactivate the environment with
+```
+mamba deactivate
+mamba activate ros_env
+```
+
+For describing robot poses and kinematics calculations we use [[https://github.com/petercorke/robotics-toolbox-python][Robotics Toolbox Python]]. With the ROS environment active, install it with:
+```
+mamba install conda-forge::roboticstoolbox-python
+```
+
+
+** Comunication with robot
+Tiba uses ROS minmally to communicate to/from the robot control laptop and a client machine that sends sequences of joint coordinates to be executed with the robot. To install ROS use the robos
 * Setup
+** "Client" laptop
+The Tiba API does not necessarily require a robot to be connected and most operations can be tested using the [[https://github.com/jhavl/swift][swift]] browser-based simulator (it comes bundled with [[https://github.com/petercorke/robotics-toolbox-python][roboticstoolbox]]). To run the UI you will need to install [[https://github.com/colormotor/py5canvas][p5canvas]], which enables writing scripts similar to Processing/p5js using Python. Scripts can be edited with live-reloading making development easier.
+** Trajectory planning
+
+
+
 ** Robot control laptop
 *** Network setup
 **** Server setup
@@ -29,6 +68,3 @@ The client *should not* run ~roscore~ but should have the approriate ROS (https:
 #+begin_example
 source rosmaster.sh
 #+end_example
-
-
-

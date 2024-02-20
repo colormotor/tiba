@@ -1,25 +1,44 @@
-#!/usr/bin/env python3
+'''
+o-O-o o-O-o o--o    O
+  |     |   |   |  / \
+  |     |   O--o  o---o
+  |     |   |   | |   |
+  o   o-O-o o--o  o   o
+
+Painting robot utils.
+© Daniel Berio (@colormotor) 2023 - ...
+
+tiba_sketch - Tiba sketch interface for py5sketch app
+Creates a UI for sending drawings to the robot and controlling it.
+Requires https://github.com/colormotor/py5canvas to be installed
+'''
+
+
 import numpy as np
 from importlib import reload
 import importlib
 
 from motor import lqt
 import imgui
-from polygonsoup import utils, geom, svg, bezier, plut
+from polygonsoup import utils, svg, bezier, plut
 import roboticstoolbox as rtb
 import pdb
 import time
 
 from .interface import TibaInterface
 from .robot import TibaRobot
-from .draw import View3d, SketchView3d, GlView3d
+from . import matplotlyb as ply
 from . import planner
 from .config import cfg
 from . import trajectory_utils as tu
+from . import draw, geom
 from .gfx import renderer
 reload(renderer)
 reload(tu)
 reload(planner)
+reload(draw)
+reload(ply)
+from .draw import View3d, SketchView3d, GlView3d, plotly_plot
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
@@ -27,6 +46,8 @@ from collections import namedtuple
 import matplotlib.pyplot as plt
 import swift
 import matplotlib
+import multiprocessing, sys
+
 
 state = lambda: None
 state.has_ros = False
@@ -51,7 +72,10 @@ def plan_samples(draft, max_speed, accel_time, penup_distance, debug=True):
     print(accel_time)
     print(penup_distance)
 
-    paths = tu.plan_polylines_jerk(draft, 0.1, max_speed=max_speed, max_accel_time=accel_time, maxiter=300)
+    paths = tu.plan_polylines_smooth(draft,
+                                      max_speed=max_speed, max_accel_time=accel_time)
+
+    #paths = tu.plan_polylines_jerk(draft, 0.1, max_speed=max_speed, max_accel_time=accel_time, maxiter=300)
     paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
     lifts = [False]
     trajectories = [paths[0]]
@@ -80,39 +104,84 @@ def plan_samples(draft, max_speed, accel_time, penup_distance, debug=True):
         planner.show_open('cart.pdf')
     return trajectories
 
-def plan_bezier(draft, max_speed, accel_time, penup_distance, debug=True):
-    print(draft)
-    print(max_speed)
-    print(accel_time)
-    print(penup_distance)
+def plan_bezier(draft,
+                max_speed,
+                accel_time,
+                penup_distance, debug=True):
+    # paths, velocities_, accelerations_ = tu.plan_polylines_trapezoidal([bezier.bezier_piecewise(P, subd=35) for P in draft],
+    #                                       max_speed=max_speed, max_accel_time=accel_time, tol=0.1)
 
-    paths = tu.plan_bezier_chains_jerk(draft, max_speed=max_speed, max_accel_time=accel_time, maxiter=300)
+    # velocities_ = [tu.compute_speed(X, cfg.dt) for X in paths]
+    # accelerations_ = [tu.compute_accel(X, cfg.dt) for X in paths]
+
+    paths, velocities_, accelerations_ = tu.plan_polylines_smooth([bezier.bezier_piecewise(P, subd=50) for P in draft],
+                                                                  max_speed=max_speed, accel_time=accel_time, tol=0.01)#10/1000)
+    max_accel = max_speed / accel_time
+    #velocities_ = [tu.rownorm(V) for V in velocities_]
+    #accelerations_ = [tu.rownorm(A) for A in accelerations_]
+    print('plan bezier box size: ', geom.rect_size(geom.bounding_box(paths)))
+    # paths = tu.plan_bezier_chains_jerk(draft, max_speed=max_speed, max_accel_time=accel_time)
     paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
+    velocities_ = [np.diff(P, axis=0) / cfg.dt for P in paths]
+    accelerations_ = [np.diff(P, n=2, axis=0) / (cfg.dt**2) for P in paths]
     lifts = [False]
     trajectories = [paths[0]]
+    velocities = [velocities_[0]]
+    accelerations = [accelerations_[0]]
+    print('velocities', velocities_)
     if len(paths) > 1:
-        for P1, P2 in zip(paths, paths[1:]):
+        for i in range(len(paths)-1):
+            P1 = paths[i]
+            P2 = paths[i+1]
             if geom.distance(P1[-1], P2[0]) > 2e-3:
                 lifts.append(True)
                 trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=1.0))
+                vel = np.diff(trajectories[-1], axis=0) / cfg.dt
+                accel = np.diff(trajectories[-1], n=2, axis=0) / (cfg.dt**2)
+                velocities.append(vel)
+                accelerations.append(accel)
+
             lifts.append(False)
             trajectories.append(P2)
 
+            accelerations.append(accelerations_[i+1])
+            velocities.append(velocities_[i+1])
+
     if debug:
-        fig = plt.figure(figsize=((12, 4)))
-        plt.subplot(121)
-        T = 0.0
-        for X, lift in zip(trajectories, lifts):
-            speed = tu.compute_speed(X, cfg.dt)
-            t = np.linspace(0, len(speed)*cfg.dt, len(speed)) + T
-            clr = 'c' if lift else 'r'
-            plt.plot(t, speed, clr, lw=1)
-            T = t[-1] + cfg.dt
-        ax = fig.add_subplot(224, projection='3d')
-        for i, X in enumerate(trajectories):
-            plt.plot(X[:,0], X[:,1], X[:,2], color=plut.default_color(i), lw=1, alpha=1)
-        plt.tight_layout()
-        planner.show_open('cart.pdf')
+        ply.figure()
+
+        Tv = 0.0
+        Ta = 0.0
+
+        for i, (X, lift) in enumerate(zip(trajectories, lifts)):
+            #speed = velocities[i] #tu.compute_speed(X, cfg.dt)
+            #accel = accelerations[i] #tu.compute_accel(X, cfg.dt)
+            tv = np.linspace(0, (len(velocities[i])-1)*cfg.dt, len(velocities[i])) + Tv
+            ta = np.linspace(0, (len(accelerations[i])-1)*cfg.dt, len(accelerations[i])) + Ta
+            ply.subplot(1, 1, title='Velocity')
+            ply.plot(tv, velocities[i][:,0], color=ply.categorical_color(i))
+            ply.plot(tv, velocities[i][:,1], color=ply.categorical_color(i))
+            ply.plot(tv, velocities[i][:,2], color='b', alpha=0.5)
+            ply.subplot(1, 2, title='Acceleration')
+            ply.plot(ta, accelerations[i][:,0], color=ply.categorical_color(i))
+            ply.plot(ta, accelerations[i][:,1], color=ply.categorical_color(i))
+            ply.plot(ta, accelerations[i][:,2], color='b', alpha=0.5)
+            Tv = tv[-1] + cfg.dt
+            Ta = ta[-1] + cfg.dt
+
+        ply.subplot(1, 1, title='Velocity')
+        ply.rectangle([0, -max_speed], [Tv, max_speed], color='k', alpha=0.1, fill=True)
+        ply.subplot(1, 2, title='Acceleration')
+        ply.rectangle([0, -max_accel], [Ta, max_accel], color='k', alpha=0.1, fill=True)
+
+        ply.subplot(2, 1, title='Trajectory 2d')
+        ply.stroke(paths, 'k')
+        ply.axis_equal(True)
+
+        ply.subplot(2, 2, title='Trajectory 3d')
+        for X in trajectories:
+            ply.stroke3d(X)
+        ply.show()
     return trajectories
 
 dip_pos = np.array([0.11812825731443674, -0.407704314564537, 0.10439764358100054,
@@ -295,24 +364,24 @@ class TibaSketch:
         self.trajectories_computed = True
         print('Dip trajectory')
 
-    def compute_trajectories(self, max_speed=250/1000, accel_time=0.4):
+    def compute_trajectories(self, max_speed=150/1000, accel_time=0.5):
         params = self.sketch.params.params
         if not self.draft:
             print("No draft")
             return
 
-        callback = self.trajectory_callback
-        if type(callback)==str:
-            if callback=='bezier':
-                callback = plan_bezier
+        traj_callback = self.trajectory_callback
+        if type(traj_callback)==str:
+            if traj_callback=='bezier':
+                traj_callback = plan_bezier
             elif callback=='samples':
-                callback = plan_samples
+                traj_callback = plan_samples
             elif callback=='lqt':
-                callback = plan_lqt
+                traj_callback = plan_lqt
             else:
                 raise ValueError('Unknown callback')
         draft = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=0.0)
-        trajectories = callback(draft, max_speed, accel_time, params.drawing.penup_mm/1000)
+        trajectories = traj_callback(draft, max_speed, accel_time, params.drawing.penup_mm/1000)
         self.trajectories = self.pad.fit_to_frame(trajectories)
         self.trajectories_computed = True
 

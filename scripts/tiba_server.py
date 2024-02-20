@@ -19,7 +19,7 @@ else:
 from tiba.interface import FrankaButton, TibaInterface
 from tiba.robot import TibaRobot
 from tiba.draw import View3d, SketchView3d, GlView3d
-from tiba import planner, cfg
+from tiba import cfg
 
 import os, socket
 

@@ -1,6 +1,24 @@
-# Python port of path-constrained minimum jerk trajectories
-# from Matlab implementation of Todorov/
-# https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/submissions/58403/versions/7/previews/min_jerk_todorov.m/index.html
+'''
+o-O-o o-O-o o--o    O
+  |     |   |   |  / \
+  |     |   O--o  o---o
+  |     |   |   | |   |
+  o   o-O-o o--o  o   o
+
+Painting robot utils.
+© Daniel Berio (@colormotor) 2023 - ...
+
+todorov - Path-constrained minimum jerk trajectories
+
+implementation of:
+Todorov, E. and Jordan, M. (1998)
+Smoothness maximization along a predefined path accurately predicts the speed profiles of
+complex arm movements.
+
+Pythpn port from Matlab implementation of Todorov here:
+https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/submissions/58403/versions/7/previews/min_jerk_todorov.m/index.html
+'''
+
 from __future__ import division
 from scipy.optimize import fmin
 import numpy as np
@@ -19,6 +37,7 @@ def min_jerk_todorov( pos, dur, vel=None, acc=None, psg=None, maxiter=5000, get_
     N = pos.shape[0]
     D = pos.shape[1]
 
+    # if not specified, bondary conditions are zero
     if vel is None:
         vel = np.zeros((2, D))
     if acc is None:

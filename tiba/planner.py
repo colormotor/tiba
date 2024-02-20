@@ -1,9 +1,26 @@
+'''
+o-O-o o-O-o o--o    O
+  |     |   |   |  / \
+  |     |   O--o  o---o
+  |     |   |   | |   |
+  o   o-O-o o--o  o   o
+
+Painting robot utils.
+© Daniel Berio (@colormotor) 2023 - ...
+
+planner -
+Adapted from polygonsoup module https://github.com/colormotor/polygonsoup
+'''
+
 import numpy as np
 import matplotlib.pyplot as plt
+
+# Using Idiap iLQR implementation for inverse kinematics planning
 from PyLQR.system import PosOrnPlannerSys,PosOrnKeypoint
 from PyLQR.solver import ILQRRecursive
 from PyLQR.sim import KDLRobot
 from PyLQR.utils import primitives, PythonCallbackMessage
+
 from polygonsoup import utils, plut, geom
 from spatialmath import SE3, SO3, UnitQuaternion
 from tqdm import tqdm, trange
@@ -13,26 +30,27 @@ import pdb
 import numbers
 import platform, subprocess
 
-
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
 from . import trajectory_utils as tu
 from .config import cfg
-
+from . import draw
+reload(draw)
 reload(utils)
 reload(tu)
 
 def is_number(x):
     return isinstance(x, numbers.Number)
 
+# Braccio joint limits
 q_min_braccio = [0.0, 0.262, 0.0, 0.0, 0.0]
 q_max_braccio = [np.pi, 2.879, np.pi, np.pi, np.pi]
 braccio_limits = [q_min_braccio, q_max_braccio]
 
+# Franka emika joint limits
 q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973])
 q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
 panda_limits = [q_min_panda, q_max_panda]
-
 
 def batch_indices(n, batch_size):
     n_batches = n//batch_size + 1
@@ -526,220 +544,7 @@ def linear_approach_2d(e, q, p, n):
     x0 = e.fkine(q).t[:2]
     return np.array([x0 + (p-x0)*tt for tt in t])
 
-class DrawingPad:
-    def __init__(self, path='pad.pkl'):
-        self.path = os.path.expanduser(path)
-        self.frame = np.eye(4)
-        self.offset = 0.0
-        self.box = None
-        self.points = []
-        self.pos_offset = [0.0, 0.0]
-        self.scale = [1.0, 1.0]
-
-    def clear(self):
-        self.points.clear()
-        self.save()
-
-    def add_point(self, p):
-        p = np.array(p)
-        for q in self.points:
-            if np.linalg.norm(p - q) < 3e-3:
-                print('Redundant point!')
-                return
-        self.points.append(p)
-        self.save()
-
-    def save(self):
-        utils.save_pkl(self.points, self.path)
-
-    def load(self):
-        try:
-            self.points = utils.load_pkl(self.path)
-        except FileNotFoundError as e:
-            print(e)
-
-    def is_valid(self):
-        return len(self.points) > 3 and self.box is not None
-
-    def z(self):
-        return self.frame[:3, 2]
-
-    def update(self, P=None):
-        # Compute frame
-        if P is not None:
-            self.points = P
-
-        if len(self.points) < 4:
-            return
-
-        U, S, mu = principal_components(self.points)
-        frame = np.eye(4)
-        frame[:3,:3] = U
-        frame[:3, 3] = mu
-        frame[:3, :3] = orthonormalize_xy(U[:3,2], np.eye(3))
-        self.frame = frame
-
-        # Compute bounding box for sample points
-        self.box = compute_frame_aligned_xy_box(self.points, self.frame)
-        scaled_box = [np.array(self.box[0]), np.array(self.box[1])]
-        size = geom.rect_size(self.box)
-        scaled_box[0] += self.pos_offset*size
-        scaled_box[1] = scaled_box[0] + self.scale*size
-        self.scaled_box = scaled_box
-
-    def get_pen_orientation(self, robot, q):
-        z = self.frame[:3,2]
-        tcp_frame = robot.pen_tcp_frame(q)
-        tcp_frame = align_frame_z(tcp_frame, -z)
-        return np.array(UnitQuaternion(SE3(tcp_frame)))
-
-    def augment_with_pen_orientation(self, trajectories, robot, q):
-        ''' Augment 3d trajectories with a fixed pen orientation perpendicular to pad'''
-        orn = self.get_pen_orientation(robot, q)
-        compound = True
-        if not geom.is_compound(trajectories):
-            trajectories = [trajectories]
-        trajectories = [[np.concatenate([pos, orn]) for pos in trajectory]
-                        for trajectory in trajectories]
-        if not compound:
-            return trajectories[0]
-        return trajectories
-
-    def fit_to_box(self, S, padding=0, penup_mm=50.0):
-        ''' Fits an input 2d trajectory to the given 2d box'''
-        res = fit_to_box_and_augment(S, self.scaled_box, padding, penup_mm=penup_mm)
-        return res
-
-    def fit_to_frame(self, S, clamp_z=True):
-        ''' Fits a 3d trajectory assumed to lie on the XY plane, to the frame of the drawing pad'''
-        compound = True
-        if not geom.is_compound(S):
-            S = [S]
-        S = [np.array(P) for P in S]
-        if clamp_z:
-            for P in S:
-                P[:,2] = np.maximum(P[:,2], 0.0)
-        S = fit_to_frame(S, self.frame, self.offset)
-        if not compound:
-            return S[0]
-        return S
-
-    def fit_trajectory(self, P, padding=100):
-        P = self.fit_to_box(P, padding) #fit_to_box_and_augment(P, self.box, padding)
-        return self.fit_to_frame(P)
-        #return fit_to_frame_box(P, self.box, self.frame, padding, offset=self.offset)
-
-    def draw(self, v3d):
-        v3d.frame(self.frame, 0.5)
-        if self.is_valid():
-            v3d.color(0, 0.4, 1.0, 1.0)
-            draw_frame_aligned_xy_box(v3d, self.box, self.frame)
-            v3d.color(0, 0.4, 1.0, 0.5)
-            draw_frame_aligned_xy_box(v3d, self.box, self.frame, self.offset)
-        if len(self.points):
-            v3d.color(1, 0, 0, 0.3)
-            v3d.points(self.points, 12)
-            v3d.color(1, 0, 0, 1)
-            v3d.points(self.points, 4)
-
-def principal_components(X, resolve_signs=False):
-    mu = np.mean(X, axis=0)
-    X = (X - mu).T @ (X - mu)
-    U, S, Vt = np.linalg.svd(X.T @ X)
-    idx = S.argsort()[::-1]
-    return U[:,idx], S[idx], mu
-
-
-# def orthonormalize_xy(U, A):
-#     ''' Compute X and Y axes based on z of U and x, y of A'''
-#     V = np.array(U)
-#     V[:3,0] = np.cross(A[:,1], U[:,2], )
-#     V[:3,1] = np.cross(U[:,2], A[:,0])
-#     # Must make sure we don't get precision issues
-#     # https://github.com/bdaiinstitute/spatialmath-python/issues/28
-#     V[:3,:3] = trnorm(V[:3,:3])
-#     return V
-
-def orthonormalize_xy(z, A):
-    ''' Compute X and Y axes based on z of U and x, y of A'''
-    V = np.array(A)
-    V[:3,2] = z
-    V[:3,0] = np.cross(A[:,1], z)
-    V[:3,1] = np.cross(z, A[:,0])
-    # Must make sure we don't get precision issues
-    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
-    V[:3,:3] = trnorm(V[:3,:3])
-    return V
-
-def frame_to_pos(frame):
-    pose = SE3(frame)
-    return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
-
-def align_pos_z(pose, z):
-    pose = tu.to_pose(pose)
-    pose = align_frame_z(pose, z)
-    return tu.to_pos_orn(pose)
-
-def align_frame_z(frame, z):
-    z = np.array(z)
-    frame = np.array(frame)
-    frame[:3,2] = z
-    frame[:3,0] = np.cross(frame[:3,1], z)
-    frame[:3,1] = np.cross(z, frame[:3,0])
-    # Must make sure we don't get precision issues
-    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
-    return trnorm(frame)
-
-def compute_frame_aligned_xy_box(P, frame):
-    # Assume we are projecting to XY
-    Q = geom.affine_transform(np.linalg.inv(frame), P)
-    box = geom.bounding_box(Q[:,:2])
-    return box
-
-def get_offset_frame(frame, offset):
-    z = frame[:3, 2]
-    oframe = np.array(frame)
-    oframe[:3, 3] = frame[:3, 3] + z*offset
-    return oframe
-
-def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
-    P = geom.close(np.array(geom.rect_corners(box)))
-    P = np.hstack([P, np.zeros([P.shape[0], 1])])
-    frame = get_offset_frame(frame, offset)
-    P = geom.affine_transform(frame, P)
-    v3d.polyline(P)
-
-
-def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, penup_mm=0.0):
-    compound = True
-    if not geom.is_compound(S):
-        S = [S]
-    S = [np.array(P) for P in S]
-    if flip_y:
-        S = [P*[1,-1] for P in S]
-    if flip_x:
-        S = [P*[-1,1] for P in S]
-    S = geom.affine_transform(geom.rot_2d(geom.radians(-90)), S)
-    mat = geom.rect_in_rect_transform(geom.bounding_box(S, input_padding), box)
-    S = geom.affine_transform(mat, S)
-
-    if penup_mm > 0.0:
-        S = [np.hstack([P, np.zeros([P.shape[0], 1])]) for P in S]
-        up = np.array([0, 0, 1])
-        S = [np.vstack([P[0] + up*(penup_mm/1000),
-                        P,
-                        P[-1] + up*(penup_mm/1000)]) for P in S]
-
-    if not compound:
-        return S[0]
-    return S
-
-def fit_to_frame(P, frame, offset=0):
-    ''' Fit a polyline to a box projected to XY plane defined by a given frame'''
-    frame = get_offset_frame(frame, offset)
-    return geom.affine_transform(frame, P)
-
-def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi=92, max_segments=200, filename=''):
+def plot_trajectory_stats_plt(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi=92, max_segments=200, filename=''):
     import matplotlib
     from matplotlib.gridspec import GridSpec
     # return
@@ -819,6 +624,44 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     else:
         print('Showing')
         plt.show() #block=False)
+
+def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi=92, max_segments=200, filename=''):
+
+    #matplotlib.interactive(True)
+    Qs = np.array(Qs)
+    dQs = np.array(dQs)
+
+    colors = []
+    trajs = []
+    marker_size = []
+    line_width = []
+    if trajectories:
+        trajs += [np.array(trajectory) for trajectory in trajectories]
+        colors += ['red'] * len(trajectories)
+        marker_size += [2] * len(trajectories)
+        line_width += [1] * len(trajectories)
+    trajs += [np.array([robot.pen_tcp_pos(q)[:3] for q in Qs])]
+    colors += ['black']
+    marker_size += [2]
+    line_width += [1]
+
+
+    I = np.linspace(0, len(Qs)-1, max_segments).astype(int)
+    for i in I:
+        q = Qs[i]
+        P, penP = robot.robot_polylines(q)
+        P = np.array(P)
+        trajs.append(P)
+        marker_size.append(0)
+        line_width += [0.5]
+        colors.append([0.0, 0.5, 1.0, 0.1])
+
+    draw.plotly_plot([[{'title': 'Joint positions (rad)', 'values': [Qs[:, i] for i in range(Qs.shape[1])]},
+                       {'title': 'Joint velocities (rad/sec)', 'values': [dQs[:, i] for i in range(dQs.shape[1])]}],
+                      [{'title': 'Joint limits', 'type': 'limits', 'X': Qs, 'min': q_min_panda, 'max': q_max_panda},
+                       {'title': 'Trajectory', 'type': 'surface',
+                        'values': trajs, 'colors': colors, 'marker_size': marker_size, 'line_width': line_width}]],
+                     title='Planning', legend_names=['q%d'%i for i in range(7)])
 
 def show_open(filename):
     plt.savefig(filename)
