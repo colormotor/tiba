@@ -148,7 +148,7 @@ def plan_bezier(draft,
             velocities.append(velocities_[i+1])
 
     if debug:
-        ply.figure()
+        ply.figure(title='Cartesian trajectory')
 
         Tv = 0.0
         Ta = 0.0
@@ -219,6 +219,7 @@ class TibaSketch:
         # self.robot.q = np.array([-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134])
         self.robot.q = self.robot.home
 
+        print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
         if state.has_ros:
             try:
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
@@ -364,7 +365,7 @@ class TibaSketch:
         self.trajectories_computed = True
         print('Dip trajectory')
 
-    def compute_trajectories(self, max_speed=150/1000, accel_time=0.5):
+    def compute_trajectories(self, max_speed=150/1000, accel_time=0.5, debug=False):
         params = self.sketch.params.params
         if not self.draft:
             print("No draft")
@@ -381,7 +382,7 @@ class TibaSketch:
             else:
                 raise ValueError('Unknown callback')
         draft = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=0.0)
-        trajectories = traj_callback(draft, max_speed, accel_time, params.drawing.penup_mm/1000)
+        trajectories = traj_callback(draft, max_speed, accel_time, params.drawing.penup_mm/1000, debug=debug)
         self.trajectories = self.pad.fit_to_frame(trajectories)
         self.trajectories_computed = True
 
@@ -389,31 +390,38 @@ class TibaSketch:
         params = self.sketch.params.params
         if imgui.button('Launch Swift'):
             self.itiba.launch_simulator()
-
-        if imgui.button('Home'):
-            self.msg_pub.publish('exec:Home')
-
+        imgui.same_line()
         if imgui.button('Say hello'):
             self.send_msg('hello!!!')
-        if imgui.button('Pick Tool'):
-            self.msg_pub.publish('exec:Pick')
         imgui.same_line()
-        if imgui.button('Release Tool'):
-            self.msg_pub.publish('exec:Release')
-
-        if imgui.button('Compute trajectories'):
-            self.compute_trajectories()
-
-        if imgui.button('Try dip'):
-            self.dip_trajectory()
-
-        if imgui.button('Print configuration'):
+        if imgui.button('Print pose'):
            tcp = self.robot.pen_tcp_pos(self.robot.q)
            q = self.robot.q
            print('TCP: ', list(tcp))
            print('q: ', list(q))
 
-        if self.trajectories_computed and imgui.button('Plan trajectories'):
+        imgui.separator()
+        if imgui.button('Home'):
+            self.msg_pub.publish('exec:Home')
+        if imgui.button('Pick Tool'):
+            self.msg_pub.publish('exec:Pick')
+        imgui.same_line()
+        if imgui.button('Release Tool'):
+            self.msg_pub.publish('exec:Release')
+        imgui.separator()
+        if imgui.button('Try dip'):
+            self.dip_trajectory()
+        imgui.separator()
+
+        if imgui.button('Compute trajectories'):
+            self.compute_trajectories(debug=True)
+
+        must_plan = False
+        if imgui.button('Compute and plan trajectories'):
+            self.compute_trajectories()
+            must_plan = True
+
+        if self.trajectories_computed and (must_plan or imgui.button('Plan trajectories')):
             cur_pos = self.robot.pen_tcp_pos(self.robot.q)
             trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
             # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]

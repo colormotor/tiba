@@ -104,7 +104,7 @@ class iLQRPlannerVelocity:
                 #     print('Oh shit')
                 traj = tu.rest_inout(traj, rest)
                 dX = np.diff(traj, axis=0)/cfg.dt
-                speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
+                speed = np.sqrt(np.sum(dX**2, axis=1))
                 try:
                     if np.max(speed) > 2:
                         pdb.set_trace()
@@ -116,23 +116,6 @@ class iLQRPlannerVelocity:
             x0 = traj[-1]
 
         all_trajs = np.vstack(linked_trajectories)
-        # plt.figure(figsize=(5,5))
-        # t = 0.0
-        # for traj in linked_trajectories:
-        #     dX = np.diff(traj, axis=0)/cfg.dt
-        #     speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
-        #     if np.max(speed) > 2:
-        #         pdb.set_trace()
-        #     T = np.linspace(0, len(speed)*cfg.dt, len(speed)) + t
-        #     plt.plot(T, speed)
-        #     t = T[-1]
-
-        # #dX = np.diff(all_trajs, axis=0)/cfg.dt
-        # #speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
-
-        # plt.title('Cartesian speed')
-        # plt.tight_layout()
-        # show_open('cartesian.pdf')
 
         # Plan
         nb_control_vars = len(self.dq0)
@@ -187,42 +170,14 @@ class iLQRPlannerVelocity:
         Qs = np.array(Qs)
         dQs = np.array(dQs)
 
-        # x = np.linspace(0, 1, len(Qs))
-        # x1 = np.linspace(0, 1, len(Qs_1))
-        # plt.figure(figsize=(12,12))
-        # plt.subplot(211)
-        # #plt.cla()
-        # print(Qs.shape, Qs_1.shape)
-        # for i in range(7):
-        #     plt.plot(x1, Qs_1[:, i], color=plut.default_color(i), ls=':', lw=2)
-        #     plt.plot(x, Qs[:, i], color=plut.default_color(i), label='q%d'%(i+1))
-
-        # plt.subplot(212)
-        # # plt.cla()
-        # print('dQ1', dQs_1[0], dQs_1[-1])
-
-        # print('dQ', dQs[0], dQs[-1])
-
-        # for i in range(7):
-        #     x = np.linspace(0, 1, len(dQs_1))
-        #     plt.plot(x, dQs_1[:, i], color=plut.default_color(i), ls=':', lw=2)
-        #     x = np.linspace(0, 1, len(dQs))
-        #     plt.plot(x, dQs[:, i], color=plut.default_color(i)) #, label='q%d'%(i+1))
-
-        plt.tight_layout()
-        #show_open('spline.pdf')
-        #plt.savefig('spline.png')
         return list(Qs), list(dQs)
 
 
 def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi=92, max_segments=200, filename=''):
-    fig = ply.figure()
+    fig = ply.figure(title='Joint and task trajectory')
 
-    #matplotlib.interactive(True)
     Qs = np.array(Qs)
     dQs = np.array(dQs)
-    #gs = GridSpec(4, 4)
-
 
     # Plot joint positions
     ply.subplot(1, 1)
@@ -257,18 +212,17 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     for i in range(3):
         t = np.linspace(0, len(vel), len(vel))*cfg.robot_dt
         ply.plot(t, vel[:,i], ['r', 'g', 'b'][i], label=['x', 'y', 'z'][i])
+    ply.plot(t, tu.rownorm(vel), 'k', lw=2, label='norm')
 
     ply.subplot(2, 2, title='Cartesian acceleration (m/s^2)')
     for i in range(3):
         t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
         ply.plot(t, acc[:,i], ['r', 'g', 'b'][i])
+    plt.plot(t, tu.rownorm(acc), 'k', lw=2)
 
     ply.subplot(2, 3)
     box = geom.shapes.box_3d([-0.8, -0.8, 0], [1, 1, 1.2])
     ply.stroke3d(box, color='r', lw=1, ls=':', alpha=0.25)
-    #ax.view_init(10, 120)
-
-
 
     if trajectories:
         for trajectory in trajectories:

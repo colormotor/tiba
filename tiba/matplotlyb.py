@@ -54,10 +54,11 @@ class Axes3d(Axes):
 
 
 class Figure:
-    def __init__(self, figsize=(10, 10)):
+    def __init__(self, figsize=(10, 10), title=''):
         self.figsize = figsize
         self.plots = defaultdict(dict)
         self.cur_ax = None
+        self.figtitle = title
 
     @property
     def num_rows(self):
@@ -167,8 +168,8 @@ class Bar(Plot):
 
 ## Immediate mode
 
-def figure(figsize=(10, 10)):
-    glob.fig = Figure(figsize=figsize)
+def figure(figsize=(10, 10), title=''):
+    glob.fig = Figure(figsize=figsize, title=title)
     return glob.fig
 
 def subplot(*args, **kwargs):
@@ -372,7 +373,11 @@ def show_plotly(fig):
                 row.append(None)
         specs.append(row)
     print('titles', titles)
-    pfig = make_subplots(rows=num_rows, cols=num_cols, specs=specs, subplot_titles=titles)
+    pfig = make_subplots(rows=num_rows, cols=num_cols,
+                         specs=specs,
+                         subplot_titles=titles,
+                         horizontal_spacing = 0.05,
+                         vertical_spacing = 0.05)
 
     ax_ind = 1
     for i in range(num_rows):
@@ -466,6 +471,7 @@ def show_plotly(fig):
                 ax_ind += 1
 
     pfig.update_layout(barmode='relative',
+                       title=dict(text=fig.figtitle),
                        #margin=dict(l=0, r=0, b=0, t=0), # Tight layout
                        scene = dict(
                            aspectmode='data' # Force aspect ratio to be 1:1:1 for 3d
