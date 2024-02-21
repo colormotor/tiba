@@ -562,7 +562,7 @@ def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300
     return Y
 
 def rownorm(dP):
-    return np.sqrt(dP[:,0]**2 + dP[:,1]**2)
+    return np.sqrt(np.sum(dP**2, axis=1)) 
 
 def compute_speed(X, dt):
     D = np.diff(X, axis=0)/dt

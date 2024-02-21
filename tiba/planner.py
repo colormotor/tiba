@@ -101,15 +101,15 @@ class iLQRPlannerVelocity:
                 #     pdb.set_trace()
                 #     print('Oh shit')
                 traj = tu.rest_inout(traj, rest)
-                dX = np.diff(traj, axis=0)/cfg.dt
-                speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
-                try:
-                    if np.max(speed) > 2:
-                        pdb.set_trace()
-                        print('Oh shit')
-                except:
-                    pdb.set_trace()
-                    print('ooooo')
+                # dX = np.diff(traj, axis=0)/cfg.dt
+                # speed = np.sqrt(np.sum(dX**2, axis=1))
+                # try:
+                #     if np.max(speed) > 2:
+                #         pdb.set_trace()
+                #         print('Oh shit')
+                # except:
+                #     pdb.set_trace()
+                #     print('ooooo')
             linked_trajectories.append(traj)
             x0 = traj[-1]
 
@@ -118,7 +118,7 @@ class iLQRPlannerVelocity:
         t = 0.0
         for traj in linked_trajectories:
             dX = np.diff(traj, axis=0)/cfg.dt
-            speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
+            speed = np.sqrt(np.sum(dX**2, axis=1))
             if np.max(speed) > 2:
                 pdb.set_trace()
             T = np.linspace(0, len(speed)*cfg.dt, len(speed)) + t
@@ -128,9 +128,6 @@ class iLQRPlannerVelocity:
         #dX = np.diff(all_trajs, axis=0)/cfg.dt
         #speed = np.sqrt(dX[:,0]**2 + dX[:,1]**2)
 
-        plt.title('Cartesian speed')
-        plt.tight_layout()
-        show_open('cartesian.pdf')
 
         # Plan
         nb_control_vars = len(self.dq0)

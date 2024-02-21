@@ -587,7 +587,7 @@ def uniform_sample( X, delta_s, closed=0, kind='slinear', data=None ):
 
     D = np.diff(X[:,:2], axis=0)
     # chord lengths
-    s = np.sqrt(D[:,0]**2 + D[:,1]**2)
+    s = np.sqrt(np.sum(D**2, axis=1))
     # Delete values in input with zero distance (due to a bug in interp1d)
     I = np.where(s==0)
     X = np.delete(X, I, axis=0)
@@ -667,7 +667,7 @@ def chord_lengths( P, closed=0 ):
     if closed:
         P = np.vstack([P, P[0]])
     D = np.diff(P, axis=0)
-    L = np.sqrt( D[:,0]**2 + D[:,1]**2 )
+    L = np.sqrt(np.sum(D**2, axis=1))
     return L
 
 
