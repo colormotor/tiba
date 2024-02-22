@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from polygonsoup import geom, utils
+import yaml
 
 class Config:
     def __init__(self):
@@ -11,5 +12,10 @@ class Config:
         #self.dt = 0.001
         self.dt = 0.01
         self.robot_dt = 0.001
+
+    def load(self, filename):
+        with open(filename, 'r') as f:
+            data = yaml.load(f, Loader=yaml.FullLoader)
+            self.__dict__.update(data)
 
 cfg = Config()
