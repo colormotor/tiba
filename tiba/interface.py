@@ -25,7 +25,7 @@ from spatialmath.base import trnorm
 from collections import namedtuple
 import swift
 
-from . import ilqr, config, drawing_pad
+from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
 from . import utils, geom
 
@@ -239,16 +239,17 @@ class MotionEditor:
 
 
 class TibaInterface:
-    def __init__(self, robot, panda, gripper,
+    def __init__(self, panda, gripper,
                  motion_path='motions_desk.json',
                  pad_path='pad.pkl',
                  plot_path='trajectory.png'):
+
         self.editor = MotionEditor(motion_path)
         self.pad = drawing_pad.DrawingPad(pad_path)
         self.pad.load()
         self.pad.update()
 
-        self.robot = robot
+        self.robot = robot.TibaRobot()
         self.grasped = False
 
         self.plot_path = plot_path
@@ -265,6 +266,15 @@ class TibaInterface:
         env.launch(realtime=True)
         env.add(self.robot)
 
+    def clear(self):
+        self.Qs = []
+        self.dQs = []
+
+    def set_tool(self, tool_dict):
+        self.clear()
+        self.robot = robot.TibaRobot(**tool_dict)
+        self.robot.q = self.robot.home
+
     def simulate(self):
         env = swift.Swift()
         env.launch(realtime=True)
@@ -276,6 +286,7 @@ class TibaInterface:
             env.step(cfg.robot_dt)
         # Reset robot after simulation
         self.robot.q = q_old
+
     def delay(self, delay):
         if delay > 0:
             print('%f second delay'%delay)
@@ -294,7 +305,7 @@ class TibaInterface:
         self.grasped = self.gripper.read_once().is_grasped
 
     def execute(self, delay=2.0):
-
+        ''' Execute the current joint motion'''
         if self.panda is None:
             print("No panda, can't execute")
             return

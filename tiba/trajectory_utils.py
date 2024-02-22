@@ -306,8 +306,33 @@ def gauss_approach(x0, x1, duration=-1,
     return []
 
 
-def split_chain(chain, tol=10):
-    tol = geom.radians(tol)
+def adaptive_subdivide(P, max_len=5):
+    ''' Subdivide a polyline so its segments are not longer than max_len'''
+    Q = [P[0]]
+    for a, b in zip(P, P[1:]):
+        l = geom.distance(a, b)
+        if l > max_len:
+            n = max(int(l/max_len), 3)
+            for t in np.linspace(0, 1, n)[1:-1]:
+                Q.append(a + (b - a)*t)
+        Q.append(b)
+    return np.array(Q)
+
+
+def split_polyline_at_angle(P, angle_tol=90):
+    ''' Split polyline at points where the turning angle is greater than angle_tol degrees'''
+    tol = geom.radians(angle_tol)
+    A = geom.turning_angles(P, all_points=True)
+    I = np.where(np.abs(A) > tol)[0]
+    I = [0] + list(I) + [len(P)-1]
+    splitted = []
+    for a, b in zip(I, I[1:]):
+        splitted.append(P[a:b+1])
+    return splitted
+
+
+def split_chain(chain, angle_tol=10):
+    tol = geom.radians(angle_tol)
     beziers = bezier.chain_to_beziers(chain)
     chunks = [[beziers[0]]]
     bez = beziers[0]
@@ -346,6 +371,13 @@ def plan_polylines_smooth(polylines, max_speed, accel_time, tol=10/1000.0):
         result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
         if not result.success:
             print('Smoothing failed in trajectory smoothing')
+            Q = np.array(P)
+            A = geom.degrees(geom.turning_angles(Q))
+            L = geom.chord_lengths(Q)
+            print('Min angle:', np.min(A))
+            print('Max angle:', np.max(A))
+            print('Min length:', np.max(L))
+            print('Max length:', np.max(L))
         else:
             trajectories.append(result.position)
             velocities.append(result.velocity)

@@ -38,9 +38,36 @@ def xacro_to_urdf(xacro_file, urdf_file, tld=None, mappings={}):
     out.close()
 
 
+tools = {
+    'Default': {
+        'tip_dist_mm': 45.0,
+        'tip_height_mm': 11.5
+    },
+
+    'Probe': {
+        'tip_dist_mm': 60.0,
+        'tip_height_mm': 0.0,
+        'angle': 0.0
+    },
+
+    'Molotow': {
+        'tip_dist_mm': 45.0,
+        'tip_height_mm': 11.5
+    },
+
+    'Calli-brush-01': {
+        'tip_dist_mm': 74.0,
+        'tip_height_mm': 0.0
+    }
+}
+
 class TibaRobot(Robot):
     """
-    Class that imports a Arduino Braccio URDF model
+    Robot description and state for Tiba robot (Franka Emika Research 3).
+    Assumes the gripper holds a pen holder (see docs) with the pen
+    attached at a default angle of 15 degrees,
+
+    ----
     """
 
     def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5, angle=15.0):

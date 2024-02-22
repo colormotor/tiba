@@ -26,7 +26,7 @@ import pdb
 import time
 
 from .interface import TibaInterface
-from .robot import TibaRobot
+from .robot import TibaRobot, tools
 from . import matplotlyb as ply
 from . import planner
 from .config import cfg
@@ -295,9 +295,6 @@ dip_pos = np.array([0.11812825731443674, -0.407704314564537, 0.10439764358100054
 #
 class TibaSketch:
     def __init__(self):
-
-        self.clear()
-
         self.params_to_check = [
             'seed',
             'drawing.padding',
@@ -311,20 +308,41 @@ class TibaSketch:
 
         self.arcball = geom.ArcBall()
 
-    def init(self, sketch, robot, callback, panda=None, gripper=None):
-        self.itiba = TibaInterface(robot, panda=panda, gripper=gripper)
+    def init(self, sketch, callback, input_tools=None, panda=None, gripper=None):
+        # Actual interface to the robot. Here this is not used to control the robot directly
+        # but to plan and execute trajectories
+        if input_tools is None:
+            self.tools = dict(tools)
+        else:
+            self.tools = input_tools
+
+
+        self.itiba = TibaInterface(panda=panda, gripper=gripper)
+        # 3d view for the robot
         self.v3d = GlView3d(sketch)
-        self.robot = robot
+        # Reference to the drawing pad
         self.pad = self.itiba.pad
+
+        # Visualization limits, trajectories will be quantized to fit these numbers
         self.max_steps = 500
         self.max_trajectory_points = 200
-        self.sketch = sketch
 
+        # The py5canvas "sketch" that will be used to run this
+        self.sketch = sketch
         self.trajectory_callback = callback
+
+        # Setup robot
+        tool_data = self.get_tool_by_index(self.params.config.tool)
+        self.set_tool(tool_data)
+
         # self.robot.q = self.robot.qr
         # self.robot.q = np.array([-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134])
         self.robot.q = self.robot.home
 
+        self.draft = []
+        self.clear()
+
+        print("#################################################")
         print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
         if state.has_ros:
             try:
@@ -355,7 +373,11 @@ class TibaSketch:
 
     @staticmethod
     def add_parameters(params_to_update):
+        ''' Add parameters to the sketch '''
         params = {
+            'Config': {
+                'tool': (0, {'hide': True}),
+            },
             'Drawing':  {
               'Plane offset': (0.0, {'min':-20,'max': 20}),
               'Padding': (80, {'min':0.0, 'max':450}),
@@ -378,8 +400,28 @@ class TibaSketch:
     def c(self):
         return self.sketch.canvas
 
+    @property
+    def robot(self):
+        return self.itiba.robot
+
+    @property
+    def params(self):
+        return self.sketch.params.params
+
     def set_drawing_data(self, data):
         self.drawing_data = data
+
+    def get_tool_names(self):
+        names = list(self.tools.keys())
+        return names
+
+    def get_tool_name(self, index):
+        names = list(self.tools.keys())
+        return names[index]
+
+    def get_tool_by_index(self, index):
+        names = list(self.tools.keys())
+        return self.tools[names[index]]
 
     def compute_steps(self, Qs):
         max_steps = self.max_steps
@@ -434,10 +476,14 @@ class TibaSketch:
     def clear(self):
         self.steps = []
         self.fk_points = []
-        self.draft = []
         self.trajectories = []
         self.dirty = True
         self.trajectories_computed = False
+        self.itiba.clear()
+
+    def set_tool(self, tool_dict):
+        self.clear()
+        self.itiba.set_tool(tool_dict)
 
     def set_draft(self, draft):
         self.clear()
@@ -472,7 +518,7 @@ class TibaSketch:
         print('Dip trajectory')
 
     def compute_trajectories(self, max_speed=150/1000, accel_time=0.5, debug=False):
-        params = self.sketch.params.params
+        params = self.params
         if not self.draft:
             print("No draft")
             return
@@ -493,7 +539,7 @@ class TibaSketch:
         self.trajectories_computed = True
 
     def gui(self):
-        params = self.sketch.params.params
+        params = self.params
         if imgui.button('Launch Swift'):
             self.itiba.launch_simulator()
         imgui.same_line()
@@ -567,7 +613,7 @@ class TibaSketch:
         self.arcball.update(self.sketch.width,
                             self.sketch.height)
 
-        params = self.sketch.params.params
+        params = self.params 
         # Udate drawing pad data
         self.pad.offset = params.drawing.plane_offset / 1000
         self.pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
@@ -582,8 +628,14 @@ class TibaSketch:
         #if state.has_ros:
         #    rospy.spin_once()
 
+    def draw(self):
+        c = self.sketch.canvas
+        c.text_size(20)
+        c.fill(1)
+        c.text([10, 30], 'Current tool: ' + self.get_tool_name(self.params.config.tool))
+
     def draw_gl(self):
-        params = self.sketch.params.params
+        params = self.params
         width, height = self.sketch.width, self.sketch.height
         q = self.robot.q
         viewport = geom.make_rect(0, 0, width, height)
@@ -645,7 +697,7 @@ class TibaSketch:
         v3d.rend.ctx.viewport = (0, 0, self.sketch.window_width, self.sketch.window_height)
 
     def mouse_pressed(self, button, modifiers):
-        params = self.sketch.params.params
+        params = self.params
         xyz = [params.tsm.rotx,
                params.tsm.roty,
                params.tsm.rotz]
@@ -654,7 +706,7 @@ class TibaSketch:
         self.arcball.click(self.sketch.mouse_pos)
 
     def mouse_dragged(self, button, modifiers):
-        params = self.sketch.params.params
+        params = self.params
         inc = 0.1
         if modifiers & 2: # ctrl (zoom)
             params.tsm.dist += self.sketch.mouse_delta[1]*inc*0.5
