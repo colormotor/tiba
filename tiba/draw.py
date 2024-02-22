@@ -129,10 +129,13 @@ class SketchView3d:
         width, height = geom.rect_size(self.viewport)
         if fov is not None:
             self.fov = fov
+        rot = np.array(rot)
+        if len(rot.shape) == 1: #Euler
+            rot = (geom.rotx_3d(rot[0]) @
+                   geom.roty_3d(rot[1]) @
+                   geom.rotz_3d(rot[2]))
         self.proj = geom.perspective(geom.radians(self.fov), width/height)
-        self.mv = geom.trans_3d(trans) @ (geom.rotx_3d(rot[0]) @
-                                          geom.roty_3d(rot[1]) @
-                                          geom.rotz_3d(rot[2]))
+        self.mv = geom.trans_3d(trans) @ rot
 
     def canvas(self):
         return self.sketch.canvas
@@ -286,9 +289,12 @@ class GlView3d:
             self.fov = fov
         self.rend.viewport(width, height)
         self.rend.perspective(self.fov, width, height)
-        self.rend.apply_matrix(geom.trans_3d(trans) @ (geom.rotx_3d(rot[0]) @
-                                          geom.roty_3d(rot[1]) @
-                                          geom.rotz_3d(rot[2])))
+        rot = np.array(rot)
+        if len(rot.shape) == 1: #Euler
+            rot = (geom.rotx_3d(rot[0]) @
+                   geom.roty_3d(rot[1]) @
+                   geom.rotz_3d(rot[2]))
+        self.rend.apply_matrix(geom.trans_3d(trans) @ rot)
         self.sketch_view.set_view(viewport, trans, rot, fov)
 
     def save_viewport(self):

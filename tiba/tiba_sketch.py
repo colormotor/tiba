@@ -8,7 +8,7 @@ o-O-o o-O-o o--o    O
 Painting robot utils.
 © Daniel Berio (@colormotor) 2023 - ...
 
-tiba_sketch - Tiba sketch interface for py5sketch app
+tiba_sketch - Tiba frontend interface for py5sketch app
 Creates a UI for sending drawings to the robot and controlling it.
 Requires https://github.com/colormotor/py5canvas to be installed
 '''
@@ -38,6 +38,7 @@ reload(tu)
 reload(planner)
 reload(draw)
 reload(ply)
+reload(geom)
 from .draw import View3d, SketchView3d, GlView3d, plotly_plot
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
@@ -53,7 +54,7 @@ state = lambda: None
 state.has_ros = False
 
 rosloader = importlib.find_loader('rospy')
-
+# Load ROS if available, not strictly necessary if not using robot
 if rosloader is not None:
     print("Loading ros")
     import rospy
@@ -66,6 +67,33 @@ if rosloader is not None:
     from std_msgs.msg import Duration
     state.has_ros = True
 
+# GUI helpers
+def imgui_title(text):
+    imgui.push_style_color(imgui.COLOR_HEADER, 0.3, 0.3, 0.3, 1.0)
+    imgui.selectable(text, True)
+    imgui.pop_style_color()
+
+def imgui_info_text(text):
+    imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
+    imgui.text(text)
+    imgui.pop_style_color()
+
+def imgui_text_separator(text):
+    imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
+    imgui.text(text)
+    imgui.same_line()
+    imgui.separator()
+    imgui.pop_style_color()
+
+def imgui_color_button(text, color):
+    if len(color) == 3:
+        color = np.concatenate([color, [1.0]])
+    imgui.push_style_color(imgui.COLOR_BUTTON, *color)
+    res = imgui.button(text)
+    imgui.pop_style_color()
+    return res
+
+# Planning routines
 def plan_samples(draft, max_speed, accel_time, penup_distance, debug=True):
     print(draft)
     print(max_speed)
@@ -103,6 +131,82 @@ def plan_samples(draft, max_speed, accel_time, penup_distance, debug=True):
         plt.tight_layout()
         planner.show_open('cart.pdf')
     return trajectories
+
+def plan_samples(samples,
+                max_speed,
+                accel_time,
+                penup_distance, debug=True):
+    paths, velocities_, accelerations_ = tu.plan_polylines_smooth(samples,
+                                                                  max_speed=max_speed,
+                                                                  accel_time=accel_time, tol=0.01)
+    max_accel = max_speed / accel_time
+    #velocities_ = [tu.rownorm(V) for V in velocities_]
+    #accelerations_ = [tu.rownorm(A) for A in accelerations_]
+    print('plan bezier box size: ', geom.rect_size(geom.bounding_box(paths)))
+    # paths = tu.plan_bezier_chains_jerk(draft, max_speed=max_speed, max_accel_time=accel_time)
+    paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
+    velocities_ = [np.diff(P, axis=0) / cfg.dt for P in paths]
+    accelerations_ = [np.diff(P, n=2, axis=0) / (cfg.dt**2) for P in paths]
+    lifts = [False]
+    trajectories = [paths[0]]
+    velocities = [velocities_[0]]
+    accelerations = [accelerations_[0]]
+    print('velocities', velocities_)
+    if len(paths) > 1:
+        for i in range(len(paths)-1):
+            P1 = paths[i]
+            P2 = paths[i+1]
+            if geom.distance(P1[-1], P2[0]) > 2e-3:
+                lifts.append(True)
+                trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=1.0))
+                vel = np.diff(trajectories[-1], axis=0) / cfg.dt
+                accel = np.diff(trajectories[-1], n=2, axis=0) / (cfg.dt**2)
+                velocities.append(vel)
+                accelerations.append(accel)
+
+            lifts.append(False)
+            trajectories.append(P2)
+
+            accelerations.append(accelerations_[i+1])
+            velocities.append(velocities_[i+1])
+
+    if debug:
+        ply.figure(title='Cartesian trajectory')
+
+        Tv = 0.0
+        Ta = 0.0
+
+        for i, (X, lift) in enumerate(zip(trajectories, lifts)):
+            #speed = velocities[i] #tu.compute_speed(X, cfg.dt)
+            #accel = accelerations[i] #tu.compute_accel(X, cfg.dt)
+            tv = np.linspace(0, (len(velocities[i])-1)*cfg.dt, len(velocities[i])) + Tv
+            ta = np.linspace(0, (len(accelerations[i])-1)*cfg.dt, len(accelerations[i])) + Ta
+            ply.subplot(1, 1, title='Velocity')
+            ply.plot(tv, velocities[i][:,0], color=ply.categorical_color(i))
+            ply.plot(tv, velocities[i][:,1], color=ply.categorical_color(i))
+            ply.plot(tv, velocities[i][:,2], color='b', alpha=0.5)
+            ply.subplot(1, 2, title='Acceleration')
+            ply.plot(ta, accelerations[i][:,0], color=ply.categorical_color(i))
+            ply.plot(ta, accelerations[i][:,1], color=ply.categorical_color(i))
+            ply.plot(ta, accelerations[i][:,2], color='b', alpha=0.5)
+            Tv = tv[-1] + cfg.dt
+            Ta = ta[-1] + cfg.dt
+
+        ply.subplot(1, 1, title='Velocity')
+        ply.rectangle([0, -max_speed], [Tv, max_speed], color='k', alpha=0.1, fill=True)
+        ply.subplot(1, 2, title='Acceleration')
+        ply.rectangle([0, -max_accel], [Ta, max_accel], color='k', alpha=0.1, fill=True)
+
+        ply.subplot(2, 1, title='Trajectory 2d')
+        ply.stroke(paths, 'k')
+        ply.axis_equal(True)
+
+        ply.subplot(2, 2, title='Trajectory 3d')
+        for X in trajectories:
+            ply.stroke3d(X)
+        ply.show()
+    return trajectories
+
 
 def plan_bezier(draft,
                 max_speed,
@@ -204,6 +308,8 @@ class TibaSketch:
             'traj.isotropy',
             'traj.angle'
         ]
+
+        self.arcball = geom.ArcBall()
 
     def init(self, sketch, robot, callback, panda=None, gripper=None):
         self.itiba = TibaInterface(robot, panda=panda, gripper=gripper)
@@ -375,9 +481,9 @@ class TibaSketch:
         if type(traj_callback)==str:
             if traj_callback=='bezier':
                 traj_callback = plan_bezier
-            elif callback=='samples':
+            elif traj_callback=='samples':
                 traj_callback = plan_samples
-            elif callback=='lqt':
+            elif traj_callback=='lqt':
                 traj_callback = plan_lqt
             else:
                 raise ValueError('Unknown callback')
@@ -400,28 +506,30 @@ class TibaSketch:
            print('TCP: ', list(tcp))
            print('q: ', list(q))
 
-        imgui.separator()
+        imgui_text_separator('Robot Actions')
         if imgui.button('Home'):
             self.msg_pub.publish('exec:Home')
+        imgui.same_line()
         if imgui.button('Pick Tool'):
             self.msg_pub.publish('exec:Pick')
         imgui.same_line()
         if imgui.button('Release Tool'):
             self.msg_pub.publish('exec:Release')
-        imgui.separator()
         if imgui.button('Try dip'):
             self.dip_trajectory()
-        imgui.separator()
 
-        if imgui.button('Compute trajectories'):
+        imgui_text_separator('Trajectory')
+
+        if imgui.button('Compute trajectories only'):
             self.compute_trajectories(debug=True)
 
         must_plan = False
-        if imgui.button('Compute and plan trajectories'):
+        button_color = [1.0, 0.5, 0.0, 1.0]
+        if imgui_color_button('Compute and plan', button_color):
             self.compute_trajectories()
             must_plan = True
 
-        if self.trajectories_computed and (must_plan or imgui.button('Plan trajectories')):
+        if self.trajectories_computed and must_plan: #(must_plan or imgui.button('Plan trajectories')):
             cur_pos = self.robot.pen_tcp_pos(self.robot.q)
             trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
             # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
@@ -430,11 +538,14 @@ class TibaSketch:
             self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
 
         if self.itiba.Qs:
-            if imgui.button('Simulate trajectory'):
-                self.itiba.simulate()
-
-            if state.has_ros and self.itiba.Qs:
-                if imgui.button("Execute trajectory"):
+            imgui.separator()
+            if not state.has_ros:
+                if imgui_color_button('Simulate trajectory', button_color):
+                    self.itiba.simulate()
+            else:
+                if imgui.button('Simulate trajectory'):
+                    self.itiba.simulate()
+                if imgui_color_button("Execute trajectory", button_color):
                     imgui.open_popup('Execute')
 
                 if imgui.begin_popup_modal('Execute').opened:
@@ -447,8 +558,15 @@ class TibaSketch:
                         imgui.close_current_popup()
                     imgui.end_popup()
 
+        imgui.separator()
+        imgui_info_text('Drag to rotate')
+        imgui_info_text('Ctrl+drag to zoom, Shift+drag to pan')
 
     def update(self):
+        # Update arcball
+        self.arcball.update(self.sketch.width,
+                            self.sketch.height)
+
         params = self.sketch.params.params
         # Udate drawing pad data
         self.pad.offset = params.drawing.plane_offset / 1000
@@ -470,8 +588,22 @@ class TibaSketch:
         q = self.robot.q
         viewport = geom.make_rect(0, 0, width, height)
         v3d = self.v3d
-        v3d.set_view(viewport, [params.tsm.xoffset, params.tsm.voffset, -params.tsm.dist],
-                    geom.radians(np.array([params.tsm.rotx, params.tsm.roty, params.tsm.rotz])),
+
+        if self.sketch.dragging:
+            rot = self.arcball.affine
+        else:
+            xyz = [params.tsm.rotx,
+                   params.tsm.roty,
+                   params.tsm.rotz]
+            # NB need to use consistent rotations for the sync to work
+            # rot_euler_xyz and arcball both use scipy Rotation as a backend
+            rot = geom.rot_euler_xyz(xyz, degrees=True)
+
+        pos = [params.tsm.xoffset, params.tsm.voffset, -params.tsm.dist]
+        v3d.set_view(viewport, [0, 0, 0],
+                     geom.trans_3d(pos)@
+                     rot@geom.rotx_3d(geom.radians(90)),
+
                     fov=40)
 
         v3d.color(1, 0.2)
@@ -498,7 +630,6 @@ class TibaSketch:
         self.pad.draw(v3d)
 
         if self.pad.is_valid():
-
             for i, trajectory in enumerate(self.trajectories):
                 v3d.color(plut.default_color(i))
                 self.draw_trajectory_3d(trajectory)
@@ -512,3 +643,28 @@ class TibaSketch:
 
         # Reset viewport
         v3d.rend.ctx.viewport = (0, 0, self.sketch.window_width, self.sketch.window_height)
+
+    def mouse_pressed(self, button, modifiers):
+        params = self.sketch.params.params
+        xyz = [params.tsm.rotx,
+               params.tsm.roty,
+               params.tsm.rotz]
+        self.arcball.from_euler(xyz,
+                           degrees=True)
+        self.arcball.click(self.sketch.mouse_pos)
+
+    def mouse_dragged(self, button, modifiers):
+        params = self.sketch.params.params
+        inc = 0.1
+        if modifiers & 2: # ctrl (zoom)
+            params.tsm.dist += self.sketch.mouse_delta[1]*inc*0.5
+        elif modifiers & 1: # Shift (pan)
+            params.tsm.xoffset += self.sketch.mouse_delta[0]*inc*0.1
+            params.tsm.voffset -= self.sketch.mouse_delta[1]*inc*0.1
+        else:
+            self.arcball.drag(True, self.sketch.mouse_pos)
+            # Copy back to params
+            rot = self.arcball.euler_xyz(degrees=True)
+            (params.tsm.rotx,
+             params.tsm.roty,
+             params.tsm.rotz) = rot

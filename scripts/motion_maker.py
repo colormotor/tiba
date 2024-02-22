@@ -42,10 +42,10 @@ tsketch = TibaSketch()
 
 def setup():
     sketch.set_gui_callback(gui)
-    create_canvas(700, 600) #, 300)
+    create_canvas(1024, 768) #, 300)
     set_color_scale(1.0)
 
-    tsketch.init(sketch, robot, 'bezier')
+    tsketch.init(sketch, robot, 'samples')
     load_svg()
 
 # def load_svg():
@@ -64,10 +64,13 @@ def load_svg():
         chunks = tu.split_chain(chain, 10)
         chunk_beziers = []
         for chunk in chunks:
-            pts = bezier.bezier_piecewise(chunk, 10)
-            beziers = fitCurve(pts, 10)
-            chunk_beziers += beziers #.append(beziers)
-        draft.append(bezier.beziers_to_chain(chunk_beziers))
+            chunk_beziers.append(chunk)
+            # pts = bezier.bezier_piecewise(chunk, 10)
+            # beziers = fitCurve(pts, 10)
+            # chunk_beziers += beziers #.append(beziers)
+        chain = bezier.beziers_to_chain(chunk_beziers)
+        draft.append(bezier.bezier_piecewise(chain, 20))
+
             #draft.append(bezier.beziers_to_chain(beziers))
 
     tsketch.set_draft(draft)
@@ -79,7 +82,6 @@ def exit():
 def gui():
     tsketch.gui()
 
-
 def draw():
     background(0)
     np.random.seed(params.seed)
@@ -88,14 +90,28 @@ def draw():
 
     stroke(1.0, 0.2)
     no_fill()
-    for i, P in enumerate(tsketch.draft):
-        stroke(*plut.default_color(i), 0.2)
+
+    draft_box = geom.make_rect(width-256, 0, 256, 256)
+    fill(1, 0.5)
+    rectangle(draft_box)
+    no_fill()
+    S = geom.transform_to_rect(tsketch.draft, draft_box, 10)
+    for i, P in enumerate(S):
+        stroke(0) #*plut.default_color(i), 0.5)
         polyline(P)
         #polyline(bezier.bezier_piecewise(P)) # + np.random.uniform(-30, 30, 2), 3))
 
 
 def draw_gl():
     tsketch.draw_gl()
+
+
+def mouse_pressed(button, modifiers):
+    tsketch.mouse_pressed(button, modifiers)
+
+
+def mouse_dragged(button, modifiers):
+    tsketch.mouse_dragged(button, modifiers)
 
 
 if __name__== '__main__':
