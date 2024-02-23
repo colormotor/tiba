@@ -92,28 +92,23 @@ class iLQRPlannerVelocity:
                 continue
             approach = tu.trapezoidal_approach(x0, traj[0])
             if len(approach) > 1:
-                linked_trajectories.append(approach)
+                linked_trajectories.append(tu.rest_inout(approach, rest*0.5))
             if rest > 0.0:
-                # traj = np.array(traj)
-                # otraj = traj
-                # odx = np.diff(traj, axis=0)/cfg.dt
-                # xx = np.array(odx)
-                # ospeed = np.sqrt(odx[:,0]**2 + odx[:,1]**2)
-                # if np.max(ospeed) > 2:
+                # TODO double check rest. Seems to give some acceleration artefacts
+                traj = tu.rest_inout(traj, rest*0.5)
+                # dX = np.diff(traj, axis=0)/cfg.dt
+                # speed = np.sqrt(np.sum(dX**2, axis=1))
+                # try:
+                #     if np.max(speed) > 2:
+                #         pdb.set_trace()
+                #         print('Oh shit')
+                # except:
                 #     pdb.set_trace()
-                #     print('Oh shit')
-                traj = tu.rest_inout(traj, rest)
-                dX = np.diff(traj, axis=0)/cfg.dt
-                speed = np.sqrt(np.sum(dX**2, axis=1))
-                try:
-                    if np.max(speed) > 2:
-                        pdb.set_trace()
-                        print('Oh shit')
-                except:
-                    pdb.set_trace()
-                    print('ooooo')
-            linked_trajectories.append(traj)
+                #     print('ooooo')
             x0 = traj[-1]
+            #break
+            linked_trajectories.append(traj)
+
 
         all_trajs = np.vstack(linked_trajectories)
 
@@ -180,7 +175,7 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     dQs = np.array(dQs)
 
     # Plot joint positions
-    ply.subplot(1, 1)
+    ply.subplot(1, 2)
     ply.title('joint positions (rad)')
     # Speed is in radians/sec
 
@@ -191,13 +186,16 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     #plt.legend(loc='right')
 
     # Plot joint speeds
-    ply.subplot(1, 2)
+    ply.subplot(2, 2)
     ply.title('joint speed deg/sec')
     # Speed is in radians/sec
     for i in range(7):
         dq = dQs[:, i]
         #dq = np.diff(Qs[:,i])
         ply.plot(geom.degrees(dq)) #, color=ply.default_color(i))
+
+    limit = geom.degrees(cfg.default_angular_velocity)
+    ply.rectangle([0, -limit], [len(dQs), limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(1, 3)
     # Joint limit graph
@@ -208,17 +206,26 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     vel = np.diff(pts, axis=0)/cfg.robot_dt
     acc = np.diff(pts, n=2, axis=0)/(cfg.robot_dt**2)
 
-    ply.subplot(2, 1, title='Cartesian velocity (m/s)')
+    ply.subplot(1, 1, title='Cartesian velocity (m/s)')
     for i in range(3):
         t = np.linspace(0, len(vel), len(vel))*cfg.robot_dt
-        ply.plot(t, vel[:,i], ['r', 'g', 'b'][i], label=['x', 'y', 'z'][i])
+        ply.plot(t, vel[:,i], ['r', 'g', 'b'][i], label=['x', 'y', 'z'][i], alpha=0.7)
     ply.plot(t, tu.rownorm(vel), 'k', lw=2, label='norm')
 
-    ply.subplot(2, 2, title='Cartesian acceleration (m/s^2)')
+    t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
+    ply.plot(t, acc[:,0], 'm', lw=2)
+
+    limit = cfg.default_cartesian_speed
+    ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
+
+    ply.subplot(2, 1, title='Cartesian acceleration (m/s^2)')
     for i in range(3):
         t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
-        ply.plot(t, acc[:,i], ['r', 'g', 'b'][i])
+        ply.plot(t, acc[:,i], ['r', 'g', 'b'][i], alpha=0.7)
     plt.plot(t, tu.rownorm(acc), 'k', lw=2)
+
+    limit = cfg.default_cartesian_speed / cfg.acceleration_time
+    ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(2, 3)
     box = geom.shapes.box_3d([-0.8, -0.8, 0], [1, 1, 1.2])

@@ -25,6 +25,9 @@ import roboticstoolbox as rtb
 import pdb
 import time
 
+from . import interface
+reload(interface)
+
 from .interface import TibaInterface
 from .robot import TibaRobot, tools
 from . import matplotlyb as ply
@@ -132,6 +135,22 @@ def plan_samples(draft, max_speed, accel_time, penup_distance, debug=True):
         planner.show_open('cart.pdf')
     return trajectories
 
+def saturate_acceleration(X, dt, max_acceleration):
+    dX = np.diff(X, axis=0)/dt
+    Y = [X[0], X[1]]
+    dY = [dX[0]]
+
+
+    for x, dx in zip(X[2:], dX[1:]):
+        ddx = (dx - dY[-1])/dt
+        ddx_norm = np.linalg.norm(ddx)
+        if np.linalg.norm(ddx) > max_acceleration:
+            n = max(3, int(ddx_norm/max_acceleration)+1)
+            for t in np.linspace(0, 1, int(n))[1:-1]:
+                Y.append(Y[-1] + dx*t*dt)
+            Y.append(x)
+    return Y
+
 def plan_samples(samples,
                 max_speed,
                 accel_time,
@@ -140,9 +159,12 @@ def plan_samples(samples,
                                                                   max_speed=max_speed,
                                                                   accel_time=accel_time, tol=0.01)
     max_accel = max_speed / accel_time
+
+    #paths = [saturate_acceleration(P, cfg.dt, max_accel) for P in paths]
+
     #velocities_ = [tu.rownorm(V) for V in velocities_]
     #accelerations_ = [tu.rownorm(A) for A in accelerations_]
-    print('plan bezier box size: ', geom.rect_size(geom.bounding_box(paths)))
+
     # paths = tu.plan_bezier_chains_jerk(draft, max_speed=max_speed, max_accel_time=accel_time)
     paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
     velocities_ = [np.diff(P, axis=0) / cfg.dt for P in paths]
@@ -517,12 +539,14 @@ class TibaSketch:
         self.trajectories_computed = True
         print('Dip trajectory')
 
-    def compute_trajectories(self, max_speed=150/1000, accel_time=0.5, debug=False):
+    def compute_trajectories(self, debug=False):
         params = self.params
         if not self.draft:
             print("No draft")
             return
 
+        max_speed=cfg.default_cartesian_speed
+        accel_time=cfg.acceleration_time
         traj_callback = self.trajectory_callback
         if type(traj_callback)==str:
             if traj_callback=='bezier':

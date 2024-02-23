@@ -119,7 +119,7 @@ def approach_inout(x, trajectory, kind='trapezoidal', **args):
 
 def joint_approach(q0, q1, speed=None):
     if speed is None:
-        speed = cfg.default_joint_approach_speed
+        speed = cfg.default_joint_speed
 
     q0 = np.array(q0)
     q1 = np.array(q1)
@@ -150,15 +150,15 @@ def joint_approach(q0, q1, speed=None):
 def angdistance(a, b):
     return a.angdist(b, metric=3)*2
 
-def duration_from_distance(x0, x1, angular_approach_speed=None,
-                                   cartesian_approach_speed=None):
+def duration_from_distance(x0, x1, angular_velocity=None,
+                                   cartesian_speed=None):
     pose0 = to_pose(x0)
     pose1 = to_pose(x1)
 
-    if angular_approach_speed is None:
-        angular_approach_speed = cfg.default_angular_approach_speed
-    if cartesian_approach_speed is None:
-        cartesian_approach_speed = cfg.default_cartesian_approach_speed
+    if angular_velocity is None:
+        angular_velocity = cfg.default_angular_velocity
+    if cartesian_speed is None:
+        cartesian_speed = cfg.default_cartesian_speed
 
     angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
     dist = np.linalg.norm(pose0.t - pose1.t)
@@ -166,31 +166,31 @@ def duration_from_distance(x0, x1, angular_approach_speed=None,
     def fitts_id(d, w=1):
         return np.log2(d/w + 1)
 
-    duration = max(angdist/angular_approach_speed, dist/cartesian_approach_speed)
+    duration = max(angdist/angular_velocity, dist/cartesian_speed)
     print('fitts comp', duration, duration*fitts_id(duration))
     return duration * (1+fitts_id(duration)) # max(cfg.min_approach_duration, duration+fitts_id(duration))
 
 
 def linear_approach(x0, x1, duration=0,
-                    angular_approach_speed=None,
-                    cartesian_approach_speed=None):
+                    angular_velocity=None,
+                    cartesian_speed=None):
     ''' Approach trajectory in task space using a constant speed'''
 
     pose0 = to_pose(x0)
     pose1 = to_pose(x1)
 
-    if angular_approach_speed is None:
-        angular_approach_speed = cfg.default_angular_approach_speed
-    if cartesian_approach_speed is None:
-        cartesian_approach_speed = cfg.default_cartesian_approach_speed
+    if angular_velocity is None:
+        angular_velocity = cfg.default_angular_velocity
+    if cartesian_speed is None:
+        cartesian_speed = cfg.default_cartesian_speed
 
     if duration <= 0.0:
         duration = duration_from_distance(pose0, pose1,
-                                          angular_approach_speed,
-                                          cartesian_approach_speed)
+                                          angular_velocity,
+                                          cartesian_speed)
 
-    # angular_approach_step = angular_approach_speed*cfg.dt
-    # pos_approach_step = cartesian_approach_speed*cfg.dt
+    # angular_approach_step = angular_velocity*cfg.dt
+    # pos_approach_step = cartesian_speed*cfg.dt
     # if duration==0:
     #     angdist = abs(pose0.angdist(pose1))
     #     dist = np.linalg.norm(pose0.t - pose1.t)
@@ -208,8 +208,8 @@ def linear_approach(x0, x1, duration=0,
     return []
 
 def trapezoidal_approach(x0, x1,
-                         angular_approach_speed=None,
-                         cartesian_approach_speed=None,
+                         angular_velocity=None,
+                         cartesian_speed=None,
                          debug=False):
     ''' Approach trajectory in task space using a trapezoidal speed profile'''
 
@@ -219,25 +219,28 @@ def trapezoidal_approach(x0, x1,
     angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
     dist = np.linalg.norm(pose0.t - pose1.t)
 
-    if angular_approach_speed is None:
-        angular_approach_speed = cfg.default_angular_approach_speed
-    if cartesian_approach_speed is None:
-        cartesian_approach_speed = cfg.default_cartesian_approach_speed
+    if angular_velocity is None:
+        angular_velocity = cfg.default_angular_velocity
+    if cartesian_speed is None:
+        cartesian_speed = cfg.default_cartesian_speed
 
-    if angdist/angular_approach_speed > dist/cartesian_approach_speed:
-        v_max = angular_approach_speed # * angdist
+    # Use angular velocity if it is the limiting factor
+    if angdist/angular_velocity > dist/cartesian_speed:
+        v_max = angular_velocity # * angdist
         d = angdist
     else:
-        v_max = cartesian_approach_speed
+        v_max = cartesian_speed
         d = dist
 
+    # Use trapezoidal planner to compute trajectory parameterization
+    # Might not be ideal for orientations?
     a_max = v_max/cfg.acceleration_time
 
     dt = cfg.dt
     tr = trapezoidal.trapezoidal_profile([0.0], [d], [0], [0], [v_max], [a_max])
     timesteps = int(tr.time / dt)
     time = np.linspace(0, tr.time, timesteps)
-    ts = [tr(t)[0][2]/d for t in time]
+    ts = [tr(t)[0][2]/d for t in time] # Assumin
     approach = [pose0.interp(pose1, t) for t in ts]
     print('approach with ', len(approach), ' steps')
     return pose_traj_to_posorn(approach)
@@ -256,30 +259,30 @@ def pose_traj_to_posorn(trajectory):
     return [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in trajectory]
 
 def gauss_approach(x0, x1, duration=-1,
-                   angular_approach_speed=None,
-                   cartesian_approach_speed=None,
+                   angular_velocity=None,
+                   cartesian_speed=None,
                    easing=5,
                    debug=False):
     pose0 = to_pose(x0)
     pose1 = to_pose(x1)
 
-    # if angular_approach_speed is None:
-    #     angular_approach_speed = cfg.default_angular_approach_speed
-    # if cartesian_approach_speed is None:
-    #     cartesian_approach_speed = cfg.default_cartesian_approach_speed
+    # if angular_velocity is None:
+    #     angular_velocity = cfg.default_angular_velocity
+    # if cartesian_speed is None:
+    #     cartesian_speed = cfg.default_cartesian_speed
 
-    # if angular_approach_speed is None:
-    #     angular_approach_speed = cfg.default_angular_approach_speed
-    # if cartesian_approach_speed is None:
-    #     cartesian_approach_speed = cfg.default_cartesian_approach_speed
+    # if angular_velocity is None:
+    #     angular_velocity = cfg.default_angular_velocity
+    # if cartesian_speed is None:
+    #     cartesian_speed = cfg.default_cartesian_speed
 
     if duration <= 0.0:
         duration = duration_from_distance(pose0, pose1,
-                                          angular_approach_speed,
-                                          cartesian_approach_speed)
+                                          angular_velocity,
+                                          cartesian_speed)
 
-    # angular_approach_step = angular_approach_speed*cfg.dt
-    # pos_approach_step = cartesian_approach_speed*cfg.dt
+    # angular_approach_step = angular_velocity*cfg.dt
+    # pos_approach_step = cartesian_speed*cfg.dt
 
     # if duration<=0:
     #     print(pose0, pose1)
@@ -841,14 +844,22 @@ class Index(object):
         self.x2 = max(p[0] for p in points)
         self.y1 = min(p[1] for p in points)
         self.y2 = max(p[1] for p in points)
+        print('x1, x2', self.x1, self.x2)
+        print('y1, y2', self.y1, self.y2)
         self.bins = defaultdict(list)
         self.size = 0
         for point in points:
             self.insert(point)
 
     def normalize(self, x, y):
-        px = (x - self.x1) / (self.x2 - self.x1)
-        py = (y - self.y1) / (self.y2 - self.y1)
+        if abs(self.x2 - self.x1) > 1e-9:
+            px = (x - self.x1) / (self.x2 - self.x1)
+        else:
+            px = 0
+        if abs(self.y2 - self.y1) > 1e-9:
+            py = (y - self.y1) / (self.y2 - self.y1)
+        else:
+            py = 0
         i = int(px * self.n)
         j = int(py * self.n)
         return (i, j)

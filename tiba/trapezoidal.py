@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Code from https://github.com/OsaroAI/py-scurve/tree/bef15b0996e41336f051c37e92a8467f7d6ec785
+# Implements:
+# Trajectory Planning for Automatic Machines and Robots-Springer (2008)" by Luigi Biagiotti, Claudio Melchiorri.
+
 import numpy as np
 
 ACCELERATION_ID = 0

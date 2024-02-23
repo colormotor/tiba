@@ -29,6 +29,8 @@ from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
 from . import utils, geom
 
+from importlib import reload
+reload(ilqr)
 
 cfg = config.cfg
 
@@ -421,7 +423,7 @@ class TibaInterface:
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
         self.plan_task_trajectories(trajectories, rest)
 
-    def plan_task_trajectories(self, trajectories, rest=0.05):
+    def plan_task_trajectories(self, trajectories, rest=0.1):
         ''' Plan trajectories for the robot given in task space as
         a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.

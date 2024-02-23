@@ -53,9 +53,8 @@ else:
     desk = None
     panda = None
 
-robot = TibaRobot(45, 11.5) # Molotow
-itiba = TibaInterface(robot, panda, gripper)
-robot.q = robot.qr
+itiba = TibaInterface(panda, gripper)
+#robot.q = robot.qr
 
 state = lambda: None
 state.running = True
