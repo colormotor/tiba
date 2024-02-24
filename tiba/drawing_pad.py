@@ -117,7 +117,7 @@ class DrawingPad:
         res = fit_to_box_and_augment(S, self.scaled_box, padding, penup_mm=penup_mm)
         return res
 
-    def fit_to_frame(self, S, clamp_z=True):
+    def fit_to_frame(self, S, clamp_z=False):
         ''' Fits a 3d trajectory assumed to lie on the XY plane, to the frame of the drawing pad'''
         compound = True
         if not geom.is_compound(S):

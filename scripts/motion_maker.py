@@ -25,6 +25,7 @@ np.set_printoptions(suppress=True)
 params = {'Seed': (5, {'min': 0, 'max': 100}),
           'svg_path': ('abr.svg', {'hide': True}),
           'GUI hue': (0.12, {'min':0, 'max': 1.0}),
+          'Bezier split angle': (46.0, {'hide': True}),
           'Traj': {
               'Sigma': (0.5, {'min': 0.1, 'max':3.0}),
               'Isotropy': (0.5, {'min': 0.1, 'max':1.0}),
@@ -47,11 +48,11 @@ def setup():
     params = sketch.parameters(params)
 
     #sketch.set_gui_callback(gui)
-    create_canvas(1024, 768) #, 300)
+    create_canvas(1024, 768, 350) #, 300)
     set_color_scale(1.0)
 
     try:
-        tsketch.init(sketch, 'samples')
+        tsketch.init(sketch)
     except Exception as e:
         print(e)
         assert(False)
@@ -79,19 +80,23 @@ def load_svg(path):
     draft = []
     tol = 0.1
     for chain in draft_in: #[2:4]:
-        chunks = tu.split_chain(chain, angle_tol=10)
+        if params.bezier_split_angle > 0:
+            chunks = tu.split_chain(chain, angle_tol=params.bezier_split_angle)
+        else:
+            chunks = [chain]
         chunk_beziers = []
         for chunk in chunks:
-            #chunk_beziers.append(chunk)
-            pts = bezier.cubic_bezier_adaptive(chunk, tol)
+            chunk_beziers.append(chunk)
+            # pts = bezier.cubic_bezier_adaptive(chunk, tol)
             #pts = bezier.bezier_piecewise(chunk, 30)
-            beziers = fitCurve(pts, 4)
-            chunk_beziers += beziers #.append(beziers)
+            # beziers = fitCurve(pts, 4)
+            # chunk_beziers += beziers #.append(beziers)
 
-        chain = bezier.beziers_to_chain(chunk_beziers)
-        P = bezier.cubic_bezier_adaptive(chain, tol)
-        P = tu.adaptive_subdivide(P, 5)
-        draft += tu.split_polyline_at_angle(P, 160)
+        for chain in chunk_beziers:
+            #chain = bezier.beziers_to_chain(chunk_beziers)
+            P = bezier.cubic_bezier_adaptive(chain, tol)
+            P = tu.adaptive_subdivide(P, 5)
+            draft += tu.split_polyline_at_angle(P, 160)
         #draft.append(P)
         # print('chain len:', len(chain))
         # draft.append(bezier.beziers_to_chain(beziers))
@@ -120,7 +125,10 @@ def gui():
         if path:
             load_svg(path)
             params.svg_path = path
-
+    #imgui.same_line()
+    changed, params.bezier_split_angle = imgui.slider_float("Angle split", params.bezier_split_angle, 0, 180)
+    if changed:
+        load_svg(params.svg_path)
     changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
     if changed:
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))

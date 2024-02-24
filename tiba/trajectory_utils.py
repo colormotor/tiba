@@ -24,9 +24,11 @@ from scipy.interpolate import interp1d, splprep, splev, make_interp_spline, Cubi
 from roboticstoolbox.tools.trajectory import ctraj, trapezoidal_func, trapezoidal
 from collections import defaultdict
 from math import hypot
-
+import motor.lqt as lqt
 from . import trapezoidal, todorov
 reload(trapezoidal)
+reload(todorov)
+
 from .fitCurves.fitCurves import fitCurve
 
 from .config import cfg
@@ -437,25 +439,24 @@ def plan_polylines_jerk(polylines, simp, max_speed, max_accel_time=0.5, angle_to
     with a given maximum speed and max acceleration time
     '''
     trajectories = []
+    simplified = []
     for P in polylines:
-        chunk_traj = []
-        for chunk in [P]: #split_chain(chain, angle_tolerance):
-            #if tol > 0:
-            #    pts = bezier.bezier_piecewise(chunk, subd=20)
-            #    beziers = fitCurve(pts, tol)
-            traj = plan_jerk(chunk, simp, max_speed, max_accel_time, subd, maxiter)
-            chunk_traj.append(traj)
-        trajectories.append(np.vstack(chunk_traj))
-        #trajectories += chunk_traj
-    return trajectories
+        traj, Q = plan_jerk(P, simp, max_speed, max_accel_time, subd, maxiter)
+        trajectories.append(traj)
+        simplified.append(Q)
+    return trajectories, simplified
 
 
 def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     # Compute points along curve
+    old = P
     P = np.array(P)
     dt = cfg.dt
     dim = P.shape[1]
-    P = simplify.dce(P, simp)
+    print('Input polyline with %d points'%len(P))
+    if simp > 0:
+       P = simplify.dce(P, simp)
+    #print('simp', P, simp)
     # Ps = P
     # #Ps = simplify.dce(P, simplify_tol)
     # #Ps = simplify.dp_simplify(P, simplify_tol*10)
@@ -466,25 +467,29 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     #     P = np.vstack([P[0], (P[0] + P[-1])/2, P[-1]])
     # Path-constrained minimum jerk according to Todorov and Jordan
     # we use this to get passage times, velocity and acceleration that minimize jerk
-    n = len(P)*2 #chain)* #10 # Pretty arbitrary
-    Q, psg, dQ, ddQ = todorov.min_jerk_todorov(P, n, get_vel_acc=True, maxiter=maxiter)
+    print('Planning minimum jerk trajectory for %d via-points (simplified)'%len(P))
+    n = max(len(P)*2, 100) #chain)* #10 # Pretty arbitrary
+    traj, psg, Q, dQ, ddQ = todorov.min_jerk_todorov(P, n, get_vel_acc=True, maxiter=maxiter)
     opsg = psg
     # Check that passage times are strictly increasing
-    dpsg = np.maximum(np.diff(psg), 1e-3)
-    if np.any(dpsg < 0):
-        print("Negative delta-time")
-    psg = np.cumsum(np.concatenate([[psg[0]], dpsg]))
-    if psg[-1] > n:
-        print("Passage times exceed total time")
-        psg = psg/psg[-1]*(n-1e-3)
 
+    if len(psg) > 1:
+        dpsg = np.maximum(np.diff(psg), 1e-3)
+        if np.any(dpsg < 0):
+            print("Negative delta-time")
+        psg = np.cumsum(np.concatenate([[psg[0]], dpsg]))
+        if psg[-1] > n:
+            print("Passage times exceed total time")
+            psg = psg/psg[-1]*(n-1e-3)
+
+    print('Q', Q.shape, 'dQ', dQ.shape, 'ddQ', ddQ.shape)
     # Add zero boundary conditions and initial and final time
     dQ = np.vstack([np.zeros(dim), dQ, np.zeros(dim)])
     ddQ = np.vstack([np.zeros(dim), ddQ, np.zeros(dim)])
     T = np.concatenate([[0], psg, [n]])
 
     # Use passage times, velocity and acceleration to compute piecewise polynomial
-    derivs = np.dstack([P, dQ, ddQ])
+    derivs = np.dstack([Q, dQ, ddQ])
     try:
         bpx = BPoly.from_derivatives(T, np.vstack([derivs[:,0, i] for i in range(3)]).T)
         bpy = BPoly.from_derivatives(T, np.vstack([derivs[:,1, i] for i in range(3)]).T)
@@ -519,7 +524,7 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     Y = np.vstack([bpx(x), bpy(x)]).T
     if len(Y)==2:
         pdb.set_trace()
-    return Y
+    return Y, P
 
 def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300):
     '''Given a (2d) cubic Bezier chain, compute a minimum jerk trajectory that tracks the curve
@@ -657,22 +662,20 @@ def tsp_glyph(n, r1=0.5, r2=1.0, center=[0,0]):
     return P[I,:]
 
 
-def smooth_strokes_lqt(S, only_pos=True, penups=True, penup_variability=0.4, **kwargs):
+def plan_polylines_lqt(S, max_speed, accel_time, penups=True, penup_variability=0.4, **kwargs):
     trajectories = []
     for P in S:
         if penups:
             variability = [1, penup_variability] + [1 for _ in P[1:-1]] + [penup_variability, 1]
         else:
             variability = []
-        trajectory = smooth_stroke_lqt(P, variability=variability, **kwargs)
+        trajectory = plan_lqt(P, max_speed, accel_time, variability=variability, **kwargs)
         trajectories.append(trajectory)
     return trajectories
 
-
-def smooth_stroke_lqt(X, only_pos=True, **kwargs):
-    import motor.lqt as lqt
-    #return st.smooth_stroke(X, ds=1, degree=1)
-    dim  = X.shape[1]
+def plan_lqt(P, max_speed, accel_time, **kwargs):
+    ''' Do semitied LQT planning with max speed and accel constraints'''
+    dim  = P.shape[1]
     default_params = dict(angle=0,
                           sigma=1.0,
                           order=3,
@@ -680,14 +683,83 @@ def smooth_stroke_lqt(X, only_pos=True, **kwargs):
                           stop_motion=True,
                           isotropy=1,
                           activation_sigma=0.5,
-                          subd=5,
-                          subsample=100) # Assuming duration of 0.5
+                          subd=5) # Assuming duration of 0.5
     default_params.update(kwargs)
-    X = lqt.semitied_lqt(X.T, dim=dim, **default_params)
-    if only_pos:
-        return X[:dim, :].T
-    return X.T
+    X, duration = semitied_lqt(P, dim=dim, **default_params)
 
+    T = np.linspace(0, duration, X.shape[0])
+    nderiv = X.shape[1]//dim
+    print("X shape", X.shape)
+    print("nderiv", nderiv)
+
+    # Construct piecewise polynomial for each dimension
+    bp = [BPoly.from_derivatives(T,
+                np.vstack([X[:, j*dim+i] for j in range(nderiv)]).T)
+          for i in range(dim)]
+    # And velocity/accel
+    dbp = [p.derivative(1) for p in bp]
+    ddbp = [p.derivative(2) for p in bp]
+
+    # Estimate maximum speed and acceleration norm for current parameterization
+    max_accel = max_speed / accel_time
+
+    dX = np.vstack([p(T) for p in dbp]).T
+    ddX = np.vstack([p(T) for p in ddbp]).T
+    smax = np.max(rownorm(dX))
+    amax = np.max(rownorm(ddX))
+
+    # Get ratio to reach desired max velocity or acceleration
+    div_s = max_speed/smax
+    div_a = np.sqrt(max_accel/amax)
+    div = min(div_s, div_a)
+
+    # Get new parametrization to achieve desired max, given the timestep
+    dt = cfg.dt
+    x = np.arange(0.0, T[-1], dt*div)
+
+    Y = np.vstack([p(x) for p in bp]).T
+    return Y
+
+
+def semitied_lqt(P, **kwargs):
+    params = dict(angle=0,
+                  isotropy=0.5,
+                  sigma=1,
+                  activation_sigma=0.5,
+                  d=3.,
+                  order=4,
+                  segment_duration=0.5,
+                  opt_x0=False,
+                  stop_movement=True,
+                  periodic=False ,
+                  subd=10,
+                  dim=2,
+                  variability=[],
+                )
+    params.update(**kwargs)
+    P = P.T
+    dim = params['dim']
+    Sigma = []
+    cov = np.eye(dim)*(params['sigma']**2)
+    cov[:2,:2] = lqt.make_sigma(geom.radians(params['angle']), [params['isotropy']*params['sigma'], params['sigma']])
+
+    for p in P.T:
+        Sigma.append(cov)
+    if params['variability']:
+        print(params['variability'])
+        Sigma = [w*s for w, s in zip(params['variability'], Sigma)]
+
+    Sigma = np.array(Sigma).T
+    sys = lqt.DynamicalSystem(params['order'], params['subd'], segment_duration=params['segment_duration'], dim=params['dim'])
+    ref = lqt.cartesian_reference(sys, P, Sigma,
+                                    activation_sigma=params['activation_sigma'],
+                                    stop_movement=params['stop_movement'], periodic=params['periodic'])
+    res = lqt.solve_lqt(sys, ref, params['d'], opt_x0=params['opt_x0']) #, r=1e-43)
+    X = res['x'].T
+    print('X', X.shape)
+    duration = (X.shape[0]-1)*sys.dt
+    print('duration', duration, sys.dt)
+    return X, duration
 
 def distance(a, b):
     return np.linalg.norm(b[:2] - a[:2])

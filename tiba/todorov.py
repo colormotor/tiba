@@ -45,9 +45,16 @@ def min_jerk_todorov( pos, dur, vel=None, acc=None, psg=None, maxiter=5000, get_
 
     t0 = np.array([0, dur])
 
+
     # optimize passage times if necessary
     if psg is None:
+        if N < 2:
+            raise ValueError("At least two points are required")
+        if N==2:
+            pos = np.array([pos[0], (pos[0]+pos[1])/2, pos[1]])
+            N = 3
         if N > 2:
+            print("Optimizing passage times for %d iterations"%maxiter)
             psg = np.linspace(dur/(N-1), dur-dur/(N-1), N-2) # np.arange(dur/(N-1), dur-dur/(N-1), dur/(N-1)).reshape(-1, 1)
             func = lambda psg_: mjCOST(psg_, pos, vel, acc, t0)
             ##%%OPTIONS.TolFun=10E-30; ftol
@@ -55,17 +62,20 @@ def min_jerk_todorov( pos, dur, vel=None, acc=None, psg=None, maxiter=5000, get_
 
             #%OPTIONS.MaxFunEvals=7500;
             #%OPTIONS.MaxIter=5000;
-            #psg = fmin(func, psg, maxiter=5000, maxfun=7500, disp=True, ftol=10e-30, xtol=10e-30) #fminsearch(func, psg);
             print("optimizing\n")
             iter_count[0] = 0
+            psg = fmin(func, psg, maxiter=maxiter, maxfun=7500, disp=True,
+                       ftol=10e-30,
+                       xtol=10e-30) #fminsearch(func, psg);
+
             psg = fmin(func, psg, maxiter=maxiter)
             print('done')
         else:
-            psg = []
+            psg = None
     trj = mjTRJ(psg, pos, vel, acc, t0, int(dur))
     if get_vel_acc:
         v, a = mjVelAcc(psg, pos, vel, acc, t0)
-        return trj, psg, v, a
+        return trj, psg, pos, v, a
         
     return trj, psg
 
@@ -162,6 +172,7 @@ def mjVelAcc(t, x, v0, a0, t0):
 
     mat = np.zeros((2*N-4,2*N-4))
     vec = np.zeros((2*N-4,D))
+
     tt = np.concatenate([[t0[0]], t, [t0[1]]])
 
     I = np.array(range(0, 2*N-4, 2))

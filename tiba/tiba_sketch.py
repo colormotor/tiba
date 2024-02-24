@@ -97,44 +97,6 @@ def imgui_color_button(text, color):
     return res
 
 # Planning routines
-def plan_samples(draft, max_speed, accel_time, penup_distance, debug=True):
-    print(draft)
-    print(max_speed)
-    print(accel_time)
-    print(penup_distance)
-
-    paths = tu.plan_polylines_smooth(draft,
-                                      max_speed=max_speed, max_accel_time=accel_time)
-
-    #paths = tu.plan_polylines_jerk(draft, 0.1, max_speed=max_speed, max_accel_time=accel_time, maxiter=300)
-    paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
-    lifts = [False]
-    trajectories = [paths[0]]
-    if len(paths) > 1:
-        for P1, P2 in zip(paths, paths[1:]):
-            if geom.distance(P1[-1], P2[0]) > 2e-3:
-                lifts.append(True)
-                trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=1.0))
-            lifts.append(False)
-            trajectories.append(P2)
-
-    if debug:
-        fig = plt.figure(figsize=((12, 4)))
-        plt.subplot(121)
-        T = 0.0
-        for X, lift in zip(trajectories, lifts):
-            speed = tu.compute_speed(X, cfg.dt)
-            t = np.linspace(0, len(speed)*cfg.dt, len(speed)) + T
-            clr = 'c' if lift else 'r'
-            plt.plot(t, speed, clr, lw=1)
-            T = t[-1] + cfg.dt
-        ax = fig.add_subplot(224, projection='3d')
-        for i, X in enumerate(trajectories):
-            plt.plot(X[:,0], X[:,1], X[:,2], color=plut.default_color(i), lw=1, alpha=1)
-        plt.tight_layout()
-        planner.show_open('cart.pdf')
-    return trajectories
-
 def saturate_acceleration(X, dt, max_acceleration):
     dX = np.diff(X, axis=0)/dt
     Y = [X[0], X[1]]
@@ -151,46 +113,139 @@ def saturate_acceleration(X, dt, max_acceleration):
             Y.append(x)
     return Y
 
-def plan_samples(samples,
-                max_speed,
-                accel_time,
-                penup_distance, debug=True):
+def plan_trapezoidal(samples,
+                     max_speed,
+                     accel_time,
+                     penup_distance,
+                     params):
     paths, velocities_, accelerations_ = tu.plan_polylines_smooth(samples,
                                                                   max_speed=max_speed,
-                                                                  accel_time=accel_time, tol=0.01)
-    max_accel = max_speed / accel_time
+                                                                  accel_time=accel_time,
+                                                                  tol=0.01)
+    return paths, samples
 
-    #paths = [saturate_acceleration(P, cfg.dt, max_accel) for P in paths]
+def ema(data, alpha):
+    ema_values = [data[0]]  # Initialize EMA with the first data point
 
-    #velocities_ = [tu.rownorm(V) for V in velocities_]
-    #accelerations_ = [tu.rownorm(A) for A in accelerations_]
+    for i in range(1, len(data)):
+        ema_values.append(alpha * data[i] + (1 - alpha) * ema_values[-1])
 
-    # paths = tu.plan_bezier_chains_jerk(draft, max_speed=max_speed, max_accel_time=accel_time)
-    paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
-    velocities_ = [np.diff(P, axis=0) / cfg.dt for P in paths]
-    accelerations_ = [np.diff(P, n=2, axis=0) / (cfg.dt**2) for P in paths]
-    lifts = [False]
-    trajectories = [paths[0]]
-    velocities = [velocities_[0]]
-    accelerations = [accelerations_[0]]
-    print('velocities', velocities_)
+    return np.array(ema_values)
+
+def plan_calligraphic(samples,
+                      max_speed,
+                      accel_time,
+                      penup_distance,
+                      params):
+    simplified = [tu.simplify.dce(P, params.config.dce_thresh/1000) for P in samples]
+    simplified = [P for P in simplified if len(P) > 1]
+    if not simplified:
+        return [], []
+
+    paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in simplified]
+    up = np.array([0, 0, penup_distance])
+    # Square pen ups
+    # motor_plan = [paths[0][0] + up, paths[0]]
+    # if len(paths) > 1:
+    #     for i in range(1, len(paths)):
+    #         P1 = paths[i-1]
+    #         P2 = paths[i]
+    #         if geom.distance(P1[-1], P2[0]) > 2e-3:
+    #             motor_plan.append(P1[-1] + up)
+    #             motor_plan.append(P2[0] + up)
+    #         motor_plan.append(P2)
+    # motor_plan.append(paths[-1][-1] + up)
+    # Triangle pen ups
+    motor_plan = [paths[0]]
     if len(paths) > 1:
-        for i in range(len(paths)-1):
-            P1 = paths[i]
-            P2 = paths[i+1]
+        for i in range(1, len(paths)):
+            P1 = paths[i-1]
+            P2 = paths[i]
             if geom.distance(P1[-1], P2[0]) > 2e-3:
-                lifts.append(True)
-                trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=1.0))
-                vel = np.diff(trajectories[-1], axis=0) / cfg.dt
-                accel = np.diff(trajectories[-1], n=2, axis=0) / (cfg.dt**2)
-                velocities.append(vel)
-                accelerations.append(accel)
+                motor_plan.append((P1[-1] + P2[0])/2 + up)
+            motor_plan.append(P2)
+    #motor_plan.append(paths[-1][-1] + up)
 
-            lifts.append(False)
+    motor_plan = np.vstack(motor_plan)
+    # Add stop points
+    motor_plan = np.vstack([motor_plan[0], motor_plan,motor_plan[-1]])
+    trajectories = tu.plan_polylines_lqt([motor_plan],
+                                         max_speed,
+                                         accel_time=accel_time,
+                                        isotropy=params.config.isotropy,
+                                        sigma=params.config.smoothing,
+                                        penups=True,
+                                        order=params.config.order,
+                                        opt_x0=True,
+                                        subd=5,
+                                        angle=params.config.angle)
+    # Clip zs to zero
+    print('Deviation from base: ', np.min(trajectories[0][:,2]))
+    #trajectories[0][:,2] = ema(np.maximum(trajectories[0][:,2], 0.0), 0.1)
+    return trajectories, simplified
+
+def plan_min_jerk(samples,
+                 max_speed,
+                 accel_time,
+                 penup_distance,
+                 params):
+    paths, simplified = tu.plan_polylines_jerk(samples,
+                                                                params.config.dce_thresh/1000,
+                                                                max_speed=max_speed,
+                                                                max_accel_time=accel_time,
+                                                                maxiter=params.config.max_iterations)
+    return paths, simplified
+
+
+def plan_simplify_test(samples,
+                 max_speed,
+                 accel_time,
+                 penup_distance,
+                 params):
+    simplified = [tu.simplify.dce(P, params.config.dce_thresh/1000) for P in samples]
+    return samples, simplified
+
+def plan_polylines(planning_callback,
+                   samples,
+                   max_speed,
+                   accel_time,
+                   penup_distance,
+                   trajectory_includes_penups=False,
+                   params={},
+                   debug=True):
+    ''' General function to plan a 2d trajectory so it is projected to 3d on the drawing pad
+    Does not handle orientation, only position
+    '''
+    if not trajectory_includes_penups:
+        # Plan each trajectory in 2d and then concatenate lifting motions
+        paths, simplified = planning_callback(samples,
+                                              penup_distance=penup_distance,
+                                              max_speed=max_speed,
+                                              accel_time=accel_time,
+                                              params=params)
+        paths = [P for P in paths if len(P) > 1]
+        paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
+        if not paths:
+            return []
+        trajectories = [paths[0]]
+        if len(paths) > 1:
+            for i in range(len(paths)-1):
+                P1 = paths[i]
+                P2 = paths[i+1]
+                if geom.distance(P1[-1], P2[0]) > 2e-3:
+                    trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=accel_time))
             trajectories.append(P2)
+    else:
+        # Create one motor plan with pen-ups and plan single trajectory
+        trajectories, simplified = planning_callback(samples,
+                                                     penup_distance=penup_distance,
+                                                     max_speed=max_speed,
+                                                     accel_time=accel_time,
+                                                     params=params)
 
-            accelerations.append(accelerations_[i+1])
-            velocities.append(velocities_[i+1])
+    velocities = [np.diff(P, axis=0) / cfg.dt for P in trajectories]
+    accelerations = [np.diff(P, n=2, axis=0) / (cfg.dt**2) for P in trajectories]
+    max_accel = max_speed / accel_time
 
     if debug:
         ply.figure(title='Cartesian trajectory')
@@ -198,7 +253,7 @@ def plan_samples(samples,
         Tv = 0.0
         Ta = 0.0
 
-        for i, (X, lift) in enumerate(zip(trajectories, lifts)):
+        for i, X in enumerate(trajectories):
             #speed = velocities[i] #tu.compute_speed(X, cfg.dt)
             #accel = accelerations[i] #tu.compute_accel(X, cfg.dt)
             tv = np.linspace(0, (len(velocities[i])-1)*cfg.dt, len(velocities[i])) + Tv
@@ -219,8 +274,11 @@ def plan_samples(samples,
         ply.subplot(1, 2, title='Acceleration')
         ply.rectangle([0, -max_accel], [Ta, max_accel], color='k', alpha=0.1, fill=True)
 
+
         ply.subplot(2, 1, title='Trajectory 2d')
-        ply.stroke(paths, 'k')
+        ply.stroke(samples, 'k', alpha=0.25)
+        ply.stroke(simplified, 'r', ls=':', lw=1)
+        ply.stroke(trajectories, 'k')
         ply.axis_equal(True)
 
         ply.subplot(2, 2, title='Trajectory 3d')
@@ -230,91 +288,15 @@ def plan_samples(samples,
     return trajectories
 
 
-def plan_bezier(draft,
-                max_speed,
-                accel_time,
-                penup_distance, debug=True):
-    # paths, velocities_, accelerations_ = tu.plan_polylines_trapezoidal([bezier.bezier_piecewise(P, subd=35) for P in draft],
-    #                                       max_speed=max_speed, max_accel_time=accel_time, tol=0.1)
-
-    # velocities_ = [tu.compute_speed(X, cfg.dt) for X in paths]
-    # accelerations_ = [tu.compute_accel(X, cfg.dt) for X in paths]
-
-    paths, velocities_, accelerations_ = tu.plan_polylines_smooth([bezier.bezier_piecewise(P, subd=50) for P in draft],
-                                                                  max_speed=max_speed, accel_time=accel_time, tol=0.01)#10/1000)
-    max_accel = max_speed / accel_time
-    #velocities_ = [tu.rownorm(V) for V in velocities_]
-    #accelerations_ = [tu.rownorm(A) for A in accelerations_]
-    print('plan bezier box size: ', geom.rect_size(geom.bounding_box(paths)))
-    # paths = tu.plan_bezier_chains_jerk(draft, max_speed=max_speed, max_accel_time=accel_time)
-    paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
-    velocities_ = [np.diff(P, axis=0) / cfg.dt for P in paths]
-    accelerations_ = [np.diff(P, n=2, axis=0) / (cfg.dt**2) for P in paths]
-    lifts = [False]
-    trajectories = [paths[0]]
-    velocities = [velocities_[0]]
-    accelerations = [accelerations_[0]]
-    print('velocities', velocities_)
-    if len(paths) > 1:
-        for i in range(len(paths)-1):
-            P1 = paths[i]
-            P2 = paths[i+1]
-            if geom.distance(P1[-1], P2[0]) > 2e-3:
-                lifts.append(True)
-                trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=1.0))
-                vel = np.diff(trajectories[-1], axis=0) / cfg.dt
-                accel = np.diff(trajectories[-1], n=2, axis=0) / (cfg.dt**2)
-                velocities.append(vel)
-                accelerations.append(accel)
-
-            lifts.append(False)
-            trajectories.append(P2)
-
-            accelerations.append(accelerations_[i+1])
-            velocities.append(velocities_[i+1])
-
-    if debug:
-        ply.figure(title='Cartesian trajectory')
-
-        Tv = 0.0
-        Ta = 0.0
-
-        for i, (X, lift) in enumerate(zip(trajectories, lifts)):
-            #speed = velocities[i] #tu.compute_speed(X, cfg.dt)
-            #accel = accelerations[i] #tu.compute_accel(X, cfg.dt)
-            tv = np.linspace(0, (len(velocities[i])-1)*cfg.dt, len(velocities[i])) + Tv
-            ta = np.linspace(0, (len(accelerations[i])-1)*cfg.dt, len(accelerations[i])) + Ta
-            ply.subplot(1, 1, title='Velocity')
-            ply.plot(tv, velocities[i][:,0], color=ply.categorical_color(i))
-            ply.plot(tv, velocities[i][:,1], color=ply.categorical_color(i))
-            ply.plot(tv, velocities[i][:,2], color='b', alpha=0.5)
-            ply.subplot(1, 2, title='Acceleration')
-            ply.plot(ta, accelerations[i][:,0], color=ply.categorical_color(i))
-            ply.plot(ta, accelerations[i][:,1], color=ply.categorical_color(i))
-            ply.plot(ta, accelerations[i][:,2], color='b', alpha=0.5)
-            Tv = tv[-1] + cfg.dt
-            Ta = ta[-1] + cfg.dt
-
-        ply.subplot(1, 1, title='Velocity')
-        ply.rectangle([0, -max_speed], [Tv, max_speed], color='k', alpha=0.1, fill=True)
-        ply.subplot(1, 2, title='Acceleration')
-        ply.rectangle([0, -max_accel], [Ta, max_accel], color='k', alpha=0.1, fill=True)
-
-        ply.subplot(2, 1, title='Trajectory 2d')
-        ply.stroke(paths, 'k')
-        ply.axis_equal(True)
-
-        ply.subplot(2, 2, title='Trajectory 3d')
-        for X in trajectories:
-            ply.stroke3d(X)
-        ply.show()
-    return trajectories
 
 dip_pos = np.array([0.11812825731443674, -0.407704314564537, 0.10439764358100054,
                     -0.008107937414934388, 0.8524478856525898, -0.5214394134973193, -0.036983802520516196])
 
 #  [-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134]
 #
+
+planner_names = ['Trapezoidal', 'Minimum Jerk', 'Calligraphic', 'Test simplify']
+
 class TibaSketch:
     def __init__(self):
         self.params_to_check = [
@@ -328,9 +310,10 @@ class TibaSketch:
             'traj.angle'
         ]
 
+
         self.arcball = geom.ArcBall()
 
-    def init(self, sketch, callback, input_tools=None, panda=None, gripper=None):
+    def init(self, sketch, callback=None, input_tools=None, panda=None, gripper=None):
         # Actual interface to the robot. Here this is not used to control the robot directly
         # but to plan and execute trajectories
         if input_tools is None:
@@ -338,7 +321,7 @@ class TibaSketch:
         else:
             self.tools = input_tools
 
-
+        # Actual interface to robot (computes IK, holds reference to robot model and drawing pad
         self.itiba = TibaInterface(panda=panda, gripper=gripper)
         # 3d view for the robot
         self.v3d = GlView3d(sketch)
@@ -399,6 +382,13 @@ class TibaSketch:
         params = {
             'Config': {
                 'tool': (0, {'hide': True}),
+                'Cart planner': (0, {'selection':planner_names}),
+                'DCE thresh' : (250, {'min':0.0, 'max':500, 'hide':True}),
+                'Max iterations' : (450, {'min':50, 'max':1000, 'hide':True}),
+                'Isotropy': (1.0, {'min':0.0, 'max':1.0, 'hide':True}),
+                'Angle': (50.0, {'min':-90.0, 'max':90.0, 'hide':True}),
+                'Smoothing': (0.0, {'min':0.01, 'max':1.0, 'hide':True}),
+                'Order': (3, {'min':2, 'max':5, 'hide':True}),
             },
             'Drawing':  {
               'Plane offset': (0.0, {'min':-20,'max': 20}),
@@ -548,17 +538,28 @@ class TibaSketch:
         max_speed=cfg.default_cartesian_speed
         accel_time=cfg.acceleration_time
         traj_callback = self.trajectory_callback
-        if type(traj_callback)==str:
-            if traj_callback=='bezier':
-                traj_callback = plan_bezier
-            elif traj_callback=='samples':
-                traj_callback = plan_samples
-            elif traj_callback=='lqt':
-                traj_callback = plan_lqt
-            else:
-                raise ValueError('Unknown callback')
+        trajectory_includes_penup = False
+        if traj_callback is None:
+            # Select planner from parameters
+            if planner_names[params.config.cart_planner] == 'Trapezoidal':
+                traj_callback = plan_trapezoidal
+            elif planner_names[params.config.cart_planner] == 'Minimum Jerk':
+                traj_callback = plan_min_jerk
+            elif planner_names[params.config.cart_planner] == 'Calligraphic':
+                traj_callback = plan_calligraphic
+                trajectory_includes_penup = True
+            elif planner_names[params.config.cart_planner] == 'Test simplify':
+                traj_callback = plan_simplify_test
+        if traj_callback is None:
+            raise ValueError('No trajectory callback')
+
+
         draft = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=0.0)
-        trajectories = traj_callback(draft, max_speed, accel_time, params.drawing.penup_mm/1000, debug=debug)
+        trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
+                                      params.drawing.penup_mm/1000,
+                                      trajectory_includes_penup,
+                                      params,
+                                      debug=debug)
         self.trajectories = self.pad.fit_to_frame(trajectories)
         self.trajectories_computed = True
 
@@ -632,7 +633,28 @@ class TibaSketch:
         imgui_info_text('Drag to rotate')
         imgui_info_text('Ctrl+drag to zoom, Shift+drag to pan')
 
+    def hide_config_except(self, *args):
+        dont_hide = ['tool', 'cart_planner'] + list(args)
+        for key, val in self.sketch.params.gui_params['Config'].items():
+            if 'hide' not in val[1]:
+                continue
+            if key not in dont_hide:
+                self.sketch.params.gui_params['Config'][key][1]['hide'] = True
+            else:
+                self.sketch.params.gui_params['Config'][key][1]['hide'] = False
+
     def update(self):
+        if 'config.cart_planner' in self.sketch.gui.changed:
+            self.clear()
+        if planner_names[self.params.config.cart_planner] == 'Trapezoidal':
+            self.hide_config_except()
+        elif planner_names[self.params.config.cart_planner] == 'Minimum Jerk':
+            self.hide_config_except('DCE thresh', 'Max iterations')
+        elif planner_names[self.params.config.cart_planner] == 'Calligraphic':
+            self.hide_config_except('DCE thresh', 'Isotropy', 'Angle', 'Smoothing', 'Order')
+        else:
+            self.hide_config_except()
+
         # Update arcball
         self.arcball.update(self.sketch.width,
                             self.sketch.height)

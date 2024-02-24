@@ -212,9 +212,6 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
         ply.plot(t, vel[:,i], ['r', 'g', 'b'][i], label=['x', 'y', 'z'][i], alpha=0.7)
     ply.plot(t, tu.rownorm(vel), 'k', lw=2, label='norm')
 
-    t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
-    ply.plot(t, acc[:,0], 'm', lw=2)
-
     limit = cfg.default_cartesian_speed
     ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
 
