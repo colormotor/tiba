@@ -129,7 +129,6 @@ class Plot2d(Plot):
                 self.x = np.linspace(0, len(self.y)-1, len(self.y))
                 self.clr = mcolors.to_rgb(args[1])
             else:
-                print("X and Y")
                 self.x = args[0]
                 self.y = args[1]
         elif len(args) == 3: # x, y, and color values
