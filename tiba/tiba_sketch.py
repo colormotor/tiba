@@ -118,7 +118,7 @@ def plan_trapezoidal(samples,
                      accel_time,
                      penup_distance,
                      params):
-    paths, velocities_, accelerations_ = tu.plan_polylines_smooth(samples,
+    paths, velocities_, accelerations_ = tu.plan_polylines_time_optimal(samples,
                                                                   max_speed=max_speed,
                                                                   accel_time=accel_time,
                                                                   tol=0.01)
@@ -225,6 +225,7 @@ def plan_polylines(planning_callback,
                                               params=params)
         paths = [P for P in paths if len(P) > 1]
         paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
+        print('lens', [len(P) for P in paths])
         if not paths:
             return []
         trajectories = [paths[0]]
@@ -234,7 +235,7 @@ def plan_polylines(planning_callback,
                 P2 = paths[i+1]
                 if geom.distance(P1[-1], P2[0]) > 2e-3:
                     trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=accel_time))
-            trajectories.append(P2)
+                trajectories.append(P2)
     else:
         # Create one motor plan with pen-ups and plan single trajectory
         trajectories, simplified = planning_callback(samples,

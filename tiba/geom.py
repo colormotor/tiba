@@ -124,6 +124,9 @@ def signed_point_line_distance(p, a, b):
         return (det(np.array([b-a, a-p]))) / norm(b-a)
 
 def point_segment_distance(p, a, b):
+    if np.array_equal(a,b):
+        return distance(p, a)
+
     a, b = np.array(a), np.array(b)
     d = b - a
     # relative projection length

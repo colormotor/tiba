@@ -354,7 +354,7 @@ def split_chain(chain, angle_tol=10):
         prev = bez[-1] - bez[-2]
     return [bezier.beziers_to_chain(chunk) for chunk in chunks]
 
-def plan_polylines_smooth(polylines, max_speed, accel_time, tol=10/1000.0):
+def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0):
     from trajectory_smoothing import TrajectorySmoother
     dof = len(polylines[0][0])
 
@@ -364,6 +364,7 @@ def plan_polylines_smooth(polylines, max_speed, accel_time, tol=10/1000.0):
     max_velocity = geom.normalize(np.ones(dof, dtype=np.float32)) * max_speed
     max_acceleration = geom.normalize(np.ones(dof, dtype=np.float32)) * max_accel
 
+    print("Smoother")
     smoother = TrajectorySmoother(
         dof, max_velocity, max_acceleration, tol
     )
@@ -373,49 +374,29 @@ def plan_polylines_smooth(polylines, max_speed, accel_time, tol=10/1000.0):
     accelerations = []
     for P in polylines:
         # Traj dt used for computations
-        result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
-        if not result.success:
-            print('Smoothing failed in trajectory smoothing')
-            Q = np.array(P)
-            A = geom.degrees(geom.turning_angles(Q))
-            L = geom.chord_lengths(Q)
-            print('Min angle:', np.min(A))
-            print('Max angle:', np.max(A))
-            print('Min length:', np.max(L))
-            print('Max length:', np.max(L))
-        else:
-            trajectories.append(result.position)
-            velocities.append(result.velocity)
-            accelerations.append(result.acceleration)
+        nattempt = 10
+        print("Planning %d points"%len(P))
+        for i in range(nattempt):
+            result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
+            if not result.success:
+                print('Smoothing failed in trajectory smoothing, attempt %d of %d'%(i+1, nattempt))
+                Q = np.array(P)
+                A = geom.degrees(geom.turning_angles(Q))
+                L = geom.chord_lengths(Q)
+                print('Min angle:', np.min(A))
+                print('Max angle:', np.max(A))
+                print('Min length:', np.max(L))
+                print('Max length:', np.max(L))
+            else:
+                print("Success %d"%(i+1))
+                print("%d points"%len(result.position))
+
+                trajectories.append(result.position)
+                velocities.append(result.velocity)
+                accelerations.append(result.acceleration)
+                break
+    print("Finished planning")
     return trajectories, velocities, accelerations
-
-
-def plan_polylines_trapezoidal(polylines, max_speed, max_accel_time, tol=0.1):
-    from . import axi_planner
-    reload(axi_planner)
-    dof = len(polylines[0][0])
-    max_speed = max_speed*1000
-    accel = max_speed / max_accel_time
-    print('max accel', accel)
-    planner = axi_planner.Planner(accel, max_speed, tol, cfg.dt)
-    trajs = []
-    velocities = []
-    accelerations = []
-    for P in polylines:
-        Pp, Vv, Aa = planner.plan_polylines([np.array(P)*1000])
-        trajs.append(np.array(Pp[0])/1000)
-        velocities.append(np.array(Vv[0])/1000)
-        accelerations.append(np.array(Aa[0]/1000))
-    return trajs, velocities, accelerations
-    #return [P/1000  for P in planner.plan_polylines([np.array(P)*1000 for P in polylines])[0]]
-    # trajectories = []
-    # for P in polylines:
-    #     result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=cfg.dt)
-    #     if not result.success:
-    #         print('Smoothing failed in trajectory smoothing')
-    #     else:
-    #         trajectories.append(result.position)
-    # return trajectories
 
 def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5, angle_tolerance=10, subd=3, maxiter=300, tol=0.0):
     '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
@@ -909,108 +890,3 @@ def saturate_speed(trajectory, max_speed, dt):
     return np.array(Xsat)
 
 
-class Index(object):
-    def __init__(self, points, n=100):
-        self.n = n
-        self.x1 = min(p[0] for p in points)
-        self.x2 = max(p[0] for p in points)
-        self.y1 = min(p[1] for p in points)
-        self.y2 = max(p[1] for p in points)
-        print('x1, x2', self.x1, self.x2)
-        print('y1, y2', self.y1, self.y2)
-        self.bins = defaultdict(list)
-        self.size = 0
-        for point in points:
-            self.insert(point)
-
-    def normalize(self, x, y):
-        if abs(self.x2 - self.x1) > 1e-9:
-            px = (x - self.x1) / (self.x2 - self.x1)
-        else:
-            px = 0
-        if abs(self.y2 - self.y1) > 1e-9:
-            py = (y - self.y1) / (self.y2 - self.y1)
-        else:
-            py = 0
-        i = int(px * self.n)
-        j = int(py * self.n)
-        return (i, j)
-
-    def insert(self, point):
-        x, y = point[:2]
-        i, j = self.normalize(x, y)
-        self.bins[(i, j)].append(point)
-        self.size += 1
-
-    def remove(self, point):
-        x, y = point[:2]
-        i, j = self.normalize(x, y)
-        self.bins[(i, j)].remove(point)
-        self.size -= 1
-
-    def nearest(self, point):
-        x, y = point[:2]
-        i, j = self.normalize(x, y)
-        points = []
-        r = 0
-        while not points:
-            points.extend(self.ring(i, j, r))
-            r += 1
-        points.extend(self.ring(i, j, r))
-        return min(points,
-            key=lambda p: (hypot(x - p[0], y - p[1]), p[1], p[0]))
-
-    def ring(self, i, j, r):
-        if r == 0:
-            return self.bins[(i, j)]
-        result = []
-        for p in range(i - r, i + r + 1):
-            result.extend(self.bins[(p, j - r)])
-            result.extend(self.bins[(p, j + r)])
-        for q in range(j - r + 1, j + r):
-            result.extend(self.bins[(i - r, q)])
-            result.extend(self.bins[(i + r, q)])
-        return result
-
-def sort_paths(paths, reversable=True, join_thresh=0):
-    paths = [[tuple(p) for p in P] for P in paths]
-    first = paths[0]
-    paths.remove(first)
-    result = [first]
-    points = []
-    print('adding paths')
-    for path in paths:
-        x1, y1 = path[0]
-        x2, y2 = path[-1]
-        points.append((x1, y1, path, False))
-        if reversable:
-            points.append((x2, y2, path, True))
-    print('%d paths'%len(paths))
-
-    index = Index(points)
-    print('sorting')
-    while index.size > 0:
-        x, y, path, reverse = index.nearest(result[-1][-1])
-        x1, y1 = path[0]
-        x2, y2 = path[-1]
-        index.remove((x1, y1, path, False))
-        if reversable:
-            index.remove((x2, y2, path, True))
-        if reverse:
-            result.append(list(reversed(path)))
-        else:
-            result.append(path)
-
-    if join_thresh > 0 and result:
-        print('joining')
-        joined = [result[0]]
-        p = joined[-1][-1]
-        for P in result[1:]:
-            x, y = P[0]
-            if hypot(x - p[0], y - p[1]) < join_thresh:
-                joined[-1] += P
-            else:
-                joined.append(P)
-            p = joined[-1][-1]
-        result = joined
-    return [np.array(P) for P in result]
