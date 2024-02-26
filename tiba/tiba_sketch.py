@@ -24,6 +24,7 @@ from polygonsoup import utils, svg, bezier, plut
 import roboticstoolbox as rtb
 import pdb
 import time
+import threading
 
 from . import interface
 reload(interface)
@@ -34,7 +35,7 @@ from . import matplotlyb as ply
 from . import planner
 from .config import cfg
 from . import trajectory_utils as tu
-from . import draw, geom
+from . import draw, geom, config
 from .gfx import renderer
 reload(renderer)
 reload(tu)
@@ -216,6 +217,9 @@ def plan_polylines(planning_callback,
     ''' General function to plan a 2d trajectory so it is projected to 3d on the drawing pad
     Does not handle orientation, only position
     '''
+    config.progress_text = 'Planning trajectory'
+    config.progress = 0
+    config.progress_max = len(samples)
     if not trajectory_includes_penups:
         # Plan each trajectory in 2d and then concatenate lifting motions
         paths, simplified = planning_callback(samples,
@@ -313,6 +317,7 @@ class TibaSketch:
 
 
         self.arcball = geom.ArcBall()
+        self.thread_funcs = []
 
     def init(self, sketch, callback=None, input_tools=None, panda=None, gripper=None):
         # Actual interface to the robot. Here this is not used to control the robot directly
@@ -361,6 +366,8 @@ class TibaSketch:
             except rospy.exceptions.ROSException as e:
                 print("Ros issue")
                 state.has_ros = False
+
+        self.threads = []
 
     def send_msg(self, data):
         print("Sending msg", data)
@@ -540,6 +547,7 @@ class TibaSketch:
         accel_time=cfg.acceleration_time
         traj_callback = self.trajectory_callback
         trajectory_includes_penup = False
+
         if traj_callback is None:
             # Select planner from parameters
             if planner_names[params.config.cart_planner] == 'Trapezoidal':
@@ -554,7 +562,7 @@ class TibaSketch:
         if traj_callback is None:
             raise ValueError('No trajectory callback')
 
-
+        time.sleep(0.2)
         draft = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=0.0)
         trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                       params.drawing.penup_mm/1000,
@@ -593,26 +601,51 @@ class TibaSketch:
         imgui_text_separator('Trajectory')
 
         if imgui.button('Compute trajectories only'):
-            self.compute_trajectories(debug=True)
+            self.threads.append(threading.Thread(target=lambda: self.compute_trajectories(debug=True),
+                                                 name="Planning trajectories"))
+            #self.compute_trajectories(debug=True)
 
         must_plan = False
         button_color = [1.0, 0.5, 0.0, 1.0]
-        if imgui_color_button('Compute and plan', button_color):
-            self.compute_trajectories()
-            must_plan = True
 
-        if self.trajectories_computed and must_plan: #(must_plan or imgui.button('Plan trajectories')):
-            cur_pos = self.robot.pen_tcp_pos(self.robot.q)
-            trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
-            # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
-            trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
-            self.itiba.plan_task_trajectories(trajectories)
-            self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+        if imgui_color_button('Compute and plan', button_color):
+            # self.compute_trajectories()
+            # must_plan = True
+            self.threads.append(threading.Thread(target=self.compute_trajectories,
+                                                 name="Planning trajectories"))
+            def plan_ik_thread():
+                time.sleep(0.2)
+                cur_pos = self.robot.pen_tcp_pos(self.robot.q)
+                trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
+                # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
+                trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
+                self.itiba.plan_task_trajectories(trajectories)
+                self.task_trajectories_augmented = trajectories
+
+            def compute_polygons_and_plot():
+                steps, fk_points = self.compute_steps(self.itiba.Qs)
+                self.steps, self.fk_points = steps, fk_points
+                self.itiba.plot_trajectory_stats(self.task_trajectories_augmented)
+
+                #self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+
+            self.threads.append(threading.Thread(target=plan_ik_thread, name="Planning IK"))
+            self.threads.append(compute_polygons_and_plot)
+
+        # if self.trajectories_computed and must_plan: #(must_plan or imgui.button('Plan trajectories')):
+
+        #     cur_pos = self.robot.pen_tcp_pos(self.robot.q)
+        #     trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
+        #     # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
+        #     trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
+        #     self.itiba.plan_task_trajectories(trajectories)
+        #     self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
 
         if self.itiba.Qs:
             imgui.separator()
             if not state.has_ros:
                 if imgui_color_button('Simulate trajectory', button_color):
+                    #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
                     self.itiba.simulate()
             else:
                 if imgui.button('Simulate trajectory'):
@@ -633,6 +666,36 @@ class TibaSketch:
         imgui.separator()
         imgui_info_text('Drag to rotate')
         imgui_info_text('Ctrl+drag to zoom, Shift+drag to pan')
+
+
+        # Threading
+        if len(self.threads):
+            if type(self.threads[0]) == threading.Thread:
+                if self.threads[0].ident is None:
+                    config.state.progress_text = self.threads[0].name
+                    config.state.progress = 0
+                    config.state.progress_active = True
+                    if self.threads[0].name != 'nogui':
+                        imgui.open_popup("Progress")
+                    self.threads[0].start()
+                elif not self.threads[0].is_alive():
+                    self.threads[0].join()
+                    self.threads.pop(0)
+                    config.state.progress_active = False
+            else:
+                config.state.progress_active = False
+                self.threads[0]()
+                self.threads.pop(0)
+
+        imgui.set_next_window_size(200, 70)
+        if imgui.begin_popup_modal("Progress").opened:
+            imgui.text(config.state.progress_text)
+            imgui.progress_bar(config.state.progress / config.state.progress_max)
+
+            if not config.state.progress_active:
+                imgui.close_current_popup()
+            imgui.end_popup()
+
 
     def hide_config_except(self, *args):
         dont_hide = ['tool', 'cart_planner'] + list(args)
@@ -736,9 +799,11 @@ class TibaSketch:
             if self.itiba.Qs:
                 v3d.line_width(0.3)
                 v3d.color(1.0, 0.1)
-                v3d.stroke_shape(self.steps)
+                if self.steps:
+                    v3d.stroke_shape(self.steps)
                 v3d.color(1.0, 0.0, 0.0)
-                v3d.points(self.fk_points)
+                if len(self.fk_points):
+                    v3d.points(self.fk_points)
 
         # Reset viewport
         v3d.rend.ctx.viewport = (0, 0, self.sketch.window_width, self.sketch.window_height)

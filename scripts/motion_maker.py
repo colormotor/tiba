@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
+from importlib import reload
+
+import threading
+
 import numpy as np
 import importlib
 from motor import lqt
 import imgui
-from polygonsoup import utils, geom, svg, bezier, plut
+# from polygonsoup import utils, geom, svg
 import roboticstoolbox as rtb
 import tiba
 import pdb
 import time
-from importlib import reload
+
 reload(tiba)
 reload(tiba.draw)
 reload(tiba.robot)
 reload(tiba.tiba_sketch)
-reload(bezier)
 
 from tiba import trajectory_utils as tu
 from tiba.tiba_sketch import TibaSketch
 from tiba.robot import TibaRobot
 from tiba.fitCurves.fitCurves import fitCurve
+from tiba import spatial, bezier, utils, svg, geom, config
+reload(spatial)
 
 np.set_printoptions(suppress=True)
 
@@ -40,6 +45,8 @@ def random_q():
 #robot = TibaRobot(60, 0, 0) # Molotow
 # robot = TibaRobot(74, 0, 15) # Small brush
 tsketch = TibaSketch()
+
+threads = []
 
 def setup():
     # Load parameters here for standalone
@@ -104,7 +111,9 @@ def load_svg(path):
     # Plan
     try:
         if len(draft) > 1:
-            draft = tu.sort_paths(draft)
+            # Sort from top left first
+            draft = sorted(draft, key=lambda P: np.min(P[:, 1]) + np.min(P[:, 0]))
+            draft = spatial.sort_paths(draft, reversable=False)
         tsketch.set_draft(draft)
     except (RuntimeWarning, ValueError) as e:
         print('Sort paths failed')
@@ -120,6 +129,31 @@ def exit():
 
 
 def gui():
+    if imgui.button('Test threads'):
+        def thread_func1():
+            print('Thread 1 started')
+            n = 10
+            config.state.progress_max = n
+            config.state.progress = 0
+            for i in range(n):
+                time.sleep(0.1)
+                config.state.progress = i+1
+
+            print('Thread 1 done')
+        def thread_func2():
+            print('Thread 2 started')
+            n = 15
+            config.state.progress_max = n
+            config.state.progress = 0
+            for i in range(n):
+                time.sleep(0.1)
+                config.state.progress = i+1
+
+            print('Thread 2 done')
+        t1 = threading.Thread(target=thread_func1, name="Thread 1")
+        t2 = threading.Thread(target=thread_func2, name="Thread 2")
+        threads.append(t1)
+        threads.append(t2)
     if imgui.button('Load SVG...'):
         path = sketch.open_file_dialog('svg', title='Open SVG file...')
         if path:
@@ -136,9 +170,33 @@ def gui():
 
 def gui_window():
     #imgui.button("Where am I")
-    pass #imgui.core.show_demo_window()
-#
+    # imgui.core.show_demo_window()
+    pass
+
 def draw():
+    if len(threads):
+        if threads[0].ident is None:
+            imgui.open_popup("Progress")
+            config.state.progress_text = threads[0].name
+            threads[0].start()
+        elif not threads[0].is_alive():
+            threads[0].join()
+            threads.pop(0)
+            print('Finished thread, %d left', len(threads))
+            if threads:
+                print("Starting new thread")
+                config.state.progress_text = threads[0].name
+                threads[0].start()
+
+    imgui.set_next_window_size(200, 70)
+    if imgui.begin_popup_modal("Progress").opened:
+        imgui.text(config.state.progress_text)
+        imgui.progress_bar(config.state.progress / config.state.progress_max)
+
+        if config.state.progress >= config.state.progress_max:
+            imgui.close_current_popup()
+        imgui.end_popup()
+
     background(0)
     np.random.seed(params.seed)
 

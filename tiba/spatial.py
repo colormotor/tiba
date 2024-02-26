@@ -38,7 +38,7 @@ class Index(object):
         else:
             self.ny = n
             if dy > 0:
-                self.nx = max(1, m*(dx/dy))
+                self.nx = max(1, n*(dx/dy))
             else:
                 self.nx = 1
 

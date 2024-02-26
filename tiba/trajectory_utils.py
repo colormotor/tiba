@@ -31,6 +31,7 @@ reload(todorov)
 
 from .fitCurves.fitCurves import fitCurve
 
+from . import config
 from .config import cfg
 
 import numbers
@@ -369,13 +370,16 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
         dof, max_velocity, max_acceleration, tol
     )
 
+    config.state.progress_max = len(polylines)
+    config.state.progress = 0
     trajectories = []
     velocities = []
     accelerations = []
-    for P in polylines:
+    for idx, P in enumerate(polylines):
         # Traj dt used for computations
         nattempt = 10
         print("Planning %d points"%len(P))
+
         for i in range(nattempt):
             result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
             if not result.success:
@@ -395,6 +399,8 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
                 velocities.append(result.velocity)
                 accelerations.append(result.acceleration)
                 break
+        config.state.progress = idx+1
+
     print("Finished planning")
     return trajectories, velocities, accelerations
 
@@ -421,7 +427,10 @@ def plan_polylines_jerk(polylines, simp, max_speed, max_accel_time=0.5, angle_to
     '''
     trajectories = []
     simplified = []
-    for P in polylines:
+    config.state.progress = 0
+    config.state.progress_max = len(polylines)
+    for i, P in enumerate(polylines):
+        config.state.progress = i+1
         traj, Q = plan_jerk(P, simp, max_speed, max_accel_time, subd, maxiter)
         trajectories.append(traj)
         simplified.append(Q)

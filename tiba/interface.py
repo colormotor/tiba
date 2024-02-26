@@ -281,11 +281,21 @@ class TibaInterface:
         env = swift.Swift()
         env.launch(realtime=True)
         env.add(self.robot)
-
+        t = time.time()
         q_old = self.robot.q
+        i = 0
+        # while i < len(self.Qs):
+        #     self.robot.q = self.Qs[i]
+
+        #     dt = time.time() - t
+        #     env.step(cfg.robot_dt)
+        #     i += max(1, int(dt/cfg.robot_dt))
+        #     t = time.time()
         for q in self.Qs:
             self.robot.q = q
             env.step(cfg.robot_dt)
+            t = time.time()
+
         # Reset robot after simulation
         self.robot.q = q_old
 
@@ -405,19 +415,27 @@ class TibaInterface:
         self.gripper.stop()
         self.gripper.move(100.0/1000, 0.2)
 
-    def plan_joint_trajectory(self, Qs, Qd, plot=True, task_trajectories=[]):
+    def plot_trajectory_stats(self, task_trajectories=[]):
+        ilqr.plot_trajectory_stats(self.robot,
+                                        self.Qs,
+                                        self.dQs,
+                                        trajectories=task_trajectories,
+                                        filename=self.plot_path)
+
+    def plan_joint_trajectory(self, Qs, Qd, plot=False, task_trajectories=[]):
         self.read_states()
         Qapproach, dQapproach = [], [] # tu.joint_approach(self.robot.q, Qs[0])
 
         self.Qs, self.dQs = Qapproach + Qs, dQapproach + Qd
 
         utils.save_pkl([self.Qs, self.dQs], 'trajectory.pkl')
-        if plot:
-            ilqr.plot_trajectory_stats(self.robot,
-                                        self.Qs,
-                                        self.dQs,
-                                        trajectories=task_trajectories,
-                                        filename=self.plot_path)
+        # if plot:
+            # self.plot_trajectory_stats(task_trajectories)
+            # ilqr.plot_trajectory_stats(self.robot,
+            #                             self.Qs,
+            #                             self.dQs,
+            #                             trajectories=task_trajectories,
+            #                             filename=self.plot_path)
 
     def plan_pad_trajectories(self, trajectories, rest=0.05):
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)

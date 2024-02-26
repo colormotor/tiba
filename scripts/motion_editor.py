@@ -148,12 +148,11 @@ else:
     desk = None
     panda = None
 
-robot = TibaRobot(45, 11.5) # Molotow
 # robot = TibaRobot(60, 0, 0)
-itiba = TibaInterface(robot, panda, gripper)
+itiba = TibaInterface(panda, gripper)
 editor = itiba.editor
 pad = itiba.pad
-robot.q = robot.qr
+itiba.robot.q = itiba.robot.qr
 
 
 v3d = None
@@ -226,7 +225,7 @@ def exit():
 
 def plan_trajectories(trajectories, rest=0.05): #15):
     itiba.plan_trajectories(trajectories, rest)
-    state.steps, state.fk_points = compute_steps(robot, state.Qs)
+    state.steps, state.fk_points = compute_steps(itiba.robot, state.Qs)
 
 def send_joint_trajectory(Qs, dQs):
     jtraj = JointTrajectory()
@@ -265,26 +264,26 @@ def gui():
         itiba.launch_simulator()
 
     if imgui.button('Plan recorded motion'):
-        Qs, dQs = editor.get_cur_motion_trajectory(robot.q)
+        Qs, dQs = editor.get_cur_motion_trajectory(itiba.robot.q)
         itiba.plan_joint_trajectory(Qs, dQs)
-        state.steps, state.fk_points = compute_steps(robot, itiba.Qs)
+        state.steps, state.fk_points = compute_steps(itiba.robot, itiba.Qs)
 
     if imgui.button('Plan trajectory'):
-        cur_pos = robot.pen_tcp_pos(robot.q)
-        trajectories = pad.augment_with_pen_orientation(state.trajectories, robot, robot.qr)
+        cur_pos = robot.pen_tcp_pos(itiba.robot.q)
+        trajectories = pad.augment_with_pen_orientation(state.trajectories, itiba.robot, robot.qr)
         # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
         trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
         itiba.plan_task_trajectories(trajectories)
-        state.steps, state.fk_points = compute_steps(robot, itiba.Qs)
+        state.steps, state.fk_points = compute_steps(itiba.robot, itiba.Qs)
 
     if imgui.button('Align tip down'):
-        cur_frame = robot.pen_tcp_frame(robot.q)
+        cur_frame = robot.pen_tcp_frame(itiba.robot.q)
         dest_frame = planner.align_frame_z(cur_frame, np.array([0, 0, -1]))
 
         trajectory = tu.append_rest(tu.trapezoidal_approach(cur_frame,
                                                       dest_frame), 0.5)
         itiba.plan_task_trajectories([trajectory])
-        state.steps, state.fk_points = compute_steps(robot, itiba.Qs)
+        state.steps, state.fk_points = compute_steps(itiba.robot, itiba.Qs)
 
     imgui.same_line()
     if imgui.button('Circle'):
@@ -310,7 +309,7 @@ def gui():
         trajectories += [tu.trapezoidal_approach(start_dip_frame, cur_frame)]
 
         itiba.plan_task_trajectories(trajectories)
-        state.steps, state.fk_points = compute_steps(robot, itiba.Qs)
+        state.steps, state.fk_points = compute_steps(itiba.robot, itiba.Qs)
 
     if itiba.Qs:
         if imgui.button('Simulate trajectory'):
@@ -365,25 +364,6 @@ def draw():
 
     params_to_check = ['seed', 'drawing.padding', 'drawing.penup_mm', 'drawing.pos_offset_x', 'drawing.pos_offset_y',
                        'traj.sigma', 'traj.isotropy', 'traj.angle']
-    if params_changed(*params_to_check) or not state.trajectories:
-        print('update')
-        #glyphs = [tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)]
-        #Q = np.vstack([tu.tsp_glyph(5, 90, 100) + [100 + i*180, 100] for i in range(3)])
-        pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
-        pad.update()
-        glyphs_3d = pad.fit_to_box(glyphs, padding=params.drawing.padding, penup_mm=params.drawing.penup_mm)
-        state.trajectories = tu.smooth_strokes_lqt(glyphs_3d,
-                                                   isotropy=params.traj.isotropy,
-                                                   sigma=params.traj.sigma,
-                                                   subsample=int(cfg.dt/cfg.robot_dt),
-                                                   subd=5,
-                                                   angle=params.traj.angle)
-
-        utils.save_pkl(state.trajectories, 'trajs.pkl')
-        state.trajectories = pad.fit_to_frame(state.trajectories)
-
-        state.trajectories_2d = glyphs
-
 
     if has_robot:
         q = panda.get_robot().read_once().q # panda.q
@@ -401,7 +381,7 @@ def draw():
     # no_fill()
     # polyline(P, closed=False)
     #robot.q = q
-    state.tcp_pos = robot.pen_tcp_pos(q)
+    state.tcp_pos = itiba.robot.pen_tcp_pos(q)
     no_fill()
     stroke(1, 0.5)
     for trajectory in state.trajectories_2d:
@@ -416,13 +396,13 @@ def draw():
 
     #draw_robot()
     no_fill()
-    editor.draw_steps(v3d, robot, [0, 0], 70, width)
+    editor.draw_steps(v3d, itiba.robot, [0, 0], 70, width)
 
 def draw_gl():
 
     #return
 
-    q = robot.q
+    q = itiba.robot.q
     #def draw_robot(q):
     viewport = geom.make_rect(0, 0, width, height)
     v3d.set_view(viewport, [params.tsm.xoffset, params.tsm.voffset, -params.tsm.dist],
@@ -440,7 +420,7 @@ def draw_gl():
     v3d.frame(np.eye(4), alpha=0.4, scale=0.5)
 
 
-    P, penP = robot.robot_polylines(q)
+    P, penP = itiba.robot.robot_polylines(q)
     v3d.color(0, 0.5, 1.0)
     v3d.line_width(8)
     v3d.polyline(P)
@@ -448,9 +428,9 @@ def draw_gl():
     #return
 
     v3d.line_width(2.0)
-    penframe = robot.pen_frame(q)
+    penframe = itiba.robot.pen_frame(q)
     v3d.frame(penframe, alpha=0.9, scale=0.05)
-    v3d.frame(robot.pen_tcp_frame(q), scale=0.02)
+    v3d.frame(itiba.robot.pen_tcp_frame(q), scale=0.02)
 
     # hand_frame_real = robot.hand_frame(q)
     # #print('real', hand_frame_real - panda.get_pose())

@@ -27,7 +27,7 @@ from PyLQR.solver import ILQRRecursive
 from PyLQR.sim import KDLRobot
 from PyLQR.utils import primitives, PythonCallbackMessage
 
-from . import utils, geom
+from . import utils, geom, config
 from . import trajectory_utils as tu
 from .config import cfg
 from . import draw
@@ -87,6 +87,9 @@ class iLQRPlannerVelocity:
         # Add approaches between trajectories
         x0 = np.concatenate([self.rbt.get_ee_pos(), self.rbt.get_ee_orn()])
         linked_trajectories = []
+
+        config.state.progress = 0
+
         for i, traj in enumerate(trajectories):
             if len(traj) < 2:
                 continue
@@ -121,6 +124,7 @@ class iLQRPlannerVelocity:
         q0 = self.q0
         dq0 = self.dq0
         for tindex, states in enumerate(linked_trajectories):
+
             print('Planning trajectory %d of %d'%(tindex+1, len(linked_trajectories)))
             timesteps = list(range(len(states)))
             self.rbt.set_conf(q0, dq0, True)
@@ -151,6 +155,7 @@ class iLQRPlannerVelocity:
 
             except Exception as e:
                 print(e)
+            config.state.progress = tindex+1
 
         Qs = sum(Qs, [])
         dQs = sum(dQs, [])
@@ -219,7 +224,7 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     for i in range(3):
         t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
         ply.plot(t, acc[:,i], ['r', 'g', 'b'][i], alpha=0.7)
-    plt.plot(t, tu.rownorm(acc), 'k', lw=2)
+    ply.plot(t, tu.rownorm(acc), 'k', lw=2)
 
     limit = cfg.default_cartesian_speed / cfg.acceleration_time
     ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)

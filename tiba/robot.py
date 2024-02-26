@@ -70,7 +70,7 @@ class TibaRobot(Robot):
     ----
     """
 
-    def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5, angle=15.0):
+    def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5, angle=15.0, pressure_range=0.0):
         path = os.path.join(os.path.dirname(__file__), '../urdf/franka_description/')
         self.xacro_file = os.path.join(path, 'tiba.urdf.xacro')
         self.urdf_file = os.path.join(path, 'tiba_test.urdf')
@@ -120,6 +120,8 @@ class TibaRobot(Robot):
 
         self.addconfiguration("qr", self.qr)
         self.addconfiguration("qz", self.qz)
+
+        self.pressure_range = pressure_range
 
     def get_pose(self, q, name):
         pose = self.fkine(q, start='base', end=name)
