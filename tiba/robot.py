@@ -87,7 +87,7 @@ class TibaRobot(Robot):
 
         links, name, urdf_string, urdf_filepath = self.URDF_read(self.urdf_file,
                                                                  tld=path)
-        print(links)
+        # print(links)
         super().__init__(
             links,
             name=name,
@@ -139,29 +139,43 @@ class TibaRobot(Robot):
     def get_frame(self, q, name):
         return np.array(self.get_pose(q, name))
 
-    def pen_tcp_pose(self, q):
+    def pen_tcp_pose(self, q=None):
+        if q is None:
+            q = self.q
         return self.get_pose(q, 'tiba_pen_tcp')
 
-    def pen_tcp_pos(self, q):
+    def pen_tcp_pos(self, q=None):
+        if q is None:
+            q = self.q
         return self.get_pos(q, 'tiba_pen_tcp')
 
-    def wrist_frame(self, q):
+    def wrist_frame(self, q=None):
+        if q is None:
+            q = self.q
         frame = self.fkine(q, start='base', end='tiba_link8')
         return np.array(frame)
 
-    def hand_frame(self, q):
+    def hand_frame(self, q=None):
+        if q is None:
+            q = self.q
         frame = self.fkine(q, start='base', end='tiba_hand_tcp')
         return np.array(frame)
 
-    def pen_holder_frame(self, q):
+    def pen_holder_frame(self, q=None):
+        if q is None:
+            q = self.q
         frame = self.fkine(q, start='base', end='tiba_holder')
         return np.array(frame)
 
-    def pen_frame(self, q):
+    def pen_frame(self, q=None):
+        if q is None:
+            q = self.q
         frame = self.fkine(q, start='base', end='tiba_pen')
         return np.array(frame)
 
-    def pen_tcp_frame(self, q):
+    def pen_tcp_frame(self, q=None):
+        if q is None:
+            q = self.q
         frame = self.fkine(q, start='base', end='tiba_pen_tcp')
         return np.array(frame)
 
@@ -170,7 +184,9 @@ class TibaRobot(Robot):
         frame = frame @ np.linalg.inv(hand_to_pen)
         return frame
 
-    def robot_polylines(self, q):
+    def robot_polylines(self, q=None):
+        if q is None:
+            q = self.q
         T = self.fkine_all(q)[3:11]
         P = [A.t for A in T]
         P += [self.wrist_frame(q)[:3,3]]

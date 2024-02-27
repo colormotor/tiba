@@ -466,5 +466,5 @@ class TibaInterface:
             url = '/desk/api/operating-mode/execution'
         desk._request('post',
                   url,
-                  files={'force': force},
+                  files={'force': True},
                   headers={'X-Control-Token': desk._token.token})

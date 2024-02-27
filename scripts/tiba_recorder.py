@@ -20,12 +20,17 @@ reload(tiba.tiba_sketch)
 
 from tiba import trajectory_utils as tu
 from tiba.tiba_sketch import TibaSketch
-from tiba.tiba_sketch import imgui_text_separator
+from tiba.tiba_sketch import imgui_text_separator, imgui_color_button
 from tiba.robot import TibaRobot
 from tiba import spatial, bezier, utils, svg, geom, config
 reload(spatial)
-
+from tiba.drawing_pad import align_frame_z, align_pos_zy
 from tiba.interface import FrankaButton
+
+from spatialmath import SE3, SO3, UnitQuaternion
+from spatialmath.base import trnorm
+
+reload(tu)
 
 panda_loader = importlib.find_loader('panda_py')
 if panda_loader is not None:
@@ -50,17 +55,20 @@ params = {'Seed': (5, {'min': 0, 'max': 100}),
           },
           }
 
+button_color = [1.0, 0.5, 0.0, 1.0]
+
 def random_q():
     return list(np.random.uniform(-np.pi, np.pi, 7))
 
-tsketch = TibaSketch(flags=[])
+tsketch = TibaSketch(flags=['no_server'])
 
 def on_event(event):
     print(event)
     robot = tsketch.robot
     itiba = tsketch.itiba
+    print('Grasped: ', itiba.grasped)
     if circle_button(event):
-        if itiba.grasped:
+        if not itiba.grasped:
             print('Grasp')
             itiba.grasp(params.gripper_mm)
         else:
@@ -80,10 +88,15 @@ def on_event(event):
 
 if has_robot:
     hostname = '172.16.0.2'
-    panda = panda_py.Panda(hostname)
     desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    print("Created desk")
+    if not desk.has_control():
+        print("Forcing control")
+        desk.take_control(True)
+        desk.activate_fci()
+    panda = panda_py.Panda(hostname)
     gripper = libfranka.Gripper(hostname)
-    desk.listen(on_event)
+
 else:
     gripper = None
     desk = None
@@ -95,7 +108,7 @@ else:
 
 state = lambda: None
 state.plane_calibration = False
-
+state.programming = True # Assume robot starts in programming mode?
 
 circle_button = FrankaButton('circle')
 cross_button = FrankaButton('cross')
@@ -118,14 +131,28 @@ def setup():
         print(e)
         assert(False)
 
+    if has_robot:
+        print("Start listen")
+        desk.listen(on_event)
+    print("End init")
+
 
 def exit():
     print("Exit")
+    tsketch.release()
     if has_robot:
-        desk.stop_listen()
-
+        #desk.release_control()
+        print("Stopping listen")
+        if desk._listening:
+            desk.stop_listen()
+    print("End exit")
 
 def gui():
+    if has_robot:
+        changed, state.programming = imgui.checkbox("Programming mode", state.programming)
+        if changed:
+            tsketch.itiba.set_programming_mode(desk, state.programming)
+
     changed, state.plane_calibration = imgui.checkbox("Plane calibration", state.plane_calibration)
 
     if (not state.plane_calibration):
@@ -138,7 +165,49 @@ def gui():
     changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
     if changed:
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
+
+    if imgui.button('Align down'):
+        #tsketch.itiba.set_programming_mode(desk, False)
+        robot = tsketch.robot
+        cur_pos = robot.pen_tcp_pos()
+        cur_frame = robot.pen_tcp_frame()
+        dest_frame = np.array(cur_frame)
+        dest_frame[:3, 0] = [0, -1, 0]
+        dest_frame[:3, 1] = [-1, 0, 0]
+        dest_frame[:3, 2] = [0, 0, -1]
+        dest_frame = tu.trnorm(dest_frame)
+        print(dest_frame)
+        #dest_pos = tu.to_pose(cur_frame)
+        #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0])
+        trajectories = [tu.approach_sequence([cur_pos, dest_frame])]
+        tsketch.plan_task_trajectories(trajectories)
+        tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+        #tsketch.itiba.set_programming_mode(desk, state.programming)
     tsketch.gui()
+
+    if tsketch.itiba.Qs:
+        imgui.separator()
+        if not has_robot:
+            if imgui_color_button('Simulate trajectory', button_color):
+                #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
+                tsketch.itiba.simulate()
+        else:
+            if imgui.button('Simulate trajectory'):
+                tsketch.itiba.simulate()
+            if imgui_color_button("Execute trajectory", button_color):
+                imgui.open_popup('Execute')
+
+            if imgui.begin_popup_modal('Execute').opened:
+                imgui.text('Are you sure?')
+                if imgui.button('OK'):
+                    tsketch.itiba.set_programming_mode(desk, False)
+                    tsketch.itiba.execute()
+                    tsketch.itiba.set_programming_mode(desk, state.programming)
+                    imgui.close_current_popup()
+                imgui.same_line()
+                if imgui.button('Cancel'):
+                    imgui.close_current_popup()
+                imgui.end_popup()
 
     if 'guiding' in sketch.gui.changed:
         print('Guiding params')
@@ -158,6 +227,7 @@ def draw():
     if has_robot:
         tsketch.itiba.read_states()
 
+    #print(desk._token.id, desk._get_active_token()) #has_control())
     background(0)
     np.random.seed(params.seed)
 
@@ -169,7 +239,17 @@ def draw():
 
     tsketch.draw()
 
+    fr = tsketch.robot.pen_tcp_frame()
+    pose = tsketch.robot.pen_tcp_pose()
+    #print(np.array(pose))
+    #print('Frame is valid:', SE3.isvalid(np.array(pose)))
+    text_size(15)
+    fill(1)
+    for i in range(3):
+        text([10, 60 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
+
     tsketch.itiba.editor.draw_steps(tsketch.v3d, tsketch.robot, [0, height-70], 70, width)
+
 
 def draw_gl():
     tsketch.draw_gl()

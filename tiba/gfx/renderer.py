@@ -174,7 +174,7 @@ class Renderer:
         self.matrix_stack = [np.eye(4)]
 
     def __del__(self):
-        print("Release")
+        print("Deleting renderer")
         self.polyline_vao.release()
         self.polyline_prog.release()
 

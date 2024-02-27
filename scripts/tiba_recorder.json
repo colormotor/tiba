@@ -21,12 +21,12 @@
             "order": 3
         },
         "tsm": {
-            "dist": 4.0,
+            "dist": 1.899999737739563,
             "xoffset": 0.0,
             "voffset": 0.0,
-            "rotx": -17,
-            "roty": 47,
-            "rotz": -179
+            "rotx": -29,
+            "roty": -24,
+            "rotz": -168
         }
     },
     "presets": {},

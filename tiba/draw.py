@@ -281,6 +281,10 @@ class GlView3d:
         self.rend = renderer.Renderer()
         self.sketch_view = SketchView3d(sketch)
 
+    def release(self):
+        print("Releasing GlView3d")
+        del self.rend
+
     def set_view(self, viewport, trans, rot, fov=None):
         self.viewport = [np.array(viewport[0]),
                          np.array(viewport[1])]

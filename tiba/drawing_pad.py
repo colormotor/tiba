@@ -199,6 +199,23 @@ def align_frame_z(frame, z):
     # https://github.com/bdaiinstitute/spatialmath-python/issues/28
     return trnorm(frame)
 
+
+def align_pos_zy(pose, z, y):
+    pose = tu.to_pose(pose)
+    pose = align_frame_zy(pose, z, y)
+    return tu.to_pos_orn(pose)
+
+def align_frame_zy(frame, z, y):
+    z = np.array(z)
+    y = np.array(y)
+    frame = np.array(frame)
+    frame[:3,2] = z
+    frame[:3,0] = np.cross(y, z)
+    frame[:3,1] = np.cross(z, frame[:3,0])
+    # Must make sure we don't get precision issues
+    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
+    return trnorm(frame)
+
 def compute_frame_aligned_xy_box(P, frame):
     # Assume we are projecting to XY
     Q = geom.affine_transform(np.linalg.inv(frame), P)

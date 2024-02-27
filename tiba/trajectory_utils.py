@@ -218,12 +218,18 @@ def trapezoidal_approach(x0, x1,
 
     pose0 = to_pose(x0)
     pose1 = to_pose(x1)
+    print(np.array2string(np.array(pose0), separator=','))
+    print(np.array2string(np.array(pose1), separator=','))
+    #print(repr(np.array(pose1)))
+    print('pose0 valid', SE3.isvalid(np.array(pose0)))
+    print('pose1 valid', SE3.isvalid(np.array(pose1)))
 
     angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
     dist = np.linalg.norm(pose0.t - pose1.t)
 
     if angular_velocity is None:
         angular_velocity = cfg.default_angular_velocity
+
     if cartesian_speed is None:
         cartesian_speed = cfg.default_cartesian_speed
 
@@ -244,8 +250,12 @@ def trapezoidal_approach(x0, x1,
     timesteps = int(tr.time / dt)
     time = np.linspace(0, tr.time, timesteps)
     ts = [tr(t)[0][2]/d for t in time] # Assumin
+    print(ts)
+    print(pose0, pose1)
     approach = [pose0.interp(pose1, t) for t in ts]
     print('approach with ', len(approach), ' steps')
+    # for i, p in enumerate(approach):
+    #     print(i, np.array(p))
     return pose_traj_to_posorn(approach)
 
 def approach(a, b, *args, **kwargs):

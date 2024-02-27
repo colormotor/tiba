@@ -356,6 +356,9 @@ class TibaSketch:
 
         self.threads = []
 
+    def release(self):
+        self.v3d.release()
+
     def send_msg(self, data):
         print("Sending msg", data)
         self.msg_pub.publish(data)
@@ -587,6 +590,8 @@ class TibaSketch:
            print('TCP: ', list(tcp))
            print('q: ', list(q))
 
+        button_color = [1.0, 0.5, 0.0, 1.0]
+
         if 'drawing' in self.flags:
             imgui_text_separator('Robot Actions')
             if imgui.button('Home'):
@@ -608,7 +613,6 @@ class TibaSketch:
                 #self.compute_trajectories(debug=True)
 
             must_plan = False
-            button_color = [1.0, 0.5, 0.0, 1.0]
 
             if imgui_color_button('Compute and plan', button_color):
                 # self.compute_trajectories()
@@ -634,36 +638,39 @@ class TibaSketch:
                 self.threads.append(threading.Thread(target=plan_ik_thread, name="Planning IK"))
                 self.threads.append(compute_polygons_and_plot)
 
-        # if self.trajectories_computed and must_plan: #(must_plan or imgui.button('Plan trajectories')):
+            # if self.trajectories_computed and must_plan: #(must_plan or imgui.button('Plan trajectories')):
 
-        #     cur_pos = self.robot.pen_tcp_pos(self.robot.q)
-        #     trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
-        #     # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
-        #     trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
-        #     self.itiba.plan_task_trajectories(trajectories)
-        #     self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+            #     cur_pos = self.robot.pen_tcp_pos(self.robot.q)
+            #     trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
+            #     # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
+            #     trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
+            #     self.itiba.plan_task_trajectories(trajectories)
+            #     self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
 
-        if self.itiba.Qs:
-            imgui.separator()
-            if not state.has_ros:
-                if imgui_color_button('Simulate trajectory', button_color):
-                    #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
-                    self.itiba.simulate()
-            else:
-                if imgui.button('Simulate trajectory'):
-                    self.itiba.simulate()
-                if imgui_color_button("Execute trajectory", button_color):
-                    imgui.open_popup('Execute')
+            if self.itiba.Qs:
+                imgui.separator()
+                if not state.has_ros:
+                    if imgui_color_button('Simulate trajectory', button_color):
+                        #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
+                        self.itiba.simulate()
+                else:
+                    if imgui.button('Simulate trajectory'):
+                        self.itiba.simulate()
+                    if imgui_color_button("Execute trajectory", button_color):
+                        imgui.open_popup('Execute')
 
-                if imgui.begin_popup_modal('Execute').opened:
-                    imgui.text('Are you sure?')
-                    if imgui.button('OK'):
-                        self.send_joint_trajectory(self.itiba.Qs, self.itiba.dQs)
-                        imgui.close_current_popup()
-                    imgui.same_line()
-                    if imgui.button('Cancel'):
-                        imgui.close_current_popup()
-                    imgui.end_popup()
+                    if imgui.begin_popup_modal('Execute').opened:
+                        imgui.text('Are you sure?')
+                        if imgui.button('OK'):
+                            if 'no_server' in self.flags:
+                                self.itiba.execute()
+                            else:
+                                self.send_joint_trajectory(self.itiba.Qs, self.itiba.dQs)
+                            imgui.close_current_popup()
+                        imgui.same_line()
+                        if imgui.button('Cancel'):
+                            imgui.close_current_popup()
+                        imgui.end_popup()
 
         imgui.separator()
         imgui_info_text('Drag to rotate')
@@ -786,6 +793,9 @@ class TibaSketch:
         penframe = self.robot.pen_frame(q)
         v3d.frame(penframe, alpha=0.9, scale=0.05)
         v3d.frame(self.robot.pen_tcp_frame(q), scale=0.02)
+
+        if self.itiba.Qs:
+            v3d.frame(self.robot.pen_tcp_frame(self.itiba.Qs[-1]), scale=0.1)
 
         v3d.line_width(9)
         v3d.color(1, 0.4)
