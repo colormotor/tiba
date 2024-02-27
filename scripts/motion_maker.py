@@ -51,7 +51,7 @@ threads = []
 def setup():
     # Load parameters here for standalone
     global params
-    TibaSketch.add_parameters(params)
+    tsketch.add_parameters(params)
     params = sketch.parameters(params)
 
     #sketch.set_gui_callback(gui)

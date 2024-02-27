@@ -55,6 +55,11 @@ tools = {
         'tip_height_mm': 11.5
     },
 
+    'Molotow Thin': {
+        'tip_dist_mm': 51.0,
+        'tip_height_mm': 10.0
+    },
+
     'Calli-brush-01': {
         'tip_dist_mm': 74.0,
         'tip_height_mm': 0.0

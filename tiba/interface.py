@@ -263,6 +263,9 @@ class TibaInterface:
 
         self.cup_pos = np.array([0.1176777, -0.40658198, 0.10431843])
 
+        # Assume not in proramming mode
+        self.programming = False
+
     def launch_simulator(self):
         env = swift.Swift()
         env.launch(realtime=True)
@@ -452,3 +455,16 @@ class TibaInterface:
                                            subsample=int(cfg.dt/cfg.robot_dt))
         Qs, dQs = planner.plan(trajectories, rest=rest)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
+
+    def set_programming_mode(self, desk, flag):
+        ''' Set the robot in programming mode
+        Urls adapted from https://github.com/TimSchneider42/franky/blob/321a6b3c5cc8fc49b1e4fae9dde0cf130bb03657/franky/robot_web_session.py
+        '''
+        if flag:
+            url = '/desk/api/operating-mode/programming'
+        else:
+            url = '/desk/api/operating-mode/execution'
+        desk._request('post',
+                  url,
+                  files={'force': force},
+                  headers={'X-Control-Token': desk._token.token})

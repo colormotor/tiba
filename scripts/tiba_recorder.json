@@ -1,0 +1,34 @@
+{
+    "params": {
+        "seed": 5,
+        "gui_hue": 0.11999999731779099,
+        "gripper_mm": 34.0,
+        "guiding": {
+            "x": true,
+            "y": true,
+            "z": true,
+            "rot": true,
+            "elbow": true
+        },
+        "config": {
+            "tool": 1,
+            "cart_planner": 0,
+            "dce_thresh": 250,
+            "max_iterations": 450,
+            "isotropy": 1.0,
+            "angle": 50.0,
+            "smoothing": 0.0,
+            "order": 3
+        },
+        "tsm": {
+            "dist": 4.0,
+            "xoffset": 0.0,
+            "voffset": 0.0,
+            "rotx": -17,
+            "roty": 47,
+            "rotz": -179
+        }
+    },
+    "presets": {},
+    "aux": {}
+}

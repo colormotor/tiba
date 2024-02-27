@@ -97,23 +97,6 @@ def imgui_color_button(text, color):
     imgui.pop_style_color()
     return res
 
-# Planning routines
-def saturate_acceleration(X, dt, max_acceleration):
-    dX = np.diff(X, axis=0)/dt
-    Y = [X[0], X[1]]
-    dY = [dX[0]]
-
-
-    for x, dx in zip(X[2:], dX[1:]):
-        ddx = (dx - dY[-1])/dt
-        ddx_norm = np.linalg.norm(ddx)
-        if np.linalg.norm(ddx) > max_acceleration:
-            n = max(3, int(ddx_norm/max_acceleration)+1)
-            for t in np.linspace(0, 1, int(n))[1:-1]:
-                Y.append(Y[-1] + dx*t*dt)
-            Y.append(x)
-    return Y
-
 def plan_trapezoidal(samples,
                      max_speed,
                      accel_time,
@@ -293,7 +276,6 @@ def plan_polylines(planning_callback,
     return trajectories
 
 
-
 dip_pos = np.array([0.11812825731443674, -0.407704314564537, 0.10439764358100054,
                     -0.008107937414934388, 0.8524478856525898, -0.5214394134973193, -0.036983802520516196])
 
@@ -303,7 +285,7 @@ dip_pos = np.array([0.11812825731443674, -0.407704314564537, 0.10439764358100054
 planner_names = ['Trapezoidal', 'Minimum Jerk', 'Calligraphic', 'Test simplify']
 
 class TibaSketch:
-    def __init__(self):
+    def __init__(self, flags=['drawing']):
         self.params_to_check = [
             'seed',
             'drawing.padding',
@@ -315,11 +297,16 @@ class TibaSketch:
             'traj.angle'
         ]
 
-
+        self.flags = flags
         self.arcball = geom.ArcBall()
         self.thread_funcs = []
 
-    def init(self, sketch, callback=None, input_tools=None, panda=None, gripper=None):
+    def init(self, sketch,
+             callback=None,
+             input_tools=None,
+             panda=None,
+             gripper=None):
+
         # Actual interface to the robot. Here this is not used to control the robot directly
         # but to plan and execute trajectories
         if input_tools is None:
@@ -384,10 +371,11 @@ class TibaSketch:
         #self.trajectories_computed = False
         #self.trajectories = []
 
-    @staticmethod
-    def add_parameters(params_to_update):
+    #@staticmethod
+    def add_parameters(self, params_to_update):
         ''' Add parameters to the sketch '''
-        params = {
+        params = {}
+        params.update({
             'Config': {
                 'tool': (0, {'hide': True}),
                 'Cart planner': (0, {'selection':planner_names}),
@@ -397,14 +385,20 @@ class TibaSketch:
                 'Angle': (50.0, {'min':-90.0, 'max':90.0, 'hide':True}),
                 'Smoothing': (0.0, {'min':0.01, 'max':1.0, 'hide':True}),
                 'Order': (3, {'min':2, 'max':5, 'hide':True}),
-            },
-            'Drawing':  {
+            }
+        })
+
+        if 'drawing' in self.flags:
+            params.update({'Drawing':  {
               'Plane offset': (0.0, {'min':-20,'max': 20}),
               'Padding': (80, {'min':0.0, 'max':450}),
               'Penup mm': (50, {'min':0.0, 'max':200}),
               'Pos offset x': (0.0, {'min': -1, 'max': 1}),
               'Pos offset y': (0.0, {'min': -1, 'max': 1}),
-            },
+            }
+                           })
+
+        params.update({
             'Tsm': {
               'Dist': (4.0, {'min':0, 'max':10}),
               'Xoffset': (0.0, {'min':-1, 'max':1}),
@@ -412,8 +406,8 @@ class TibaSketch:
               'rotx': (275, {'min':0, 'max':360}),
               'roty': (0, {'min':0, 'max':360}),
               'rotz': (138, {'min':0, 'max':360}),
-          }
-        }
+            }
+        })
         params_to_update.update(params)
 
     @property
@@ -509,6 +503,12 @@ class TibaSketch:
         self.clear()
         self.draft = draft
 
+
+    def plan_task_trajectories(self, trajectories):
+        self.itiba.plan_task_trajectories(trajectories)
+        self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+        self.trajectories_computed = True
+
     def dip_trajectory(self):
         up = np.array([0, 0, 1, 0, 0, 0, 0])
         start_offset = 70/1000
@@ -532,10 +532,11 @@ class TibaSketch:
         #                 tu.xy_circles_mm(dip_next, 10, 1.5, 4, ease_duration=1.0),
         #                 tu.trapezoidal_approach(dip_next, dip_start)]
 
-        self.itiba.plan_task_trajectories(trajectories)
-        self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
-        self.trajectories_computed = True
-        print('Dip trajectory')
+        self.plan_task_trajectories(trajectories)
+        # self.itiba.plan_task_trajectories(trajectories)
+        # self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+        # self.trajectories_computed = True
+        # print('Dip trajectory')
 
     def compute_trajectories(self, debug=False):
         params = self.params
@@ -586,51 +587,52 @@ class TibaSketch:
            print('TCP: ', list(tcp))
            print('q: ', list(q))
 
-        imgui_text_separator('Robot Actions')
-        if imgui.button('Home'):
-            self.msg_pub.publish('exec:Home')
-        imgui.same_line()
-        if imgui.button('Pick Tool'):
-            self.msg_pub.publish('exec:Pick')
-        imgui.same_line()
-        if imgui.button('Release Tool'):
-            self.msg_pub.publish('exec:Release')
-        if imgui.button('Try dip'):
-            self.dip_trajectory()
+        if 'drawing' in self.flags:
+            imgui_text_separator('Robot Actions')
+            if imgui.button('Home'):
+                self.msg_pub.publish('exec:Home')
+            imgui.same_line()
+            if imgui.button('Pick Tool'):
+                self.msg_pub.publish('exec:Pick')
+            imgui.same_line()
+            if imgui.button('Release Tool'):
+                self.msg_pub.publish('exec:Release')
+            if imgui.button('Try dip'):
+                self.dip_trajectory()
 
-        imgui_text_separator('Trajectory')
+            imgui_text_separator('Trajectory')
 
-        if imgui.button('Compute trajectories only'):
-            self.threads.append(threading.Thread(target=lambda: self.compute_trajectories(debug=True),
-                                                 name="Planning trajectories"))
-            #self.compute_trajectories(debug=True)
+            if imgui.button('Compute trajectories only'):
+                self.threads.append(threading.Thread(target=lambda: self.compute_trajectories(debug=True),
+                                                    name="Planning trajectories"))
+                #self.compute_trajectories(debug=True)
 
-        must_plan = False
-        button_color = [1.0, 0.5, 0.0, 1.0]
+            must_plan = False
+            button_color = [1.0, 0.5, 0.0, 1.0]
 
-        if imgui_color_button('Compute and plan', button_color):
-            # self.compute_trajectories()
-            # must_plan = True
-            self.threads.append(threading.Thread(target=self.compute_trajectories,
-                                                 name="Planning trajectories"))
-            def plan_ik_thread():
-                time.sleep(0.2)
-                cur_pos = self.robot.pen_tcp_pos(self.robot.q)
-                trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
-                # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
-                trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
-                self.itiba.plan_task_trajectories(trajectories)
-                self.task_trajectories_augmented = trajectories
+            if imgui_color_button('Compute and plan', button_color):
+                # self.compute_trajectories()
+                # must_plan = True
+                self.threads.append(threading.Thread(target=self.compute_trajectories,
+                                                    name="Planning trajectories"))
+                def plan_ik_thread():
+                    time.sleep(0.2)
+                    cur_pos = self.robot.pen_tcp_pos(self.robot.q)
+                    trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
+                    # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
+                    trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
+                    self.itiba.plan_task_trajectories(trajectories)
+                    self.task_trajectories_augmented = trajectories
 
-            def compute_polygons_and_plot():
-                steps, fk_points = self.compute_steps(self.itiba.Qs)
-                self.steps, self.fk_points = steps, fk_points
-                self.itiba.plot_trajectory_stats(self.task_trajectories_augmented)
+                def compute_polygons_and_plot():
+                    steps, fk_points = self.compute_steps(self.itiba.Qs)
+                    self.steps, self.fk_points = steps, fk_points
+                    self.itiba.plot_trajectory_stats(self.task_trajectories_augmented)
 
-                #self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+                    #self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
 
-            self.threads.append(threading.Thread(target=plan_ik_thread, name="Planning IK"))
-            self.threads.append(compute_polygons_and_plot)
+                self.threads.append(threading.Thread(target=plan_ik_thread, name="Planning IK"))
+                self.threads.append(compute_polygons_and_plot)
 
         # if self.trajectories_computed and must_plan: #(must_plan or imgui.button('Plan trajectories')):
 
@@ -725,15 +727,16 @@ class TibaSketch:
 
         params = self.params 
         # Udate drawing pad data
-        self.pad.offset = params.drawing.plane_offset / 1000
-        self.pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
-        self.pad.update()
+        if 'drawing' in self.flags:
+            self.pad.offset = params.drawing.plane_offset / 1000
+            self.pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
+            self.pad.update()
 
-        if self.dirty or self.params_changed(*self.params_to_check):
-            paths = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=params.drawing.penup_mm)
-            self.trajectories = self.pad.fit_to_frame(paths)
-            self.trajectories_computed = False
-            self.dirty = False
+            if self.dirty or self.params_changed(*self.params_to_check):
+                paths = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=params.drawing.penup_mm)
+                self.trajectories = self.pad.fit_to_frame(paths)
+                self.trajectories_computed = False
+                self.dirty = False
 
         #if state.has_ros:
         #    rospy.spin_once()
