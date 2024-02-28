@@ -937,3 +937,53 @@ def saturate_speed(trajectory, max_speed, dt):
     return np.array(Xsat)
 
 
+def orthonormalize_xy(z, A):
+    ''' Compute X and Y axes based on z of U and x, y of A'''
+    V = np.array(A)
+    V[:3,2] = z
+    V[:3,0] = np.cross(A[:,1], z)
+    V[:3,1] = np.cross(z, A[:,0])
+    # Must make sure we don't get precision issues
+    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
+    V[:3,:3] = trnorm(V[:3,:3])
+    return V
+
+def frame_to_pos(frame):
+    pose = SE3(frame)
+    return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
+
+def align_pos_z(pose, z):
+    pose = to_pose(pose)
+    pose = align_frame_z(pose, z)
+    return to_pos_orn(pose)
+
+def align_frame_z(frame, z):
+    z = np.array(z)
+    frame = np.array(frame)
+    frame[:3,2] = z
+    frame[:3,0] = np.cross(frame[:3,1], z)
+    frame[:3,1] = np.cross(z, frame[:3,0])
+    # Must make sure we don't get precision issues
+    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
+    return trnorm(frame)
+
+def align_pos_zy(pose, z, y):
+    pose = to_pose(pose)
+    pose = align_frame_zy(pose, z, y)
+    return to_pos_orn(pose)
+
+def align_pose_zy(pose, z, y):
+    pose = to_pose(pose)
+    pose = align_frame_zy(pose, z, y)
+    return to_pose(pose)
+
+def align_frame_zy(frame, z, y):
+    z = np.array(z)
+    y = np.array(y)
+    frame = np.array(frame)
+    frame[:3,2] = z
+    frame[:3,0] = np.cross(y, z)
+    frame[:3,1] = np.cross(z, frame[:3,0])
+    # Must make sure we don't get precision issues
+    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
+    return trnorm(frame)

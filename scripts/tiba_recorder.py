@@ -23,7 +23,6 @@ from tiba.tiba_sketch import TibaSketch
 from tiba.robot import TibaRobot
 from tiba import spatial, bezier, utils, svg, geom, config, ui
 reload(spatial)
-from tiba.drawing_pad import align_frame_z, align_pos_zy
 from tiba.interface import FrankaButton
 
 from spatialmath import SE3, SO3, UnitQuaternion
@@ -110,10 +109,28 @@ state = lambda: None
 state.plane_calibration = False
 state.programming = True # Assume robot starts in programming mode?
 state.dest_pose = None
+state.move_amount = np.zeros(3)
 
 circle_button = FrankaButton('circle')
 cross_button = FrankaButton('cross')
 check_button = FrankaButton('check')
+
+def check_collision(q, itiba):
+    r = itiba.collision_robot
+    r.q = q
+    collision_links = [link for link in r.links if link.collision][3:] #[4:-1]
+    print([l.name for l in collision_links])
+    n = len(collision_links)
+    for i in range(n):
+        stop = False
+        for j in range(i+2, n):
+            isCollide = collision_links[i].iscollided(shape = collision_links[j].collision[0])
+            if isCollide:
+                stop = True
+                print("--COLLISION DETECT:",collision_links[i].name," will collide with ",collision_links[j].name)
+                break
+        if stop: break
+    return stop
 
 
 def setup():
@@ -151,6 +168,10 @@ def setup():
     #                 2.155968632893118,
     #                 0.8315813678712944
     #             ]
+    # Self collision
+    #tsketch.robot.q = [-1.639689114087109, -1.7716644918674729, 0.007238895131838701, -3.013367922364223, -0.015000028089361048, 0.9541045565059841, 0.7067115097185542]
+
+    check_collision(tsketch.robot.q, tsketch.itiba)
 
     if has_robot:
         print("Start listen")
@@ -202,7 +223,7 @@ def gui():
         #dest_pos = tu.to_pose(cur_frame)
         #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
         #tu.to_pose(cur_pos) #cur_frame #tu.to_pose(
-        dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0]) # On left (pick pens)
+        dest_pos = tu.align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0]) # On left (pick pens)
         cur_frame = robot.pen_tcp_pose() #robot.hand_frame_to_pen_tcp(tu.to_pose(cur_pos))
         dest_frame = robot.hand_frame_to_pen_tcp(tu.to_pose(dest_pos))
 
@@ -223,26 +244,52 @@ def gui():
         # print(dest_frame)
         #dest_pos = tu.to_pose(cur_frame)
         #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
-        dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0]) # On left (pick pens)
+        dest_pos = tu.align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0]) # On left (pick pens)
 
         trajectories = [tu.approach_sequence([cur_pos, dest_pos])]
         tsketch.plan_task_trajectories(trajectories)
         tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
         #tsketch.itiba.set_programming_mode(desk, state.programming)
+
+    if imgui.button('Try script'):
+        tsketch.plan_script('motions/dip.py', dip_radius_mm=7.5, clean_radius_mm=14.0)
+        if tsketch.itiba.Qs:
+            tsketch.itiba.plot_trajectory_stats()
+
+    dest_position = None
+
+    for i in range(3):
+        _, state.move_amount[i] = imgui.slider_float("Move %s mm"%['X', 'Y', 'Z'][i], state.move_amount[i], -300, 300.0)
+
+    dest_frame = np.array(tsketch.robot.pen_tcp_frame())
+    dest_frame[:3, 3] += state.move_amount/1000.0
+    #print(dest_frame)
+    state.dest_pose = tu.to_pose(dest_frame)
+
+    if np.linalg.norm(state.move_amount) > 0:
+        dest_frame = np.array(tsketch.robot.pen_tcp_frame())
+        if imgui.button('Make Move'):
+            dest_position = state.dest_pose
+            state.move_amount = np.zeros(3)
     if tsketch.itiba.editor.get_cur_position():
         if ui.imgui_color_button('Cartesian move to position'):
             q = tsketch.itiba.editor.get_cur_position()
-            cur_pos = tsketch.robot.pen_tcp_pos()
-            #home_pos = tsketch.robot.pen_tcp_pos(tsketch.robot.home)
-            dest_pos = tsketch.robot.pen_tcp_pos(q)
-            trajectories = [tu.approach_sequence([cur_pos, dest_pos])]
-            tsketch.plan_task_trajectories(trajectories)
-            tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+            dest_position = tsketch.robot.pen_tcp_pos(q)
 
         if ui.imgui_color_button('Joint move to position'):
             q = tsketch.itiba.editor.get_cur_position()
             tsketch.plan_joint_approach(q)
             tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+
+    if dest_position is not None:
+        cur_pos = tsketch.robot.pen_tcp_pos()
+            #home_pos = tsketch.robot.pen_tcp_pos(tsketch.robot.home)
+
+        trajectories = [tu.approach_sequence([cur_pos, dest_position])]
+        tsketch.plan_task_trajectories(trajectories)
+        tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+
+
         #
     tsketch.gui()
 
@@ -293,6 +340,8 @@ def draw():
     if has_robot:
         tsketch.itiba.read_states()
 
+
+
     #print(desk._token.id, desk._get_active_token()) #has_control())
     background(0)
     np.random.seed(params.seed)
@@ -318,31 +367,9 @@ def draw():
 
 
 def draw_gl():
+    v3d = tsketch.v3d
     tsketch.begin_draw_gl()
     tsketch.draw_gl_main()
-
-    v3d = tsketch.v3d
-    robot = tsketch.robot
-    cur_pos = robot.get_pos(None, 'tiba_hand_tcp')
-        # cur_frame = robot.pen_tcp_frame()
-        # dest_frame = np.array(cur_frame)
-        # dest_frame[:3, 0] = [0, -1, 0]
-        # dest_frame[:3, 1] = [-1, 0, 0]
-        # dest_frame[:3, 2] = [0, 0, -1]
-        # dest_frame = tu.trnorm(dest_frame)
-        # print(dest_frame)
-
-        #dest_pos = tu.to_pose(cur_frame)
-        #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
-        #tu.to_pose(cur_pos) #cur_frame #tu.to_pose(
-    #state.dest_pose = cur_pose
-    state.dest_pose = tu.to_pose(cur_pos) #
-    state.dest_pose = robot.hand_frame_to_pen_tcp(state.dest_pose)
-    #state.dest_pose = tu.to_pose(align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0]))
-    #cur_frame = robot.hand_frame_to_pen_tcp(tu.to_pose(cur_pos))
-
-    #dest_frame = robot.hand_frame_to_pen_tcp(tu.to_pose(dest_pos))
-
 
     if state.dest_pose is not None:
         v3d.frame(np.array(state.dest_pose), alpha=0.9, scale=0.1)

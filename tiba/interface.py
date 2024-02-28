@@ -16,7 +16,7 @@ import importlib
 
 import numpy as np
 import os, sys, time
-
+import traceback
 
 import roboticstoolbox as rtb
 from spatialmath import SE3, SO3, UnitQuaternion
@@ -337,6 +337,7 @@ class TibaInterface:
         self.pad.update()
 
         self.robot = robot.TibaRobot()
+        self.collision_robot = robot.TibaRobot()
         self.grasped = False
 
         self.plot_path = plot_path
@@ -364,6 +365,8 @@ class TibaInterface:
         self.clear()
         self.robot = robot.TibaRobot(**tool_dict)
         self.robot.q = self.robot.home
+        self.collision_robot = robot.TibaRobot(**tool_dict)
+        self.collision_robot.q = self.collision_robot.home
 
     def simulate(self):
         env = swift.Swift()
@@ -533,17 +536,23 @@ class TibaInterface:
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
         self.plan_task_trajectories(trajectories, rest)
 
-    def plan_task_trajectories(self, trajectories, rest=0.1):
+    def compute_task_trajectories(self, trajectories, rest=0.1, q=None):
         ''' Plan trajectories for the robot given in task space as
         a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
         The result is a joint trajectory sampled at (1.0 / cfg.robot_dt) Hz
         '''
+        if q is None:
+            q = self.robot.q
         planner = ilqr.iLQRPlannerVelocity(self.robot.urdf_file,
-                                           self.robot.q,
+                                           q,
                                            subsample=int(cfg.dt/cfg.robot_dt),
                                            )
         Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits)
+        return Qs, dQs
+
+    def plan_task_trajectories(self, trajectories, rest=0.1, q=None):
+        Qs, dQs = self.compute_task_trajectories(trajectories, rest, q)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
     def set_programming_mode(self, desk, flag):
@@ -558,3 +567,104 @@ class TibaInterface:
                   url,
                   files={'force': True},
                   headers={'X-Control-Token': desk._token.token})
+
+
+    def plan_script(self, path, **kwargs):
+        # Local functions
+        import numpy as np
+
+        # Local state to incrementally build trajectory
+        state = lambda: None
+        state.q = self.robot.q
+        state.pose = self.robot.pen_tcp_pose(state.q)
+
+        # Clear joint trajectory
+        self.Qs = []
+        self.dQs = []
+
+        print(kwargs)
+        # local variable context for script (updated later)
+        var_context = {}
+
+        def require_args(*args):
+            missing = []
+            for arg in args:
+                if arg not in kwargs:
+                    missing.append(arg)
+            if missing:
+                raise(ValueError("Missing arguments: " + ", ".join(missing)))
+
+        def update_state(q):
+            state.q = q
+            state.pose = self.robot.pen_tcp_pose(state.q)
+
+        def joint_move(q):
+            if type(q) == str:
+                q = self.editor.get_position(q)
+            Q, dQ = tu.joint_approach(state.q, q)
+            self.Qs += list(Q)
+            self.dQs += list(dQ)
+            update_state(self.Qs[-1])
+
+        def tool_align():
+            dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
+            trajectories = [tu.approach_sequence([state.pose, dest_pose])]
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            self.Qs += list(Qs)
+            self.dQs += list(dQs)
+            update_state(self.Qs[-1])
+
+        def dip_align():
+            dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
+            trajectories = [tu.approach_sequence([state.pose, dest_pose])]
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            self.Qs += list(Qs)
+            self.dQs += list(dQs)
+            update_state(self.Qs[-1])
+
+        def goto_xyz(pos):
+            #print(state.pose)
+            dest_pose = np.array(state.pose)
+            dest_pose[:3, 3] = pos
+            #print(dest_pose)
+            trajectories = [tu.approach_sequence([state.pose, dest_pose])]
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            self.Qs += list(Qs)
+            self.dQs += list(dQs)
+            update_state(self.Qs[-1])
+
+        def xy_circles(radius_mm, rep):
+            p0 = state.pose.t
+            pts = [p0]
+            n = max(5, int(4*np.pi*radius_mm)) # 0.5 mm steps
+            radius = radius_mm/1000
+            for i in range(rep):
+                for a in np.linspace(0, 2*np.pi, n)[:-1]:
+                    pts.append(p0 + np.array([np.cos(a), np.sin(a), 0])*radius)
+            pts.append(p0)
+
+            paths, _, _ = tu.plan_polylines_time_optimal([np.array(pts)],
+                                                                  max_speed=cfg.default_cartesian_speed,
+                                                                  accel_time=cfg.acceleration_time,
+                                                                  tol=0.01)
+            orn = tu.to_pos_orn(state.pose)[3:]
+            trajectories = [[np.concatenate([p, orn]) for p in P] for P in paths]
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            self.Qs += list(Qs)
+            self.dQs += list(dQs)
+            update_state(self.Qs[-1])
+
+        print("Compiling script")
+        # update varaibles for script
+        var_context.update(locals())
+        var_context.update(kwargs)
+        # Try compiling and executing
+        try:
+            prog_text = open(path).read()
+            prog = compile(prog_text, path, 'exec')
+            exec(prog, var_context)
+            # Success, view joint trjectory
+        except Exception as e:
+            print('Error in script: ' + path)
+            print(e)
+            traceback.print_exc()

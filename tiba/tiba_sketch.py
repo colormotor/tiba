@@ -512,10 +512,16 @@ class TibaSketch:
         self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
         self.trajectories_computed = True
 
+    def plan_script(self, path, **kwargs):
+        self.itiba.plan_script(path, **kwargs)
+        self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+        self.trajectories_computed = True
+
     def plan_task_trajectories(self, trajectories):
         self.itiba.plan_task_trajectories(trajectories)
         self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
         self.trajectories_computed = True
+
 
     def dip_trajectory(self):
         up = np.array([0, 0, 1, 0, 0, 0, 0])
@@ -525,7 +531,7 @@ class TibaSketch:
         dip_start = dip_pos + up*start_offset
 
         print(dip_start)
-        dip_start = planner.align_pos_z(dip_start, np.array([0, 0, -1]))
+        dip_start = tu.align_pos_z(dip_start, np.array([0, 0, -1]))
         dip_rim = dip_start - up*start_offset
         dip_in = dip_rim - up*dip_offset #planner.align_frame_z(dip_start, np.array([0, 0, -1]))
         dip_clean = dip_rim - up*clean_offset

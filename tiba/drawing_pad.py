@@ -82,7 +82,7 @@ class DrawingPad:
         frame = np.eye(4)
         frame[:3,:3] = U
         frame[:3, 3] = mu
-        frame[:3, :3] = orthonormalize_xy(U[:3,2], np.eye(3))
+        frame[:3, :3] = tu.orthonormalize_xy(U[:3,2], np.eye(3))
         self.frame = frame
 
         # Compute bounding box for sample points
@@ -96,7 +96,7 @@ class DrawingPad:
     def get_pen_orientation(self, robot, q):
         z = self.frame[:3,2]
         tcp_frame = robot.pen_tcp_frame(q)
-        tcp_frame = align_frame_z(tcp_frame, -z)
+        tcp_frame = tu.align_frame_z(tcp_frame, -z)
         return np.array(UnitQuaternion(SE3(tcp_frame)))
 
     def augment_with_pen_orientation(self, trajectories, robot, q):
@@ -169,52 +169,6 @@ def principal_components(X, resolve_signs=False):
 #     V[:3,:3] = trnorm(V[:3,:3])
 #     return V
 
-def orthonormalize_xy(z, A):
-    ''' Compute X and Y axes based on z of U and x, y of A'''
-    V = np.array(A)
-    V[:3,2] = z
-    V[:3,0] = np.cross(A[:,1], z)
-    V[:3,1] = np.cross(z, A[:,0])
-    # Must make sure we don't get precision issues
-    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
-    V[:3,:3] = trnorm(V[:3,:3])
-    return V
-
-def frame_to_pos(frame):
-    pose = SE3(frame)
-    return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
-
-def align_pos_z(pose, z):
-    pose = tu.to_pose(pose)
-    pose = align_frame_z(pose, z)
-    return tu.to_pos_orn(pose)
-
-def align_frame_z(frame, z):
-    z = np.array(z)
-    frame = np.array(frame)
-    frame[:3,2] = z
-    frame[:3,0] = np.cross(frame[:3,1], z)
-    frame[:3,1] = np.cross(z, frame[:3,0])
-    # Must make sure we don't get precision issues
-    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
-    return trnorm(frame)
-
-
-def align_pos_zy(pose, z, y):
-    pose = tu.to_pose(pose)
-    pose = align_frame_zy(pose, z, y)
-    return tu.to_pos_orn(pose)
-
-def align_frame_zy(frame, z, y):
-    z = np.array(z)
-    y = np.array(y)
-    frame = np.array(frame)
-    frame[:3,2] = z
-    frame[:3,0] = np.cross(y, z)
-    frame[:3,1] = np.cross(z, frame[:3,0])
-    # Must make sure we don't get precision issues
-    # https://github.com/bdaiinstitute/spatialmath-python/issues/28
-    return trnorm(frame)
 
 def compute_frame_aligned_xy_box(P, frame):
     # Assume we are projecting to XY
