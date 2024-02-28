@@ -35,7 +35,7 @@ from . import matplotlyb as ply
 from . import planner
 from .config import cfg
 from . import trajectory_utils as tu
-from . import draw, geom, config
+from . import draw, geom, config, ui
 from .gfx import renderer
 reload(renderer)
 reload(tu)
@@ -43,6 +43,7 @@ reload(planner)
 reload(draw)
 reload(ply)
 reload(geom)
+reload(ui)
 from .draw import View3d, SketchView3d, GlView3d, plotly_plot
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
@@ -71,31 +72,31 @@ if rosloader is not None:
     from std_msgs.msg import Duration
     state.has_ros = True
 
-# GUI helpers
-def imgui_title(text):
-    imgui.push_style_color(imgui.COLOR_HEADER, 0.3, 0.3, 0.3, 1.0)
-    imgui.selectable(text, True)
-    imgui.pop_style_color()
+# # GUI helpers
+# def imgui_title(text):
+#     imgui.push_style_color(imgui.COLOR_HEADER, 0.3, 0.3, 0.3, 1.0)
+#     imgui.selectable(text, True)
+#     imgui.pop_style_color()
 
-def imgui_info_text(text):
-    imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
-    imgui.text(text)
-    imgui.pop_style_color()
+# def imgui_info_text(text):
+#     imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
+#     imgui.text(text)
+#     imgui.pop_style_color()
 
-def imgui_text_separator(text):
-    imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
-    imgui.text(text)
-    imgui.same_line()
-    imgui.separator()
-    imgui.pop_style_color()
+# def imgui_text_separator(text):
+#     imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
+#     imgui.text(text)
+#     imgui.same_line()
+#     imgui.separator()
+#     imgui.pop_style_color()
 
-def imgui_color_button(text, color):
-    if len(color) == 3:
-        color = np.concatenate([color, [1.0]])
-    imgui.push_style_color(imgui.COLOR_BUTTON, *color)
-    res = imgui.button(text)
-    imgui.pop_style_color()
-    return res
+# def imgui_color_button(text, color):
+#     if len(color) == 3:
+#         color = np.concatenate([color, [1.0]])
+#     imgui.push_style_color(imgui.COLOR_BUTTON, *color)
+#     res = imgui.button(text)
+#     imgui.pop_style_color()
+#     return res
 
 def plan_trapezoidal(samples,
                      max_speed,
@@ -593,7 +594,7 @@ class TibaSketch:
         button_color = [1.0, 0.5, 0.0, 1.0]
 
         if 'drawing' in self.flags:
-            imgui_text_separator('Robot Actions')
+            ui.imgui_text_separator('Robot Actions')
             if imgui.button('Home'):
                 self.msg_pub.publish('exec:Home')
             imgui.same_line()
@@ -605,7 +606,7 @@ class TibaSketch:
             if imgui.button('Try dip'):
                 self.dip_trajectory()
 
-            imgui_text_separator('Trajectory')
+            ui.imgui_text_separator('Trajectory')
 
             if imgui.button('Compute trajectories only'):
                 self.threads.append(threading.Thread(target=lambda: self.compute_trajectories(debug=True),
@@ -614,7 +615,7 @@ class TibaSketch:
 
             must_plan = False
 
-            if imgui_color_button('Compute and plan', button_color):
+            if ui.imgui_color_button('Compute and plan'):
                 # self.compute_trajectories()
                 # must_plan = True
                 self.threads.append(threading.Thread(target=self.compute_trajectories,
@@ -650,13 +651,13 @@ class TibaSketch:
             if self.itiba.Qs:
                 imgui.separator()
                 if not state.has_ros:
-                    if imgui_color_button('Simulate trajectory', button_color):
+                    if ui.imgui_color_button('Simulate trajectory'):
                         #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
                         self.itiba.simulate()
                 else:
                     if imgui.button('Simulate trajectory'):
                         self.itiba.simulate()
-                    if imgui_color_button("Execute trajectory", button_color):
+                    if ui.imgui_color_button("Execute trajectory"):
                         imgui.open_popup('Execute')
 
                     if imgui.begin_popup_modal('Execute').opened:
@@ -673,8 +674,8 @@ class TibaSketch:
                         imgui.end_popup()
 
         imgui.separator()
-        imgui_info_text('Drag to rotate')
-        imgui_info_text('Ctrl+drag to zoom, Shift+drag to pan')
+        ui.imgui_info_text('Drag to rotate')
+        ui.imgui_info_text('Ctrl+drag to zoom, Shift+drag to pan')
 
 
         # Threading
@@ -796,6 +797,15 @@ class TibaSketch:
 
         if self.itiba.Qs:
             v3d.frame(self.robot.pen_tcp_frame(self.itiba.Qs[-1]), scale=0.1)
+
+        cur_q = self.itiba.editor.get_cur_position()
+        if cur_q:
+            P, penP = self.robot.robot_polylines(cur_q)
+            v3d.color(0.5, 0.0, 0.0, 0.5)
+            v3d.line_width(2)
+            v3d.polyline(P)
+            penframe = self.robot.pen_frame(cur_q)
+            v3d.frame(penframe, alpha=0.3, scale=0.05)
 
         v3d.line_width(9)
         v3d.color(1, 0.4)

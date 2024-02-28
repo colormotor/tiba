@@ -196,6 +196,11 @@ def stroke(X, color=None, **kwargs):
         color = mcolors.to_rgb(color)
     glob.fig.add_plot(Plot2d(X[:,0], X[:,1], color=color, **kwargs))
 
+def axis_3d(A, size, **kwargs):
+    glob.fig.add_plot(Plot3d([A[:3,3], A[:3,3] + A[:3,0]*size], 'r', **kwargs))
+    glob.fig.add_plot(Plot3d([A[:3,3], A[:3,3] + A[:3,1]*size], 'g', **kwargs))
+    glob.fig.add_plot(Plot3d([A[:3,3], A[:3,3] + A[:3,2]*size], 'b', **kwargs))
+
 def stroke3d(X, color=None, **kwargs):
     if type(X) == list and X and not is_number(X[0][0]):
         print('complex')
@@ -330,8 +335,10 @@ def show_plt(fig):
                             clr = categorical_color(k)
                         else:
                             clr = plot.clr
-
-                        ax.plot(x, y, z, color=clr, lw=plot.lw,
+                        x=plot.X[:,0]
+                        y=plot.X[:,1]
+                        z=plot.X[:,2]
+                        plt.plot(x, y, z, color=clr, lw=plot.lw,
                                 ls=plot.ls, alpha=plot.alpha,
                                 label=plot.label)
                 if ax.equal:

@@ -22,6 +22,8 @@ from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 from scipy.interpolate import interp1d, splprep, splev, make_interp_spline, CubicSpline, BPoly
 from roboticstoolbox.tools.trajectory import ctraj, trapezoidal_func, trapezoidal
+from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Slerp
 from collections import defaultdict
 from math import hypot
 import motor.lqt as lqt
@@ -92,6 +94,26 @@ def rest_inout(traj, duration):
     return [traj[0]]*n + traj + [traj[-1]]*n
 
 # Trajectory generators
+def SE3_interp(a, b, t):
+    ''' Spherical linear interpolation between two SE3 poses
+    The spatialmath version (`a.slerp(b, t)`) seems to break for simlar rotations
+    See: https://github.com/bdaiinstitute/spatialmath-python/issues/41
+    Maybe due to numerical issues?
+    '''
+    pa = a.t
+    pb = b.t
+    qa = UnitQuaternion(a)
+    qb = UnitQuaternion(b)
+    rots = R.from_quat([np.array(qa), np.array(qb)])
+    slerp = Slerp([0, 1], rots)
+    d = pb - pa
+    if type(t) is float:
+        res = np.concatenate([pa + t*d, slerp(t).as_quat()])
+        print(SE3.isvalid(np.array(to_pose(res))))
+        return res
+    res = [np.concatenate([pa + ti*d, slerp(ti).as_quat()]) for ti in t]
+    return res
+
 def xy_circles_mm(pose, radius_mm, cycle_duration, cycles=1, ease_duration=0.5, easing=2, sign=1):
     pose = to_pos_orn(pose)
     pos, orn = pose[:3], pose[3:]
@@ -205,8 +227,9 @@ def linear_approach(x0, x1, duration=0,
     n = int(duration/cfg.dt)
     # Compute appriach keypoints if necessary
     if n > 0:
-        approach = pose0.interp(pose1, n)
-        approach = [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in approach]
+        approach = SE3.interp(pose0, pose1, np.linspace(0, 1, n))
+        #approach = pose0.interp(pose1, n)
+        #approach = [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in approach]
         return approach
     return []
 
@@ -250,13 +273,13 @@ def trapezoidal_approach(x0, x1,
     timesteps = int(tr.time / dt)
     time = np.linspace(0, tr.time, timesteps)
     ts = [tr(t)[0][2]/d for t in time] # Assumin
-    print(ts)
-    print(pose0, pose1)
-    approach = [pose0.interp(pose1, t) for t in ts]
-    print('approach with ', len(approach), ' steps')
-    # for i, p in enumerate(approach):
-    #     print(i, np.array(p))
-    return pose_traj_to_posorn(approach)
+    #print(ts)
+    #print(pose0, pose1)
+    approach = SE3_interp(pose0, pose1, ts)
+    return approach
+
+    # approach = [pose0.interp(pose1, t) for t in ts]
+    # return pose_traj_to_posorn(approach)
 
 def approach(a, b, *args, **kwargs):
     return trapezoidal_approach(a, b, *args, **kwargs)
@@ -317,8 +340,9 @@ def gauss_approach(x0, x1, duration=-1,
 
     n = int(duration/cfg.dt)
     if n > 0:
-        approach = [pose0.interp(pose1, t) for t in gaussspace(0, 1, n, easing=easing)]
-        return pose_traj_to_posorn(approach)
+        return SE3_interp(pose0, pose1, gaussspace(0, 1, n, easing=easing))
+        #approach = [pose0.interp(pose1, t) for t in gaussspace(0, 1, n, easing=easing)]
+        #return pose_traj_to_posorn(approach)
     return []
 
 

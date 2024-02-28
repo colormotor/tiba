@@ -27,7 +27,7 @@ import swift
 
 from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
-from . import utils, geom
+from . import utils, geom, ui
 
 from importlib import reload
 reload(ilqr)
@@ -35,7 +35,7 @@ reload(ilqr)
 cfg = config.cfg
 
 class FrankaButton:
-
+    ''' Keeps track of the state of a robot button'''
     def __init__(self, button='circle'):
         self.button = button
         self.state = False
@@ -50,21 +50,45 @@ class FrankaButton:
         return res
 
 class MotionEditor:
-    def __init__(self, path='motions_desk.json'):
+    def __init__(self, path='motions_desk.json', positions_path='key_positions.json'):
         try:
             self.motions = utils.load_json(path)
         except:
             self.motions = {}
+
+        try:
+            self.positions = utils.load_json(positions_path)
+        except Exception as e:
+            print(e)
+            self.positions = {}
+
         self.path = path
-        self.new_motion_name = ''
         self.cur_motion = -1
         self.cur_step = -1
+
+        self.positions_path = path
+        self.new_motion_name = 'Insert name'
+        self.cur_position = -1
+
+        self.new_motion_name = 'Insert name'
+
+    def get_cur_position(self):
+        names = list(self.positions.keys())
+        if self.cur_position < 0 or self.cur_position >= len(names):
+            return {}
+        return self.positions[names[self.cur_position]]
 
     def get_cur_motion(self):
         names = list(self.motions.keys())
         if self.cur_motion < 0 or self.cur_motion >= len(names):
             return {}
         return self.motions[names[self.cur_motion]]
+
+    def save_positions(self):
+        if not self.positions:
+            return
+        print(self.positions)
+        utils.save_json(self.positions, self.positions_path)
 
     def save_motions(self):
         if not self.motions:
@@ -124,21 +148,51 @@ class MotionEditor:
         print('Cur motion set to %s'%list(self.motions.keys())[self.cur_motion])
         return True
 
+    def add_position(self, name, q):
+        if not name:
+            print("No name")
+            return
+
+        if name not in self.positions:
+            self.positions[name] = list(q)
+            self.save_positions()
+        else:
+            print("Motion already exists")
+
+    def delete_position(self, name):
+        if name in self.positions:
+            self.positions.pop(name)
+            self.cur_position = -1
+            self.save_positions()
+        else:
+            print("Position does not exist")
+
+    def set_cur_position(self, name):
+        if name not in self.positions.keys():
+            print("Motion %s does not exist"%name)
+            self.cur_position = -1
+            return False
+        self.cur_position = list(self.positions.keys()).index(name)
+        print('Cur position set to %s'%list(self.positions.keys())[self.cur_position])
+        return True
+
     def gui(self, imgui, itiba):
         names = list(self.motions.keys())
         if self.cur_motion >= len(names):
             self.cur_motion = -1
 
-        clicked, self.cur_motion = imgui.listbox("Motions", self.cur_motion, names)
+        ui.imgui_text_separator("Recorded Motions")
+        clicked, self.cur_motion = imgui.listbox("Motion Label", self.cur_motion, names)
         if clicked:
             print(self.cur_motion)
 
-        if imgui.button("Add"):
+        if imgui.button("Add Motion"):
             imgui.open_popup('Add motion')
 
+        imgui.set_next_window_size(300, 200)
         if imgui.begin_popup_modal('Add motion').opened:
             imgui.text("Select name")
-            changed, self.new_motion_name = imgui.input_text('Name', self.new_motion_name, 512)
+            changed, self.new_motion_name = imgui.input_text('', self.new_motion_name, 512)
 
             if imgui.button('OK'):
                 self.add_motion(self.new_motion_name)
@@ -155,6 +209,32 @@ class MotionEditor:
             if self.get_cur_motion():
                 imgui.text(names[self.cur_motion])
                 self.motion_gui(imgui, itiba, names[self.cur_motion])
+
+        names = list(self.positions.keys())
+        if self.cur_position >= len(names):
+            self.cur_position = -1
+
+        ui.imgui_text_separator("Key positions")
+        clicked, self.cur_position = imgui.listbox("Position Label", self.cur_position, names)
+        if clicked:
+            print(self.cur_position)
+
+        if imgui.button("Add Position"):
+            imgui.open_popup('Add position')
+
+        imgui.set_next_window_size(300, 200)
+        if imgui.begin_popup_modal('Add position').opened:
+            imgui.text("Select name")
+            changed, self.new_motion_name = imgui.input_text('', self.new_motion_name, 512)
+
+            if imgui.button('OK'):
+                self.add_position(self.new_motion_name, itiba.robot.q)
+                imgui.close_current_popup()
+            imgui.same_line()
+            if imgui.button('Cancel'):
+                imgui.close_current_popup()
+            imgui.end_popup()
+
 
 
     def motion_gui(self, imgui, itiba, key):

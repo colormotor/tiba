@@ -1,7 +1,7 @@
 {
     "params": {
         "seed": 5,
-        "gui_hue": 0.11999999731779099,
+        "gui_hue": 0.20200000703334808,
         "gripper_mm": 34.0,
         "guiding": {
             "x": true,
@@ -11,7 +11,7 @@
             "elbow": true
         },
         "config": {
-            "tool": 1,
+            "tool": 0,
             "cart_planner": 0,
             "dce_thresh": 250,
             "max_iterations": 450,
@@ -21,12 +21,12 @@
             "order": 3
         },
         "tsm": {
-            "dist": 1.899999737739563,
+            "dist": 1.8999987840652466,
             "xoffset": 0.0,
             "voffset": 0.0,
-            "rotx": -29,
-            "roty": -24,
-            "rotz": -168
+            "rotx": -49,
+            "roty": -18,
+            "rotz": 177
         }
     },
     "presets": {},

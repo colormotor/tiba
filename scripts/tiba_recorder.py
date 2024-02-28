@@ -20,9 +20,8 @@ reload(tiba.tiba_sketch)
 
 from tiba import trajectory_utils as tu
 from tiba.tiba_sketch import TibaSketch
-from tiba.tiba_sketch import imgui_text_separator, imgui_color_button
 from tiba.robot import TibaRobot
-from tiba import spatial, bezier, utils, svg, geom, config
+from tiba import spatial, bezier, utils, svg, geom, config, ui
 reload(spatial)
 from tiba.drawing_pad import align_frame_z, align_pos_zy
 from tiba.interface import FrankaButton
@@ -31,6 +30,7 @@ from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 
 reload(tu)
+reload(ui)
 
 panda_loader = importlib.find_loader('panda_py')
 if panda_loader is not None:
@@ -131,6 +131,26 @@ def setup():
         print(e)
         assert(False)
 
+    # Dip pos
+    tsketch.robot.q = [                   -1.2621834561240015,
+                    -0.5742350572707479,
+                    -0.04934481753466121,
+                    -2.510081760803854,
+                    -0.014960459649711948,
+                    2.1480748627228876,
+                    0.9754806254955254]
+
+    # Pick pens
+    tsketch.robot.q = [
+                    0.8923272938377215,
+                    -0.3647182149714724,
+                    0.26038909909143254,
+                    -2.45132644355543,
+                    0.07505659465603819,
+                    2.155968632893118,
+                    -2.8190804380883363
+                ]
+
     if has_robot:
         print("Start listen")
         desk.listen(on_event)
@@ -161,7 +181,7 @@ def gui():
         if imgui.button('Clear points'):
             tsketch.itiba.pad.clear()
 
-    imgui_text_separator("Robot")
+    ui.imgui_text_separator("Robot")
     changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
     if changed:
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
@@ -170,16 +190,18 @@ def gui():
         #tsketch.itiba.set_programming_mode(desk, False)
         robot = tsketch.robot
         cur_pos = robot.pen_tcp_pos()
-        cur_frame = robot.pen_tcp_frame()
-        dest_frame = np.array(cur_frame)
-        dest_frame[:3, 0] = [0, -1, 0]
-        dest_frame[:3, 1] = [-1, 0, 0]
-        dest_frame[:3, 2] = [0, 0, -1]
-        dest_frame = tu.trnorm(dest_frame)
-        print(dest_frame)
+        # cur_frame = robot.pen_tcp_frame()
+        # dest_frame = np.array(cur_frame)
+        # dest_frame[:3, 0] = [0, -1, 0]
+        # dest_frame[:3, 1] = [-1, 0, 0]
+        # dest_frame[:3, 2] = [0, 0, -1]
+        # dest_frame = tu.trnorm(dest_frame)
+        # print(dest_frame)
         #dest_pos = tu.to_pose(cur_frame)
-        #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0])
-        trajectories = [tu.approach_sequence([cur_pos, dest_frame])]
+        #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
+        dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On left (pick pens)
+
+        trajectories = [tu.approach_sequence([cur_pos, dest_pos])]
         tsketch.plan_task_trajectories(trajectories)
         tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
         #tsketch.itiba.set_programming_mode(desk, state.programming)
@@ -188,13 +210,13 @@ def gui():
     if tsketch.itiba.Qs:
         imgui.separator()
         if not has_robot:
-            if imgui_color_button('Simulate trajectory', button_color):
+            if ui.imgui_color_button('Simulate trajectory'):
                 #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
                 tsketch.itiba.simulate()
         else:
             if imgui.button('Simulate trajectory'):
                 tsketch.itiba.simulate()
-            if imgui_color_button("Execute trajectory", button_color):
+            if ui.imgui_color_button("Execute trajectory"):
                 imgui.open_popup('Execute')
 
             if imgui.begin_popup_modal('Execute').opened:
