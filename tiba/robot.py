@@ -66,6 +66,16 @@ tools = {
     }
 }
 
+# Braccio joint limits
+q_min_braccio = [0.0, 0.262, 0.0, 0.0, 0.0]
+q_max_braccio = [np.pi, 2.879, np.pi, np.pi, np.pi]
+braccio_limits = [q_min_braccio, q_max_braccio]
+
+# Franka emika joint limits
+q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973])
+q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
+panda_limits = [q_min_panda, q_max_panda]
+
 class TibaRobot(Robot):
     """
     Robot description and state for Tiba robot (Franka Emika Research 3).
@@ -129,10 +139,14 @@ class TibaRobot(Robot):
         self.pressure_range = pressure_range
 
     def get_pose(self, q, name):
+        if q is None:
+            q = self.q
         pose = self.fkine(q, start='base', end=name)
         return pose
 
     def get_pos(self, q, name):
+        if q is None:
+            q = self.q
         pose = self.fkine(q, start='base', end=name)
         return np.concatenate([pose.t, np.array(UnitQuaternion(pose))])
 
@@ -183,6 +197,12 @@ class TibaRobot(Robot):
         hand_to_pen = self.fkine(self.qr, start='tiba_holder', end='tiba_pen_tcp')
         frame = frame @ np.linalg.inv(hand_to_pen)
         return frame
+
+    def hand_frame_to_pen_tcp(self, frame):
+        hand_to_pen = self.fkine(self.qr, start='tiba_holder', end='tiba_pen_tcp')
+        frame = frame * hand_to_pen #np.linalg.inv(hand_to_pen)
+        return frame
+
 
     def robot_polylines(self, q=None):
         if q is None:

@@ -61,6 +61,9 @@ def to_pose(pose):
     pose = SE3(*pose[:3])*(UnitQuaternion(pose[3:])).SE3()
     return pose.norm()
 
+def to_frame(pose):
+    return np.array(to_pose(pose))
+
 def append_rest(traj, duration):
     ''' Append rest to trajectory for a given duration'''
     traj = list(traj)
@@ -150,9 +153,9 @@ def joint_approach(q0, q1, speed=None):
     q1 = np.array(q1)
 
     dof = len(q0)
-    dq = np.abs(q1-q0)
-    d = np.max(dq)
-    v_max = geom.radians(speed) / d
+    dq = q1-q0
+    d = np.max(np.abs(dq))
+    v_max = geom.radians(speed)/d
     a_max = v_max/cfg.acceleration_time
     dt = cfg.robot_dt
     tr = trapezoidal.trapezoidal_profile([0], [1],
@@ -162,14 +165,15 @@ def joint_approach(q0, q1, speed=None):
 
 
     timesteps = int(tr.time / dt)
-    print('timesteps', timesteps)
-    print('time', tr.time)
+    #print('timesteps', timesteps)
+    #print('time', tr.time)
     time = np.linspace(0, tr.time, timesteps)
     ts = [tr(t)[0][2] for t in time]
     dts = [tr(t)[0][1] for t in time]
     Qs = [q0 + (q1-q0)*t for t in ts]
-    dQs = [dq*dt for dt in dts]
-    print(dQs[0], dQs[-1])
+    dQs = np.vstack([np.zeros_like(q0)] + [np.diff(Qs, axis=0)/dt])
+    #dQs = [dq*dt for dt in dts]
+    #print(dQs[0], dQs[-1])
     return Qs, dQs
 
 def angdistance(a, b):

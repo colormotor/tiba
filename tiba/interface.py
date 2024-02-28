@@ -78,6 +78,11 @@ class MotionEditor:
             return {}
         return self.positions[names[self.cur_position]]
 
+    def get_position(self, name):
+        if name not in self.positions:
+            return None
+        return self.positions[name]
+
     def get_cur_motion(self):
         names = list(self.motions.keys())
         if self.cur_motion < 0 or self.cur_motion >= len(names):
@@ -505,6 +510,10 @@ class TibaInterface:
                                         trajectories=task_trajectories,
                                         filename=self.plot_path)
 
+    def plan_joint_approach(self, q):
+        ''' Plan a joint approach to a target position'''
+        self.Qs, self.dQs = tu.joint_approach(self.robot.q, q)
+
     def plan_joint_trajectory(self, Qs, Qd, plot=False, task_trajectories=[]):
         self.read_states()
         Qapproach, dQapproach = [], [] # tu.joint_approach(self.robot.q, Qs[0])
@@ -532,8 +541,9 @@ class TibaInterface:
         '''
         planner = ilqr.iLQRPlannerVelocity(self.robot.urdf_file,
                                            self.robot.q,
-                                           subsample=int(cfg.dt/cfg.robot_dt))
-        Qs, dQs = planner.plan(trajectories, rest=rest)
+                                           subsample=int(cfg.dt/cfg.robot_dt),
+                                           )
+        Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
     def set_programming_mode(self, desk, flag):

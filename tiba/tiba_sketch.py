@@ -507,6 +507,10 @@ class TibaSketch:
         self.clear()
         self.draft = draft
 
+    def plan_joint_approach(self, q):
+        self.itiba.plan_joint_approach(q)
+        self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
+        self.trajectories_computed = True
 
     def plan_task_trajectories(self, trajectories):
         self.itiba.plan_task_trajectories(trajectories)
@@ -755,10 +759,9 @@ class TibaSketch:
         c.fill(1)
         c.text([10, 30], 'Current tool: ' + self.get_tool_name(self.params.config.tool))
 
-    def draw_gl(self):
+    def begin_draw_gl(self):
         params = self.params
         width, height = self.sketch.width, self.sketch.height
-        q = self.robot.q
         viewport = geom.make_rect(0, 0, width, height)
         v3d = self.v3d
 
@@ -776,8 +779,20 @@ class TibaSketch:
         v3d.set_view(viewport, [0, 0, 0],
                      geom.trans_3d(pos)@
                      rot@geom.rotx_3d(geom.radians(90)),
-
                     fov=40)
+
+    def end_draw_gl(self):
+        # Reset viewport
+        self.v3d.rend.ctx.viewport = (0, 0, self.sketch.window_width, self.sketch.window_height)
+
+    def draw_gl(self):
+        self.begin_draw_gl()
+        self.draw_gl_main()
+        self.end_draw_gl()
+
+    def draw_gl_main(self):
+        q = self.robot.q
+        v3d = self.v3d
 
         v3d.color(1, 0.2)
         v3d.line_width(2.0)
@@ -828,8 +843,6 @@ class TibaSketch:
                 if len(self.fk_points):
                     v3d.points(self.fk_points)
 
-        # Reset viewport
-        v3d.rend.ctx.viewport = (0, 0, self.sketch.window_width, self.sketch.window_height)
 
     def mouse_pressed(self, button, modifiers):
         params = self.params

@@ -199,7 +199,7 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
         #dq = np.diff(Qs[:,i])
         ply.plot(geom.degrees(dq)) #, color=ply.default_color(i))
 
-    limit = geom.degrees(cfg.default_angular_velocity)
+    limit = cfg.default_joint_speed
     ply.rectangle([0, -limit], [len(dQs), limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(1, 3)
