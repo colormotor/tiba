@@ -164,7 +164,7 @@ def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=0): #
     if max_speed is None:
         max_speed = geom.radians(cfg.default_joint_speed)
     if accel_time is None:
-        accel_time = cfg.acceleration_time
+        accel_time = cfg.joint_acceleration_time
     max_accel = max_speed / accel_time
 
     dof = len(Q[0])
@@ -178,16 +178,16 @@ def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=0): #
         dof, max_velocity, max_acceleration, tol
     )
 
-    result = smoother.smooth_interpolate(Q, interpolation_dt=cfg.robot_dt, traj_dt=0.0001)
+    result = smoother.smooth_interpolate(Q, interpolation_dt=cfg.robot_dt, traj_dt=0.001)
     if not result.success:
         print("Failed to compute joint trajectory")
 
     Q = np.array(result.position)
     #dQ = np.vstack([np.zeros_like(Q[0]), np.diff(Q, axis=0)/cfg.robot_dt])
     dQ = np.array(result.velocity)
-    print('dQ', dQ.shape)
-    print('dQ0', dQ[0])
-    print('dQ1', dQ[-1])
+    # print('dQ', dQ.shape)
+    # print('dQ0', dQ[0])
+    # print('dQ1', dQ[-1])
     return list(Q), list(dQ) #result.position), list(result.velocity)
 
 def joint_approach(q0, q1, speed=None):

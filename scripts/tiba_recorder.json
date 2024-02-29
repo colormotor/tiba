@@ -2,7 +2,7 @@
     "params": {
         "seed": 5,
         "gui_hue": 0.20200000703334808,
-        "gripper_mm": 34.0,
+        "gripper_mm": 16.631000518798828,
         "guiding": {
             "x": true,
             "y": true,
@@ -24,9 +24,9 @@
             "dist": 2.4499995708465576,
             "xoffset": -0.1300000101327896,
             "voffset": -0.23000000417232513,
-            "rotx": -7,
-            "roty": -52,
-            "rotz": 179
+            "rotx": -6,
+            "roty": -18,
+            "rotz": -178
         }
     },
     "presets": {},

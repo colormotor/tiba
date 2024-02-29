@@ -6,8 +6,9 @@ class Config:
     def __init__(self):
         self.default_angular_velocity = geom.radians(30) #(np.pi/5)
         self.default_cartesian_speed = 200/1000.0  #(np.pi/5)
-        self.default_joint_speed = 40.0
+        self.default_joint_speed = 20.0
         self.acceleration_time = 0.4
+        self.joint_acceleration_time = 1.0
         self.default_grasp_mm = 34.0
         #self.dt = 0.001
         self.dt = 0.01

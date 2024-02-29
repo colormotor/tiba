@@ -574,7 +574,7 @@ class TibaInterface:
         ''' Grasp with a width specified in mm'''
         if self.gripper is None:
             print('No gripper!')
-        self.gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04)
+        self.gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04) # Might want to increase pressure current 10 N
 
     def ungrasp(self):
         ''' Release the gripper'''
