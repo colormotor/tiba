@@ -144,7 +144,7 @@ def approach_inout(x, trajectory, kind='trapezoidal', **args):
             list(trajectory) +
             approach(trajectory[-1], x, **args))
 
-def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=np.pi/2000.0):
+def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=0): #np.pi/2000.0):
     from trajectory_smoothing import TrajectorySmoother
     Q_ = np.array(Q_)
     Q = [Q_[0]]
@@ -178,14 +178,13 @@ def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=np.pi
         dof, max_velocity, max_acceleration, tol
     )
 
-    result = smoother.smooth_interpolate(Q, interpolation_dt=cfg.robot_dt, traj_dt=0.001)
+    result = smoother.smooth_interpolate(Q, interpolation_dt=cfg.robot_dt, traj_dt=0.0001)
     if not result.success:
         print("Failed to compute joint trajectory")
-        print(Q)
-        print(len(Q))
+
     Q = np.array(result.position)
-    dQ = np.vstack([np.zeros_like(Q[0]), np.diff(Q, axis=0)/cfg.robot_dt])
-    #dQ = np.array(result.velocity)
+    #dQ = np.vstack([np.zeros_like(Q[0]), np.diff(Q, axis=0)/cfg.robot_dt])
+    dQ = np.array(result.velocity)
     print('dQ', dQ.shape)
     print('dQ0', dQ[0])
     print('dQ1', dQ[-1])
