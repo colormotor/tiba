@@ -42,15 +42,6 @@ reload(tu)
 def is_number(x):
     return isinstance(x, numbers.Number)
 
-# Braccio joint limits
-q_min_braccio = [0.0, 0.262, 0.0, 0.0, 0.0]
-q_max_braccio = [np.pi, 2.879, np.pi, np.pi, np.pi]
-braccio_limits = [q_min_braccio, q_max_braccio]
-
-# Franka emika joint limits
-q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973])
-q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
-panda_limits = [q_min_panda, q_max_panda]
 
 def batch_indices(n, batch_size):
     n_batches = n//batch_size + 1

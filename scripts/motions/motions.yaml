@@ -1,0 +1,9 @@
+Dip-0:
+    file: "./motions/dip.py"
+    args:
+        dip_radius_mm: 7.5
+        clean_radius_mm: 14.0
+    desc: "Dip brush in first container"
+Pick-0:
+    file: "./motions/pick.py"
+    desc: "Pick first tool"

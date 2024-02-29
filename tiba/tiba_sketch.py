@@ -334,6 +334,9 @@ class TibaSketch:
         tool_data = self.get_tool_by_index(self.params.config.tool)
         self.set_tool(tool_data)
 
+        # For launching interface scripts
+        self.cur_script = -1
+
         # self.robot.q = self.robot.qr
         # self.robot.q = np.array([-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134])
         self.robot.q = self.robot.home
@@ -587,6 +590,32 @@ class TibaSketch:
         self.trajectories = self.pad.fit_to_frame(trajectories)
         self.trajectories_computed = True
 
+    def script_gui(self):
+        itiba = self.itiba
+        selected_script = {}
+        if itiba.scripts:
+            names = list(itiba.scripts.keys())
+            clicked, self.cur_script = imgui.listbox("Scripts", self.cur_script, names)
+            if imgui.button('Reload scripts'):
+                itiba.reload_scripts()
+
+            if -1 < self.cur_script < len(names):
+                name = names[self.cur_script]
+                script = itiba.scripts[name]
+
+                imgui.same_line()
+                if ui.imgui_color_button('Load script'):
+                    selected_script = script
+
+                if 'desc' in script:
+                    ui.imgui_info_text('Description: ' + script['desc'])
+                if 'args' in script:
+                    ui.imgui_info_text('Arguments: ')
+                    for key, val in script['args'].items():
+                        imgui.text(f'{key}: {val}')
+
+        return selected_script
+
     def gui(self):
         params = self.params
         if imgui.button('Launch Swift'):
@@ -602,6 +631,8 @@ class TibaSketch:
            print('q: ', list(q))
 
         button_color = [1.0, 0.5, 0.0, 1.0]
+
+
 
         if 'drawing' in self.flags:
             ui.imgui_text_separator('Robot Actions')
@@ -658,7 +689,7 @@ class TibaSketch:
             #     self.itiba.plan_task_trajectories(trajectories)
             #     self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
 
-            if self.itiba.Qs:
+            if self.itiba.motions: #Qs:
                 imgui.separator()
                 if not state.has_ros:
                     if ui.imgui_color_button('Simulate trajectory'):
@@ -684,8 +715,8 @@ class TibaSketch:
                         imgui.end_popup()
 
         imgui.separator()
-        ui.imgui_info_text('Drag to rotate')
-        ui.imgui_info_text('Ctrl+drag to zoom, Shift+drag to pan')
+        # ui.imgui_info_text('Drag to rotate')
+        # ui.imgui_info_text('Ctrl+drag to zoom, Shift+drag to pan')
 
 
         # Threading
@@ -765,6 +796,10 @@ class TibaSketch:
         c.fill(1)
         c.text([10, 30], 'Current tool: ' + self.get_tool_name(self.params.config.tool))
 
+        c.text_size(12)
+        c.fill(0.5)
+        c.text([c.width-290, 20], 'Drag to rotate, Ctrl-drag to zoom, Shift-drag to zoom')
+
     def begin_draw_gl(self):
         params = self.params
         width, height = self.sketch.width, self.sketch.height
@@ -816,8 +851,8 @@ class TibaSketch:
         v3d.frame(penframe, alpha=0.9, scale=0.05)
         v3d.frame(self.robot.pen_tcp_frame(q), scale=0.02)
 
-        if self.itiba.Qs:
-            v3d.frame(self.robot.pen_tcp_frame(self.itiba.Qs[-1]), scale=0.1)
+        for motion in self.itiba.motions:
+            v3d.frame(self.robot.pen_tcp_frame(motion.Qs[-1]), scale=0.1)
 
         cur_q = self.itiba.editor.get_cur_position()
         if cur_q:
@@ -840,7 +875,7 @@ class TibaSketch:
                 v3d.color(plut.default_color(i))
                 self.draw_trajectory_3d(trajectory)
 
-            if self.itiba.Qs:
+            if self.itiba.motions: #Qs:
                 v3d.line_width(0.3)
                 v3d.color(1.0, 0.1)
                 if self.steps:

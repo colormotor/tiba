@@ -8,6 +8,7 @@ class Config:
         self.default_cartesian_speed = 200/1000.0  #(np.pi/5)
         self.default_joint_speed = 50.0
         self.acceleration_time = 0.4
+        self.default_grasp_mm = 34.0
         #self.dt = 0.001
         self.dt = 0.01
         self.robot_dt = 0.001

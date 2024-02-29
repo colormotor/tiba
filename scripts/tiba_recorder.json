@@ -11,7 +11,7 @@
             "elbow": true
         },
         "config": {
-            "tool": 0,
+            "tool": 4,
             "cart_planner": 0,
             "dce_thresh": 250,
             "max_iterations": 450,
@@ -21,12 +21,12 @@
             "order": 3
         },
         "tsm": {
-            "dist": 1.8999987840652466,
-            "xoffset": 0.0,
-            "voffset": 0.0,
-            "rotx": -49,
-            "roty": -18,
-            "rotz": 177
+            "dist": 2.4499995708465576,
+            "xoffset": -0.1300000101327896,
+            "voffset": -0.23000000417232513,
+            "rotx": -7,
+            "roty": -52,
+            "rotz": 179
         }
     },
     "presets": {},

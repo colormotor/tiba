@@ -9,11 +9,11 @@ dip_offset = 15/1000
 clean_offset = 30/1000
 
 joint_move('Dip')
-tool_align()
+hand_align()
 goto_xyz(dip_pos + up*start_offset),
 goto_xyz(dip_pos + up*dip_offset),
-xy_circles(dip_radius_mm, 3)
+xy_circles(dip_radius_mm, 4)
 goto_xyz(dip_pos + up*clean_offset)
-xy_circles(clean_radius_mm, 3)
+xy_circles(clean_radius_mm, 4)
 goto_xyz(dip_pos + up*start_offset)
 joint_move('Home')

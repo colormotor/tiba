@@ -32,6 +32,20 @@ For describing robot poses and kinematics calculations we use [[https://github.c
 mamba install conda-forge::roboticstoolbox-python
 ```
 
+** Interface with the robot
+*** Tiba server
+Describe
+*** Recording motions
+*** Scripting motions
+Predefined motions of the robot (e.g. picking brushes/pens, dipping) are defined as simple Python scripts that can be dinamically loaded by a ~TibaInterface~ object. A script can accept a number of "arguments". A simple example of a script contained in a Python file could be:
+#+begin_example
+require_args("offset_x_mm", "offset_y_mm")
+offset = np.array([offset_x, offset_y, 0.0])/1000 # Movement in meters
+move_xyz(offset)
+#+end_example
+The scripts moves the end effector along the "x" and "y" directions (forward/back, sidewise) by the given amounts `offset_x_mm` and `offset_y_mm` specified in millimeters and without changing the orientation of the end effector.
+The ~require_args~ function at the beginning makes sure that an error is thrown early on if the required arguments are not provided.  From code, the path for the robot can be computed using the ~plan_script~ method in ~TibaInterface~, e.g. if we have an interface object ~itiba~ and a script in the "move_xy.py" file, we can plan the motion with ~itiba.plan_script('move_xy.py', offset_x_mm=10, offset_y_mm=2)~. The arguments passed to the functions will be injected into the script and made avaialbe.
+
 
 ** Comunication with robot
 Tiba uses ROS minmally to communicate to/from the robot control laptop and a client machine that sends sequences of joint coordinates to be executed with the robot. To install ROS use the robos
@@ -75,6 +89,7 @@ source rosmaster.sh
 
 
 #+BEGIN_SRC jupyter-python :session py
+from importlib import reload
 import numpy as np
 from spatialmath.base import trnorm
 from spatialmath import SE3, SO3, UnitQuaternion
@@ -82,7 +97,8 @@ from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
 from scipy.spatial import transform
 from tiba import trajectory_utils as tu
-
+from tiba import matplotlyb as ply
+reload(ply)
 print(transform.__file__)
 A = np.array(
 [[-0.11483364,-0.99315865,-0.02119266, 0.0 ],
@@ -113,16 +129,25 @@ def SE3_interp(a, b, t):
     slerp = Slerp([0, 1], rots)
     d = pb - pa
     if type(t) is float:
-        res = np.concatenate([[pa + t*d], slerp(t)])
+        res = np.concatenate([pa + t*d, slerp(t).as_quat()])
         print(SE3.isvalid(np.array(tu.to_pose(res))))
         return res
-    res = [np.concatenate([[pa + ti*d], slerp(ti)]) for ti in t]
+    res = [np.concatenate([pa + ti*d, slerp(ti).as_quat()]) for ti in t]
     return res
 
 
 print(A.interp(B, 0.0)) # this works
 print(A.interp(B, 1.0)) # this works
-print(A.interp(B, 0.3)) # TypeError
+
+print(SE3_interp(A, B, 0.3))
+
+poses = SE3_interp(A, B, np.linspace(0, 1, 6))
+
+ply.figure(figsize=(7,4))
+for p in poses:
+    ply.axis_3d(np.array(tu.to_pose(p)), 0.1, alpha=0.5)
+ply.show('plt')
+#print(A.interp(B, 0.3)) # TypeError
 #print(R.random(5))
 # lerped = [slerp(t) for t in np.linspace(0.0, 1.0, 5)]
 
@@ -134,28 +159,24 @@ print(A.interp(B, 0.3)) # TypeError
 #+END_SRC
 
 #+RESULTS:
+:RESULTS:
 #+begin_example
 /Users/colormotor/opt/miniconda3/lib/python3.10/site-packages/scipy/spatial/transform/__init__.py
 True
 True
-[[-0.99939819  0.0274615  -0.02119266]
- [ 0.01788954 -0.11539436 -0.99315865]
- [-0.02971914 -0.99294008  0.11483364]]
+  -0.1148   -0.9932   -0.02119   0
+  -0.9929    0.1154   -0.02746   0
+   0.02972   0.01789  -0.9994    0
+   0         0         0         1
+
+   0        -1         0         0
+  -1         0         0         0
+   0         0        -1         0
+   0         0         0         1
+
 True
-[[-0.9996613   0.02083018 -0.01560086]
- [ 0.01374187 -0.08658482 -0.9961497 ]
- [-0.02210077 -0.99602669  0.08626924]]
-True
-[[-0.99984941  0.01403868 -0.01020158]
- [ 0.00937505 -0.05773178 -0.99828811]
- [-0.01460361 -0.99823342  0.05759148]]
-True
-[[-0.99996234  0.00709319 -0.00499972]
- [ 0.00479304 -0.02886144 -0.99957193]
- [-0.00723445 -0.99955825  0.02882636]]
-True
-[[-1.00000000e+00 -1.06375228e-17  8.98863294e-18]
- [-8.98863294e-18  3.39854715e-37 -1.00000000e+00]
- [ 1.06375228e-17 -1.00000000e+00  3.39854715e-37]]
-True
+[ 0.          0.          0.         -0.01193726 -0.67792812  0.73502784
+ -0.00224433]
 #+end_example
+[[file:./.ob-jupyter/84b7ff671205fa109e1e78ef16cc9dc91db7c358.png]]
+:END:

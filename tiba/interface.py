@@ -17,6 +17,7 @@ import importlib
 import numpy as np
 import os, sys, time
 import traceback
+import yaml
 
 import roboticstoolbox as rtb
 from spatialmath import SE3, SO3, UnitQuaternion
@@ -324,11 +325,17 @@ class MotionEditor:
             x += size
         v3d.restore_viewport()
 
+class Motion:
+    def __init__(self, Qs, dQs, grasp=None):
+        self.Qs = list(Qs)
+        self.dQs = list(dQs)
+        self.grasp = grasp
 
 class TibaInterface:
     def __init__(self, panda, gripper,
                  motion_path='motions_desk.json',
                  pad_path='pad.pkl',
+                 scripts_file='./motions/motions.yaml',
                  plot_path='trajectory.png'):
 
         self.editor = MotionEditor(motion_path)
@@ -344,13 +351,20 @@ class TibaInterface:
         self.panda = panda
         self.gripper = gripper
         self.grasping_state = False
-        self.Qs = []
-        self.dQs = []
+
+        self.motions = []
+        #self.Qs = []
+        #self.dQs = []
 
         self.cup_pos = np.array([0.1176777, -0.40658198, 0.10431843])
 
         # Assume not in proramming mode
         self.programming = False
+
+        # Load scripted motion path
+        self.scripts = {}
+        self.scripts_file = scripts_file
+        self.reload_scripts()
 
     def launch_simulator(self):
         env = swift.Swift()
@@ -358,8 +372,28 @@ class TibaInterface:
         env.add(self.robot)
 
     def clear(self):
-        self.Qs = []
-        self.dQs = []
+        self.motions = []
+        #self.Qs = []
+        #self.dQs = []
+
+    def reload_scripts(self):
+        if os.path.exists(self.scripts_file):
+            with open(self.scripts_file, 'r') as f:
+                try:
+                    self.scripts = yaml.safe_load(f)
+                except Exception as e:
+                    print(e)
+                    #self.scripts = {}
+        else:
+            self.scripts = {}
+
+    @property
+    def Qs(self):
+        return sum([m.Qs for m in self.motions], [])
+
+    @property
+    def dQs(self):
+        return sum([m.dQs for m in self.motions], [])
 
     def set_tool(self, tool_dict):
         self.clear()
@@ -367,6 +401,20 @@ class TibaInterface:
         self.robot.q = self.robot.home
         self.collision_robot = robot.TibaRobot(**tool_dict)
         self.collision_robot.q = self.collision_robot.home
+
+
+    def set_programming_mode(self, desk, flag):
+        ''' Set the robot in programming mode
+        Urls adapted from https://github.com/TimSchneider42/franky/blob/321a6b3c5cc8fc49b1e4fae9dde0cf130bb03657/franky/robot_web_session.py
+        '''
+        if flag:
+            url = '/desk/api/operating-mode/programming'
+        else:
+            url = '/desk/api/operating-mode/execution'
+        desk._request('post',
+                  url,
+                  files={'force': True},
+                  headers={'X-Control-Token': desk._token.token})
 
     def simulate(self):
         env = swift.Swift()
@@ -382,10 +430,10 @@ class TibaInterface:
         #     env.step(cfg.robot_dt)
         #     i += max(1, int(dt/cfg.robot_dt))
         #     t = time.time()
-        for q in self.Qs:
-            self.robot.q = q
-            env.step(cfg.robot_dt)
-            t = time.time()
+        for motion in self.motions:
+            for q in motion.Qs:
+                self.robot.q = q
+                env.step(cfg.robot_dt)
 
         # Reset robot after simulation
         self.robot.q = q_old
@@ -417,34 +465,47 @@ class TibaInterface:
 
         self.delay(delay)
 
-        Q = self.Qs
-        dQ = self.dQs
-        print('Moving to initial position')
-        self.panda.move_to_joint_position(Q[0])
-        self.delay(0.5)
-        i = 0
-        print('Starting control loop')
-        ctrl = controllers.JointPosition()
-        panda = self.panda
-        dq_thresh = 0.001
-        dq0 = np.zeros(7)
+        for motion in self.motions:
 
-        panda.start_controller(ctrl)
-        with panda.create_context(frequency=1000) as ctx:
-            while ctx.ok():
-                if i < len(dQ):
-                    ctrl.set_control(Q[i], dQ[i])
-                    i += 1
+            if motion.grasp is not None:
+                if motion.grasp == False:
+                    self.ungrasp()
+                if type(motion.grasp) == bool:
+                    self.grasp()
                 else:
-                    ctrl.set_control(Q[-1], dq0)
-                    dq = panda.get_state().dq
-                    if abs(np.max(dq)) < dq_thresh:
-                        break
-            q = panda.q
-        print('Stopping controller')
-        self.panda.stop_controller()
-        #time.sleep(0.5)
-        print('Finished motion')
+                    self.grasp(motion.grasp)
+
+            #Q = self.Qs
+            #dQ = self.dQs
+            Q = motion.Qs
+            dQ = motion.dQs
+
+            print('Moving to initial position')
+            self.panda.move_to_joint_position(Q[0])
+            self.delay(0.5)
+            i = 0
+            print('Starting control loop')
+            ctrl = controllers.JointPosition()
+            panda = self.panda
+            dq_thresh = 0.001
+            dq0 = np.zeros(7)
+
+            panda.start_controller(ctrl)
+            with panda.create_context(frequency=1000) as ctx:
+                while ctx.ok():
+                    if i < len(dQ):
+                        ctrl.set_control(Q[i], dQ[i])
+                        i += 1
+                    else:
+                        ctrl.set_control(Q[-1], dq0)
+                        dq = panda.get_state().dq
+                        if abs(np.max(dq)) < dq_thresh:
+                            break
+                q = panda.q
+            print('Stopping controller')
+            self.panda.stop_controller()
+            #time.sleep(0.5)
+            print('Finished motion')
         return q
 
     def play_cur_motion(self, delay=2.0):
@@ -493,7 +554,7 @@ class TibaInterface:
         print('Ending')
 
 
-    def grasp(self, mm):
+    def grasp(self, mm=cfg.default_grasp_mm):
         ''' Grasp with a width specified in mm'''
         if self.gripper is None:
             print('No gripper!')
@@ -507,23 +568,29 @@ class TibaInterface:
         self.gripper.move(100.0/1000, 0.2)
 
     def plot_trajectory_stats(self, task_trajectories=[]):
-        ilqr.plot_trajectory_stats(self.robot,
-                                        self.Qs,
-                                        self.dQs,
-                                        trajectories=task_trajectories,
-                                        filename=self.plot_path)
+        Qs = []
+        dQs = []
+        for motion in self.motions:
+            Qs += motion.Qs
+            dQs += motion.dQs
+
+        if Qs:
+            ilqr.plot_trajectory_stats(self.robot,
+                                            Qs,
+                                            dQs,
+                                            trajectories=task_trajectories,
+                                            filename=self.plot_path)
 
     def plan_joint_approach(self, q):
         ''' Plan a joint approach to a target position'''
-        self.Qs, self.dQs = tu.joint_approach(self.robot.q, q)
+        Qs, dQs = tu.joint_approach(self.robot.q, q)
+        self.motions = [Motion(Qs, dQs)]
 
-    def plan_joint_trajectory(self, Qs, Qd, plot=False, task_trajectories=[]):
+        
+    def plan_joint_trajectory(self, Qs, dQs, plot=False, task_trajectories=[]):
         self.read_states()
-        Qapproach, dQapproach = [], [] # tu.joint_approach(self.robot.q, Qs[0])
-
-        self.Qs, self.dQs = Qapproach + Qs, dQapproach + Qd
-
-        utils.save_pkl([self.Qs, self.dQs], 'trajectory.pkl')
+        self.motions = [Motion(Qs, dQs)]
+        #utils.save_pkl([self.Qs, self.dQs], 'trajectory.pkl')
         # if plot:
             # self.plot_trajectory_stats(task_trajectories)
             # ilqr.plot_trajectory_stats(self.robot,
@@ -555,20 +622,6 @@ class TibaInterface:
         Qs, dQs = self.compute_task_trajectories(trajectories, rest, q)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
-    def set_programming_mode(self, desk, flag):
-        ''' Set the robot in programming mode
-        Urls adapted from https://github.com/TimSchneider42/franky/blob/321a6b3c5cc8fc49b1e4fae9dde0cf130bb03657/franky/robot_web_session.py
-        '''
-        if flag:
-            url = '/desk/api/operating-mode/programming'
-        else:
-            url = '/desk/api/operating-mode/execution'
-        desk._request('post',
-                  url,
-                  files={'force': True},
-                  headers={'X-Control-Token': desk._token.token})
-
-
     def plan_script(self, path, **kwargs):
         # Local functions
         import numpy as np
@@ -579,8 +632,10 @@ class TibaInterface:
         state.pose = self.robot.pen_tcp_pose(state.q)
 
         # Clear joint trajectory
-        self.Qs = []
-        self.dQs = []
+        self.motions = [Motion([], [])]
+
+        # self.Qs = []
+        # self.dQs = []
 
         print(kwargs)
         # local variable context for script (updated later)
@@ -602,25 +657,38 @@ class TibaInterface:
             if type(q) == str:
                 q = self.editor.get_position(q)
             Q, dQ = tu.joint_approach(state.q, q)
-            self.Qs += list(Q)
-            self.dQs += list(dQ)
-            update_state(self.Qs[-1])
+            self.motions[-1].Qs += list(Q)
+            self.motions[-1].dQs += list(dQ)
+            update_state(self.motions[-1].Qs[-1])
 
         def tool_align():
             dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
-            self.Qs += list(Qs)
-            self.dQs += list(dQs)
-            update_state(self.Qs[-1])
+            self.motions[-1].Qs += list(Qs)
+            self.motions[-1].dQs += list(dQs)
+            update_state(self.motions[-1].Qs[-1])
 
-        def dip_align():
+        def hand_align():
+            dest_pose = self.robot.get_pos(state.q, 'tiba_hand_tcp')
             dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
+            dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
-            self.Qs += list(Qs)
-            self.dQs += list(dQs)
-            update_state(self.Qs[-1])
+            self.motions[-1].Qs += list(Qs)
+            self.motions[-1].dQs += list(dQs)
+            update_state(self.motions[-1].Qs[-1])
+
+        def move_xyz(v):
+            #print(state.pose)
+            dest_pose = np.array(state.pose)
+            dest_pose[:3, 3] += v
+            #print(dest_pose)
+            trajectories = [tu.approach_sequence([state.pose, dest_pose])]
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            self.motions[-1].Qs += list(Qs)
+            self.motions[-1].dQs += list(dQs)
+            update_state(self.motions[-1].Qs[-1])
 
         def goto_xyz(pos):
             #print(state.pose)
@@ -629,9 +697,9 @@ class TibaInterface:
             #print(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
-            self.Qs += list(Qs)
-            self.dQs += list(dQs)
-            update_state(self.Qs[-1])
+            self.motions[-1].Qs += list(Qs)
+            self.motions[-1].dQs += list(dQs)
+            update_state(self.motions[-1].Qs[-1])
 
         def xy_circles(radius_mm, rep):
             p0 = state.pose.t
@@ -650,9 +718,15 @@ class TibaInterface:
             orn = tu.to_pos_orn(state.pose)[3:]
             trajectories = [[np.concatenate([p, orn]) for p in P] for P in paths]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
-            self.Qs += list(Qs)
-            self.dQs += list(dQs)
-            update_state(self.Qs[-1])
+            self.motions[-1].Qs += list(Qs)
+            self.motions[-1].dQs += list(dQs)
+            update_state(self.motions[-1].Qs[-1])
+
+        def grasp(mm=cfg.default_grasp_mm):
+            self.motions.append(Motion([], [], grasp=mm))
+
+        def ungrasp():
+            self.motions.append(Motion([], [], grasp=False))
 
         print("Compiling script")
         # update varaibles for script

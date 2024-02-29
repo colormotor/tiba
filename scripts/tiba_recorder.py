@@ -168,7 +168,18 @@ def setup():
     #                 2.155968632893118,
     #                 0.8315813678712944
     #             ]
+    #
+    # tsketch.robot.q = [
+    #                      0.8899934283549032,
+    #                 0.26157877084836123,
+    #                 0.22606831535379185,
+    #                 -2.5866245919384454,
+    #                 -0.20197267653590556,
+    #                 2.855830673453475,
+    #                 -2.6059172405630866
+    # ]
     # Self collision
+
     #tsketch.robot.q = [-1.639689114087109, -1.7716644918674729, 0.007238895131838701, -3.013367922364223, -0.015000028089361048, 0.9541045565059841, 0.7067115097185542]
 
     check_collision(tsketch.robot.q, tsketch.itiba)
@@ -208,6 +219,14 @@ def gui():
     if changed:
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
 
+    ui.imgui_text_separator("Scripts")
+    script = tsketch.script_gui()
+    if script:
+        args = script['args'] if 'args' in script else {}
+        tsketch.plan_script(script['file'], **args)
+        if tsketch.itiba.Qs:
+            tsketch.itiba.plot_trajectory_stats()
+    ui.imgui_text_separator("Motion")
     if imgui.button('Align hand for tool'):
         #tsketch.itiba.set_programming_mode(desk, False)
         robot = tsketch.robot
@@ -251,10 +270,11 @@ def gui():
         tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
         #tsketch.itiba.set_programming_mode(desk, state.programming)
 
-    if imgui.button('Try script'):
-        tsketch.plan_script('motions/dip.py', dip_radius_mm=7.5, clean_radius_mm=14.0)
-        if tsketch.itiba.Qs:
-            tsketch.itiba.plot_trajectory_stats()
+    # if imgui.button('Try script'):
+    #     #tsketch.plan_script('motions/dip.py', dip_radius_mm=7.5, clean_radius_mm=34.0) #dip_radius_mm=7.5, clean_radius_mm=14.0)
+    #     tsketch.plan_script('motions/pick.py')
+    #     if tsketch.itiba.Qs:
+    #         tsketch.itiba.plot_trajectory_stats()
 
     dest_position = None
 
@@ -283,14 +303,9 @@ def gui():
 
     if dest_position is not None:
         cur_pos = tsketch.robot.pen_tcp_pos()
-            #home_pos = tsketch.robot.pen_tcp_pos(tsketch.robot.home)
-
         trajectories = [tu.approach_sequence([cur_pos, dest_position])]
         tsketch.plan_task_trajectories(trajectories)
         tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
-
-
-        #
     tsketch.gui()
 
     if tsketch.itiba.Qs:
@@ -300,7 +315,6 @@ def gui():
                 #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
                 tsketch.itiba.simulate()
                 tsketch.robot.q = tsketch.itiba.Qs[-1]
-
         else:
             if imgui.button('Simulate trajectory'):
                 tsketch.itiba.simulate()
@@ -362,6 +376,7 @@ def draw():
     fill(1)
     for i in range(3):
         text([10, 60 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
+
 
     tsketch.itiba.editor.draw_steps(tsketch.v3d, tsketch.robot, [0, height-70], 70, width)
 
