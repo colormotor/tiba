@@ -144,37 +144,86 @@ def approach_inout(x, trajectory, kind='trapezoidal', **args):
             list(trajectory) +
             approach(trajectory[-1], x, **args))
 
+def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=np.pi/2000.0):
+    from trajectory_smoothing import TrajectorySmoother
+    Q_ = np.array(Q_)
+    Q = [Q_[0]]
+    for q1, q2 in zip(Q_, Q_[1:]):
+        d = np.linalg.norm(q2 - Q[-1])
+        if d < tol:
+            #print("Skipping joint distance: ", d)
+            continue
+        Q.append(q2)
+    if len(Q) < 2:
+        print(len(Q), len(Q_))
+        print("Trajectory too short")
+        return [], []
+
+    Q = np.array(Q)
+
+    if max_speed is None:
+        max_speed = geom.radians(cfg.default_joint_speed)
+    if accel_time is None:
+        accel_time = cfg.acceleration_time
+    max_accel = max_speed / accel_time
+
+    dof = len(Q[0])
+    # Max velocity and acceleration combined along unit vector
+    # Note that otherwise we would get higher max speed and acceleration maginitude
+    max_velocity = np.ones(dof, dtype=np.float32) * max_speed
+    max_acceleration = np.ones(dof, dtype=np.float32) * max_accel
+
+    print("Smoother")
+    smoother = TrajectorySmoother(
+        dof, max_velocity, max_acceleration, tol
+    )
+
+    result = smoother.smooth_interpolate(Q, interpolation_dt=cfg.robot_dt, traj_dt=0.001)
+    if not result.success:
+        print("Failed to compute joint trajectory")
+        print(Q)
+        print(len(Q))
+    Q = np.array(result.position)
+    dQ = np.vstack([np.zeros_like(Q[0]), np.diff(Q, axis=0)/cfg.robot_dt])
+    #dQ = np.array(result.velocity)
+    print('dQ', dQ.shape)
+    print('dQ0', dQ[0])
+    print('dQ1', dQ[-1])
+    return list(Q), list(dQ) #result.position), list(result.velocity)
 
 def joint_approach(q0, q1, speed=None):
     if speed is None:
         speed = cfg.default_joint_speed
 
-    q0 = np.array(q0)
-    q1 = np.array(q1)
-
-    dof = len(q0)
-    dq = q1-q0
-    d = np.max(np.abs(dq))
-    v_max = geom.radians(speed)/d
-    a_max = v_max/cfg.acceleration_time
-    dt = cfg.robot_dt
-    tr = trapezoidal.trapezoidal_profile([0], [1],
-                                         [0], [0],
-                                         [v_max],
-                                         [a_max])
+    return joint_trajectory_time_optimal([q0, q1]) #, max_speed=geom.radians(speed))
 
 
-    timesteps = int(tr.time / dt)
-    #print('timesteps', timesteps)
-    #print('time', tr.time)
-    time = np.linspace(0, tr.time, timesteps)
-    ts = [tr(t)[0][2] for t in time]
-    dts = [tr(t)[0][1] for t in time]
-    Qs = [q0 + (q1-q0)*t for t in ts]
-    dQs = np.vstack([np.zeros_like(q0)] + [np.diff(Qs, axis=0)/dt])
-    #dQs = [dq*dt for dt in dts]
-    #print(dQs[0], dQs[-1])
-    return Qs, dQs
+    # q0 = np.array(q0)
+    # q1 = np.array(q1)
+
+    # dof = len(q0)
+    # dq = q1-q0
+    # d = np.max(np.abs(dq))
+    # v_max = geom.radians(speed)/d
+    # a_max = v_max/cfg.acceleration_time
+    # dt = cfg.robot_dt
+    # tr = trapezoidal.trapezoidal_profile([0], [1],
+    #                                      [0], [0],
+    #                                      [v_max],
+    #                                      [a_max])
+
+
+    # timesteps = int(tr.time / dt)
+    # #print('timesteps', timesteps)
+    # #print('time', tr.time)
+    # time = np.linspace(0, tr.time, timesteps)
+    # ts = [tr(t)[0][2] for t in time]
+    # dts = [tr(t)[0][1] for t in time]
+    # Qs = [q0 + (q1-q0)*t for t in ts]
+    # dQs = np.vstack([np.zeros_like(q0)] + [np.diff(Qs, axis=0)/dt])
+    # #dQs = [dq*dt for dt in dts]
+    # #print(dQs[0], dQs[-1])
+    # return Qs, dQs
 
 def angdistance(a, b):
     return a.angdist(b, metric=3)*2
@@ -288,7 +337,9 @@ def trapezoidal_approach(x0, x1,
 def approach(a, b, *args, **kwargs):
     return trapezoidal_approach(a, b, *args, **kwargs)
 
+
 def approach_sequence(seq, *args, **kwargs):
+    #path, _, _ = plan_polylines_time_optimal([np.array(seq)], *args, **kwargs)
     traj = []
     for a, b in zip(seq, seq[1:]):
         traj += approach(a, b, *args, **kwargs)

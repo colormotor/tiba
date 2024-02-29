@@ -673,6 +673,8 @@ class TibaInterface:
             if type(q) == str:
                 q = self.editor.get_position(q)
             Q, dQ = tu.joint_approach(state.q, q)
+            print(Q)
+            print(dQ)
             self.motions[-1].Qs += list(Q)
             self.motions[-1].dQs += list(dQ)
             update_state(self.motions[-1].Qs[-1])

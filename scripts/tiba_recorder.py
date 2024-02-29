@@ -225,6 +225,7 @@ def gui():
         args = script['args'] if 'args' in script else {}
         tsketch.plan_script(script['file'], **args)
         if tsketch.itiba.Qs:
+            print('Script plan sizes:', len(tsketch.itiba.Qs), len(tsketch.itiba.dQs))
             tsketch.itiba.plot_trajectory_stats()
     ui.imgui_text_separator("Motion")
     if imgui.button('Align hand for tool'):
