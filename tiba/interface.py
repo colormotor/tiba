@@ -228,6 +228,15 @@ class MotionEditor:
         if imgui.button("Add Position"):
             imgui.open_popup('Add position')
 
+
+
+        if self.get_cur_position():
+            #print("Selected position")
+            imgui.same_line()
+            if ui.imgui_color_button('Go'):
+                q = self.get_cur_position()
+                itiba.goto_joint_position(q)
+
         imgui.set_next_window_size(300, 200)
         if imgui.begin_popup_modal('Add position').opened:
             imgui.text("Select name")
@@ -515,6 +524,13 @@ class TibaInterface:
             print('No motion')
             return
         self.play_motion(motion, delay)
+
+    def goto_joint_position(self, q):
+        print('goto ', q)
+        if self.panda is not None:
+            print("Actually moving the robot")
+            self.panda.move_to_joint_position(np.array(q))
+        self.robot.q = q
 
     def play_motion(self, motion, delay=2.0):
         ''' Play a pre-recorded motion'''

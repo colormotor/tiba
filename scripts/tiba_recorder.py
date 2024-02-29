@@ -329,7 +329,7 @@ def gui():
                 if imgui.button('OK'):
                     tsketch.itiba.set_programming_mode(desk, False)
                     tsketch.itiba.execute()
-                    tsketch.itiba.set_programming_mode(desk, state.programming)
+                    # tsketch.itiba.set_programming_mode(desk, state.programming) #
                     imgui.close_current_popup()
                 imgui.same_line()
                 if imgui.button('Cancel'):
