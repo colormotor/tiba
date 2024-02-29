@@ -24,6 +24,7 @@ from tiba import cfg
 import os, socket
 
 def get_ip():
+    ''' Gets IP of machine'''
     # From https://stackoverflow.com/a/28950776
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(0)
@@ -40,9 +41,6 @@ def get_ip():
 # Turns out we need to tell the node what is the IP to reach this computer
 # The trick above seems to do it
 os.environ['ROS_IP'] = get_ip()
-
-print("Running server on: ", os.environ['ROS_IP'])
-print("Make sure this is reflected in rosmaster.sh")
 
 if has_robot:
     hostname = '172.16.0.2'
@@ -127,8 +125,21 @@ def joint_pos_sender_thread():
         time.sleep(0.1)
 
 def main():
-    print('TIBA server v0.1')
+    print('__________________________________________')
+    print('o-O-o o-O-o o--o    O')
+    print('  |     |   |   |  / \\')
+    print('  |     |   O--o  o---o')
+    print('  |     |   |   | |   |')
+    print('  o   o-O-o o--o  o   o')
+
+
+    print('\nTIBA server v0.1')
+    print('__________________________________________')
+    print("Running server on: ", os.environ['ROS_IP'])
+    print("Make sure this is reflected in rosmaster.sh")
+    print('On client run: source rosmaster.sh')
     print('Waiting for data...')
+    print('__________________________________________')
 
     global qpub, respub
 
