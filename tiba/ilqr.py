@@ -220,6 +220,12 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     limit = cfg.default_cartesian_speed
     ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
 
+    # ply.subplot(2, 1, title='Cartesian acceleration (m/s^2)')
+    # acc = np.diff(dQs, axis=0)/cfg.robot_dt
+    # for i in range(7):
+    #     t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
+    #     ply.plot(t, acc[:,i]) #, ['r', 'g', 'b'][i], alpha=0.7)
+
     ply.subplot(2, 1, title='Cartesian acceleration (m/s^2)')
     for i in range(3):
         t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
