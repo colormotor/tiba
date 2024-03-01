@@ -5,9 +5,9 @@
         "gripper_mm": 16.631000518798828,
         "guiding": {
             "x": true,
-            "y": true,
+            "y": false,
             "z": true,
-            "rot": true,
+            "rot": false,
             "elbow": true
         },
         "config": {
@@ -24,9 +24,9 @@
             "dist": 2.4499995708465576,
             "xoffset": -0.1300000101327896,
             "voffset": -0.23000000417232513,
-            "rotx": -19,
-            "roty": 35,
-            "rotz": 165
+            "rotx": -13,
+            "roty": -6,
+            "rotz": -179
         }
     },
     "presets": {},

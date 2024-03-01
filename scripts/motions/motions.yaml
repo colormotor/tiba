@@ -7,3 +7,6 @@ Dip-0:
 Pick-0:
     file: "./motions/pick.py"
     desc: "Pick first tool"
+Drop-0:
+    file: "./motions/drop.py"
+    desc: "Drop first tool"

@@ -67,7 +67,7 @@ class MotionEditor:
         self.cur_motion = -1
         self.cur_step = -1
 
-        self.positions_path = path
+        self.positions_path = positions_path
         self.new_motion_name = 'Insert name'
         self.cur_position = -1
 
@@ -228,7 +228,10 @@ class MotionEditor:
         if imgui.button("Add Position"):
             imgui.open_popup('Add position')
 
-
+        if self.get_cur_position():
+            imgui.same_line()
+            if imgui.button("Del"):
+                self.delete_position(names[self.cur_position])
 
         if self.get_cur_position():
             #print("Selected position")
@@ -479,7 +482,7 @@ class TibaInterface:
             if motion.grasp is not None:
                 if motion.grasp == False:
                     self.ungrasp()
-                if type(motion.grasp) == bool:
+                elif type(motion.grasp) == bool:
                     self.grasp()
                 else:
                     self.grasp(motion.grasp)
@@ -672,7 +675,11 @@ class TibaInterface:
 
         def joint_move(q):
             if type(q) == str:
-                q = self.editor.get_position(q)
+                name = q
+                q = self.editor.get_position(name)
+                if q is None:
+                    print(self.editor.positions)
+                    raise ValueError("Position does not exist")
             Q, dQ = tu.joint_approach(state.q, q)
             # print(Q)
             # print(dQ)
@@ -688,9 +695,9 @@ class TibaInterface:
             self.motions[-1].dQs += list(dQs)
             update_state(self.motions[-1].Qs[-1])
 
-        def hand_align():
+        def hand_align_pick_tool():
             dest_pose = self.robot.get_pos(state.q, 'tiba_hand_tcp')
-            dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
+            dest_pose = tu.align_pose_zy(dest_pose, [0, 0, -1], [0, -1, 0])
             dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             print('Initial position', state.pose)
