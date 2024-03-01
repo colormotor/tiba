@@ -74,7 +74,12 @@ braccio_limits = [q_min_braccio, q_max_braccio]
 # Franka emika joint limits
 q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973])
 q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
+
+q_min_fr3 = np.array([-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159])
+q_max_fr3 = np.array([2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159])
+
 panda_limits = [q_min_panda, q_max_panda]
+fr3_limits = [q_min_fr3, q_max_fr3]
 
 class TibaRobot(Robot):
     """
@@ -85,7 +90,9 @@ class TibaRobot(Robot):
     ----
     """
 
-    def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5, angle=15.0, pressure_range=0.0):
+    def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5, angle=15.0,
+                 pressure_range=0.0,
+                 limits=fr3_limits):
         path = os.path.join(os.path.dirname(__file__), '../urdf/franka_description/')
         self.xacro_file = os.path.join(path, 'tiba.urdf.xacro')
         self.urdf_file = os.path.join(path, 'tiba_test.urdf')
@@ -108,10 +115,10 @@ class TibaRobot(Robot):
         )
 
 
-        #self.grippers[0].tool = SE3(0, 0, 0.1034)
-
-        self.qdlim = np.array(
-            [2.1750, 2.1750, 2.1750, 2.1750, 2.6100, 2.6100, 2.6100, 3.0, 3.0]
+        self.q_min = limits[0]
+        self.q_max = limits[1]
+        self.qd_lim = np.array(
+            [2.62, 2.62, 2.62, 2.62, 5.26, 4.18, 5.26]
         )
 
         self.qr = np.array([-0.07348355578820649,
@@ -193,13 +200,17 @@ class TibaRobot(Robot):
         frame = self.fkine(q, start='base', end='tiba_pen_tcp')
         return np.array(frame)
 
-    def pen_tcp_frame_to_hand(self, frame):
-        hand_to_pen = self.fkine(self.qr, start='tiba_holder', end='tiba_pen_tcp')
+    def pen_tcp_frame_to_hand(self, frame, q=None):
+        if q is None:
+            q = self.q
+        hand_to_pen = self.fkine(q, start='tiba_holder', end='tiba_pen_tcp')
         frame = frame @ np.linalg.inv(hand_to_pen)
         return frame
 
-    def hand_frame_to_pen_tcp(self, frame):
-        hand_to_pen = self.fkine(self.qr, start='tiba_holder', end='tiba_pen_tcp')
+    def hand_frame_to_pen_tcp(self, frame, q=None):
+        if q is None:
+            q = self.q
+        hand_to_pen = self.fkine(q, start='tiba_holder', end='tiba_pen_tcp')
         frame = frame * hand_to_pen #np.linalg.inv(hand_to_pen)
         return frame
 

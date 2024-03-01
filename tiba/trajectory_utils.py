@@ -94,7 +94,7 @@ def rest_inout(traj, duration):
     n = int(duration/cfg.dt)
     if not n:
         return traj
-    return [traj[0]]*n + traj + [traj[-1]]*n
+    return [np.array(traj[0])]*n + traj + [np.array(traj[-1])]*n
 
 # Trajectory generators
 def SE3_interp(a, b, t):
@@ -150,7 +150,7 @@ def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=0): #
     Q = [Q_[0]]
     for q1, q2 in zip(Q_, Q_[1:]):
         d = np.linalg.norm(q2 - Q[-1])
-        if d < tol:
+        if d <= tol:
             #print("Skipping joint distance: ", d)
             continue
         Q.append(q2)
@@ -167,27 +167,34 @@ def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=0): #
         accel_time = cfg.joint_acceleration_time
     max_accel = max_speed / accel_time
 
+    dtype = np.float64
+
     dof = len(Q[0])
     # Max velocity and acceleration combined along unit vector
     # Note that otherwise we would get higher max speed and acceleration maginitude
-    max_velocity = np.ones(dof, dtype=np.float32) * max_speed
-    max_acceleration = np.ones(dof, dtype=np.float32) * max_accel
+    max_velocity = np.ones(dof, dtype=dtype) * max_speed
+    max_acceleration = np.ones(dof, dtype=dtype) * max_accel
 
     print("Smoother")
     smoother = TrajectorySmoother(
         dof, max_velocity, max_acceleration, tol
     )
 
+    Q = np.array(Q).astype(dtype)
     result = smoother.smooth_interpolate(Q, interpolation_dt=cfg.robot_dt, traj_dt=0.001)
     if not result.success:
         print("Failed to compute joint trajectory")
 
-    Q = np.array(result.position)
+    Q = np.array(result.position, dtype=dtype)
     #dQ = np.vstack([np.zeros_like(Q[0]), np.diff(Q, axis=0)/cfg.robot_dt])
-    dQ = np.array(result.velocity)
+    dQ = np.array(result.velocity, dtype=dtype)
+    # Looks like the planner does not create zero velocity at the end?
+    dQ = np.vstack([dQ] + [np.zeros_like(dQ[0])]*500)
+    Q = np.vstack([Q] + [Q[-1]]*500)
+
     # print('dQ', dQ.shape)
-    # print('dQ0', dQ[0])
-    # print('dQ1', dQ[-1])
+    print('dQ0', dQ[0])
+    print('dQ1', dQ[-1])
     return list(Q), list(dQ) #result.position), list(result.velocity)
 
 def joint_approach(q0, q1, speed=None):
@@ -293,6 +300,8 @@ def trapezoidal_approach(x0, x1,
 
     pose0 = to_pose(x0)
     pose1 = to_pose(x1)
+    print('Trapezoidal approach from', pose0, 'to', pose1)
+
     print(np.array2string(np.array(pose0), separator=','))
     print(np.array2string(np.array(pose1), separator=','))
     #print(repr(np.array(pose1)))
@@ -325,9 +334,14 @@ def trapezoidal_approach(x0, x1,
     timesteps = int(tr.time / dt)
     time = np.linspace(0, tr.time, timesteps)
     ts = [tr(t)[0][2]/d for t in time] # Assumin
-    #print(ts)
+
+    print('trapezoidal ts:', ts)
     #print(pose0, pose1)
     approach = SE3_interp(pose0, pose1, ts)
+    if len(approach):
+        print('approach', to_pose(approach[0]), 'to ', to_pose(approach[-1] ))
+    else:
+        print('empty approach')
     return approach
 
     # approach = [pose0.interp(pose1, t) for t in ts]

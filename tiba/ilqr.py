@@ -41,14 +41,14 @@ from tqdm import tqdm, trange
 reload(ply)
 
 # Braccio joint limits
-q_min_braccio = [0.0, 0.262, 0.0, 0.0, 0.0]
-q_max_braccio = [np.pi, 2.879, np.pi, np.pi, np.pi]
-braccio_limits = [q_min_braccio, q_max_braccio]
+# q_min_braccio = [0.0, 0.262, 0.0, 0.0, 0.0]
+# q_max_braccio = [np.pi, 2.879, np.pi, np.pi, np.pi]
+# braccio_limits = [q_min_braccio, q_max_braccio]
 
 # Franka emika joint limits
-q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973])
-q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
-panda_limits = [q_min_panda, q_max_panda]
+# q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973])
+# q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
+# panda_limits = [q_min_panda, q_max_panda]
 
 def is_number(x):
     return isinstance(x, numbers.Number)
@@ -60,17 +60,18 @@ def batch_indices(n, batch_size):
     I = np.linspace(0, n-1, n_batches).astype(int)
     return [np.array(list(range(a, b+1))) for a, b in zip(I, I[1:])]
 
-def check_limits(q):
-    return np.all(q >= q_min_panda, axis=0) and np.all(q <= q_max_panda, axis=0)
+def check_limits(robot, q):
+    return np.all(q >= robot.q_min, axis=0) and np.all(q <= robot.q_max, axis=0)
 
 
+dtype = np.float64
 class iLQRPlannerVelocity:
     def __init__(self, urdf_path, q0,
                  base_frame='tiba_link0',
                  tip_frame='tiba_pen_tcp',
                  subsample=10):
-        self.q0 = q0
-        self.dq0 = np.zeros(len(q0))
+        self.q0 = q0.astype(dtype)
+        self.dq0 = np.zeros(len(q0)).astype(dtype)
         self.rbt = KDLRobot(urdf_path, base_frame, tip_frame, self.q0, self.dq0)
         self.subsample = subsample
 
@@ -78,14 +79,17 @@ class iLQRPlannerVelocity:
              num_iter=20,
              r=1e-5,
              weights=np.ones(7),
-             rest = 0.0,
+             rest = 0.1,
              limits=[]):
         if (is_number(trajectories[0][0])): # Single trajectory case
             trajectories = [trajectories]
-        Q = np.diag(weights)
+        Q = np.diag(weights).astype(dtype)
         trajectories = list(trajectories)
         # Add approaches between trajectories
         x0 = np.concatenate([self.rbt.get_ee_pos(), self.rbt.get_ee_orn()])
+        print('Initial position (KDL)', tu.to_pose(x0))
+        print('Initial trajectory position ', tu.to_pose(trajectories[0][0]))
+
         linked_trajectories = []
 
         config.state.progress = 0
@@ -96,9 +100,14 @@ class iLQRPlannerVelocity:
             approach = tu.trapezoidal_approach(x0, traj[0])
             if len(approach) > 1:
                 linked_trajectories.append(tu.rest_inout(approach, rest*0.5))
+                print("Approach 0", tu.to_pose(approach[0]))
+                print("Approach 1", tu.to_pose(approach[-1]))
+
             if rest > 0.0:
                 # TODO double check rest. Seems to give some acceleration artefacts
+
                 traj = tu.rest_inout(traj, rest*0.5)
+                print("Traj 0", tu.to_pose(traj[0]))
                 # dX = np.diff(traj, axis=0)/cfg.dt
                 # speed = np.sqrt(np.sum(dX**2, axis=1))
                 # try:
@@ -119,7 +128,7 @@ class iLQRPlannerVelocity:
         nb_control_vars = len(self.dq0)
         Qs = []
         dQs = []
-        u0_t = np.zeros(nb_control_vars)
+        u0_t = np.zeros(nb_control_vars).astype(dtype)
 
         q0 = self.q0
         dq0 = self.dq0
@@ -159,16 +168,16 @@ class iLQRPlannerVelocity:
 
         Qs = sum(Qs, [])
         dQs = sum(dQs, [])
-        Qs_1 = np.array(Qs)
-        dQs_1= np.array(dQs)
+        Qs_1 = np.array(Qs).astype(dtype)
+        dQs_1= np.array(dQs).astype(dtype)
 
         if self.subsample > 1:
             n = len(Qs)
             Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=1, duration=(n-1)*cfg.dt)
             print('Splined shapes', Qs.shape, dQs.shape)
 
-        Qs = np.array(Qs)
-        dQs = np.array(dQs)
+        Qs = np.array(Qs).astype(dtype)
+        dQs = np.array(dQs).astype(dtype)
 
         return list(Qs), list(dQs)
 
@@ -184,28 +193,35 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     ply.title('joint positions (rad)')
     # Speed is in radians/sec
 
+    t = np.linspace(0, cfg.robot_dt*(len(Qs)-1), len(Qs))
     for i in range(7):
         q = Qs[:, i]
         #dq = np.diff(Qs[:,i])
-        ply.plot(q, label='q%d'%i)
+        ply.plot(t, q, label='q%d'%i)
     #plt.legend(loc='right')
 
     # Plot joint speeds
     ply.subplot(2, 2)
-    ply.title('joint speed deg/sec')
+    ply.title('joint speed rad/sec')
+    t = np.linspace(0, cfg.robot_dt*(len(Qs)-1), len(dQs))
     # Speed is in radians/sec
     for i in range(7):
         dq = dQs[:, i]
         #dq = np.diff(Qs[:,i])
-        ply.plot(geom.degrees(dq)) #, color=ply.default_color(i))
+        ply.plot(t, dq) #geom.degrees(dq)) #, color=ply.default_color(i))
 
-    limit = cfg.default_joint_speed
-    ply.rectangle([0, -limit], [len(dQs), limit], color='k', alpha=0.1, fill=True)
+    n = len(dQs)
+    for i, l in enumerate(robot.qd_lim):
+        ply.line([0, -l], [t[-1], -l], ply.categorical_color(i), ls=':')
+        ply.line([0, l], [t[-1], l], ply.categorical_color(i), ls=':')
+
+    #limit = cfg.default_joint_speed
+    #ply.rectangle([0, -limit], [len(dQs), limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(1, 3)
     # Joint limit graph
     ply.title('Joints min/max')
-    ply.bar([np.min(Qs, axis=0), np.max(Qs, axis=0)], limits=[q_min_panda, q_max_panda])
+    ply.bar([np.min(Qs, axis=0), np.max(Qs, axis=0)], limits=[robot.q_min, robot.q_max])
 
     pts = np.array([robot.pen_tcp_pos(q)[:3] for q in Qs])
     vel = np.diff(pts, axis=0)/cfg.robot_dt
@@ -215,25 +231,27 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     for i in range(3):
         t = np.linspace(0, len(vel), len(vel))*cfg.robot_dt
         ply.plot(t, vel[:,i], ['r', 'g', 'b'][i], label=['x', 'y', 'z'][i], alpha=0.7)
-    ply.plot(t, tu.rownorm(vel), 'k', lw=2, label='norm')
+    #ply.plot(t, tu.rownorm(vel), 'k', lw=2, label='norm')
+    t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
+    ply.plot(t, acc[:,0], 'k', alpha=0.7)
 
     limit = cfg.default_cartesian_speed
     ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
 
-    ply.subplot(2, 1, title='Cartesian acceleration (m/s^2)')
-    acc = np.diff(dQs, axis=0)/cfg.robot_dt
-    for i in range(7):
-        t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
-        ply.plot(t, acc[:,i]) #, ['r', 'g', 'b'][i], alpha=0.7)
-
     # ply.subplot(2, 1, title='Cartesian acceleration (m/s^2)')
-    # for i in range(3):
+    # acc = np.diff(dQs, axis=0)/cfg.robot_dt
+    # for i in range(7):
     #     t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
-    #     ply.plot(t, acc[:,i], ['r', 'g', 'b'][i], alpha=0.7)
-    # ply.plot(t, tu.rownorm(acc), 'k', lw=2)
+    #     ply.plot(t, acc[:,i]) #, ['r', 'g', 'b'][i], alpha=0.7)
 
-    limit = cfg.default_cartesian_speed / cfg.acceleration_time
-    ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
+    ply.subplot(2, 1, title='Cartesian acceleration (m/s^2)')
+    for i in range(1,2):
+        t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
+        ply.plot(t, acc[:,i], ['r', 'g', 'b'][i], alpha=0.7)
+    #ply.plot(t, tu.rownorm(acc), 'k', lw=2)
+
+    #limit = cfg.default_cartesian_speed / cfg.acceleration_time
+    #ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(2, 3)
     box = geom.shapes.box_3d([-0.8, -0.8, 0], [1, 1, 1.2])

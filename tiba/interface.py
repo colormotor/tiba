@@ -619,7 +619,7 @@ class TibaInterface:
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
         self.plan_task_trajectories(trajectories, rest)
 
-    def compute_task_trajectories(self, trajectories, rest=0.1, q=None):
+    def compute_task_trajectories(self, trajectories, rest=0.5, q=None):
         ''' Plan trajectories for the robot given in task space as
         a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
@@ -668,6 +668,7 @@ class TibaInterface:
         def update_state(q):
             state.q = q
             state.pose = self.robot.pen_tcp_pose(state.q)
+            print('Updated pose to', state.pose)
 
         def joint_move(q):
             if type(q) == str:
@@ -692,6 +693,7 @@ class TibaInterface:
             dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
             dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
+            print('Initial position', state.pose)
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
             self.motions[-1].Qs += list(Qs)
             self.motions[-1].dQs += list(dQs)

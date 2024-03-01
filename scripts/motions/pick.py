@@ -4,8 +4,10 @@ up = np.array([0, 0, 1])
 
 start_offset = 100/1000
 
+print('Moving to tool')
 joint_move('Tool')
-# hand_align()
+print('Align hand')
+hand_align()
 # goto_xyz(pick_pos + up*start_offset)
 # goto_xyz(pick_pos)
 # grasp()

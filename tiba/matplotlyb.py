@@ -177,6 +177,10 @@ def subplot(*args, **kwargs):
 def plot(*args, **kwargs):
     glob.fig.add_plot(Plot2d(*args, **kwargs))
 
+def line(a, b, *args, **kwargs):
+    P = np.array([a, b])
+    glob.fig.add_plot(Plot2d(P[:,0], P[:,1], *args, **kwargs))
+
 def bar(*args, **kwargs):
     glob.fig.add_plot(Bar(*args, **kwargs))
 
