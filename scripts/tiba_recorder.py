@@ -243,7 +243,7 @@ def gui():
         #dest_pos = tu.to_pose(cur_frame)
         #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
         #tu.to_pose(cur_pos) #cur_frame #tu.to_pose(
-        dest_pos = tu.align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0]) # On left (pick pens)
+        dest_pos = tu.align_pos_zy(cur_pos, [0, 0, -1], [0, -1, 0]) # On left (pick pens)
         cur_frame = robot.pen_tcp_pose() #robot.hand_frame_to_pen_tcp(tu.to_pose(cur_pos))
         dest_frame = robot.hand_frame_to_pen_tcp(tu.to_pose(dest_pos))
 
