@@ -9,7 +9,7 @@ dip_offset = 15/1000
 clean_offset = 30/1000
 
 joint_move('Dip')
-hand_align()
+tool_align_dip()
 goto_xyz(dip_pos + up*start_offset),
 goto_xyz(dip_pos + up*dip_offset),
 xy_circles(dip_radius_mm, 4)

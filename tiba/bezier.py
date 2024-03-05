@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from scipy.special import binom
 from numpy.linalg import norm
 from scipy.interpolate import interp1d
+from . import geom
 
 def num_bezier(n_ctrl, degree=3):
     if type(n_ctrl) == np.ndarray:
@@ -270,3 +271,21 @@ def cubic_bezier_adaptive(Cp, tol):
     for i in range(0, len(Cp) - 1, 3):
         decasteljau(pts, Cp[i:i+4], tol)
     return np.array(pts)
+
+def split_chain(chain, angle_tol=10):
+    tol = geom.radians(angle_tol)
+    beziers = chain_to_beziers(chain)
+    chunks = [[beziers[0]]]
+    bez = beziers[0]
+    prev = bez[-1] - bez[-2]
+    for bez in beziers[1:]:
+        next = bez[1] - bez[0]
+        theta = abs(geom.angle_between(prev, next))
+        #print(theta)
+        if theta > tol:
+            #if np.linalg.norm(bez[0] - bez[1]) < tol:
+            chunks.append([bez])
+        else:
+            chunks[-1].append(bez)
+        prev = bez[-1] - bez[-2]
+    return [beziers_to_chain(chunk) for chunk in chunks]

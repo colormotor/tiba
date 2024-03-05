@@ -63,13 +63,8 @@ The Tiba API does not necessarily require a robot to be connected and most opera
 - Activate FCI
 *** Network setup
 **** Server setup
-The machine currently cannot run the GPU, which makes graphics apps pretty slow. First run ~ngrok~ to open out a http tunnel with:
-#+begin_example
-ngrok http --domain=horribly-next-shark.ngrok-free.app 11311
-#+end_example
-This will allow connections to/from a second laptop sending coordinates to be drawn by the robot. This is pretty much all ROS is needed for.
-
-Then in order to connect to the robot open one terminal with
+The machine currently cannot run the GPU, which makes graphics apps pretty slow.
+In order to allow external communication with the server and connect to the robot open one terminal with
 #+begin_example
 conda activate ros_env
 roscore
@@ -81,6 +76,7 @@ For using the robot we will need to:
 - unlock the joints (little "unlock" icon)
 - Set the robot to "execution mode"
 - Activate FCI (from the top menu with the IP address)
+
 **** Client setup
 The client *should not* run ~roscore~ but should have the approriate ROS (https://robostack.github.io) conda environment activated. We will need to tell the client machine who is running ~roscore~ by setting the relevant env variable and this can be done in the current terminal by running (from the ~scripts~ directory):
 #+begin_example

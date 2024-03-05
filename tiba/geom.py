@@ -691,6 +691,31 @@ class ArcBall:
         return self.rot.as_euler('xyz', degrees=degrees)
 
 ## Curves and interpolation
+##
+def split_polyline_at_angle(P, angle_tol=90):
+    ''' Split polyline at points where the turning angle is greater than angle_tol degrees'''
+    tol = geom.radians(angle_tol)
+    A = geom.turning_angles(P, all_points=True)
+    I = np.where(np.abs(A) > tol)[0]
+    I = [0] + list(I) + [len(P)-1]
+    splitted = []
+    for a, b in zip(I, I[1:]):
+        splitted.append(P[a:b+1])
+    return splitted
+
+
+def adaptive_subdivide(P, max_len=5):
+    ''' Subdivide a polyline so its segments are not longer than max_len'''
+    Q = [P[0]]
+    for a, b in zip(P, P[1:]):
+        l = distance(a, b)
+        if l > max_len:
+            n = max(int(l/max_len), 3)
+            for t in np.linspace(0, 1, n)[1:-1]:
+                Q.append(a + (b - a)*t)
+        Q.append(b)
+    return np.array(Q)
+
 def uniform_sample( X, delta_s, closed=0, kind='slinear', data=None ):
     ''' Uniformly samples a polyline at approximately equal distances'''
     if closed:

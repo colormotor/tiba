@@ -31,6 +31,7 @@ from . import trapezoidal, todorov
 reload(trapezoidal)
 reload(todorov)
 
+
 from .fitCurves.fitCurves import fitCurve
 
 from . import config
@@ -38,6 +39,7 @@ from .config import cfg
 
 import numbers
 import pdb
+
 
 def is_number(x):
     return isinstance(x, numbers.Number)
@@ -117,15 +119,6 @@ def SE3_interp(a, b, t):
     res = [np.concatenate([pa + ti*d, slerp(ti).as_quat()]) for ti in t]
     return res
 
-def xy_circles_mm(pose, radius_mm, cycle_duration, cycles=1, ease_duration=0.5, easing=2, sign=1):
-    pose = to_pos_orn(pose)
-    pos, orn = pose[:3], pose[3:]
-
-    duration = cycle_duration*cycles
-    radius = radius_mm / 1000
-    T = gauss_easeinout(0, np.pi*2*cycles, duration, ease_duration, easing=easing)
-    pts = [pos + [np.cos(t*sign)*radius, np.sin(t*sign)*radius, 0] for t in T]
-    return approach_inout(pose, [np.concatenate([pos, orn]) for pos in pts])
 
 def offset_frame(frame, d):
     frame = np.array(frame)
@@ -189,12 +182,12 @@ def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=0): #
     #dQ = np.vstack([np.zeros_like(Q[0]), np.diff(Q, axis=0)/cfg.robot_dt])
     dQ = np.array(result.velocity, dtype=dtype)
     # Looks like the planner does not create zero velocity at the end?
-    dQ = np.vstack([dQ] + [np.zeros_like(dQ[0])]*500)
-    Q = np.vstack([Q] + [Q[-1]]*500)
+    # dQ = np.vstack([dQ] + [np.zeros_like(dQ[0])]*500)
+    # Q = np.vstack([Q] + [Q[-1]]*500)
 
     # print('dQ', dQ.shape)
-    print('dQ0', dQ[0])
-    print('dQ1', dQ[-1])
+    # print('dQ0', dQ[0])
+    # print('dQ1', dQ[-1])
     return list(Q), list(dQ) #result.position), list(result.velocity)
 
 def joint_approach(q0, q1, speed=None):
@@ -203,56 +196,9 @@ def joint_approach(q0, q1, speed=None):
 
     return joint_trajectory_time_optimal([q0, q1]) #, max_speed=geom.radians(speed))
 
-
-    # q0 = np.array(q0)
-    # q1 = np.array(q1)
-
-    # dof = len(q0)
-    # dq = q1-q0
-    # d = np.max(np.abs(dq))
-    # v_max = geom.radians(speed)/d
-    # a_max = v_max/cfg.acceleration_time
-    # dt = cfg.robot_dt
-    # tr = trapezoidal.trapezoidal_profile([0], [1],
-    #                                      [0], [0],
-    #                                      [v_max],
-    #                                      [a_max])
-
-
-    # timesteps = int(tr.time / dt)
-    # #print('timesteps', timesteps)
-    # #print('time', tr.time)
-    # time = np.linspace(0, tr.time, timesteps)
-    # ts = [tr(t)[0][2] for t in time]
-    # dts = [tr(t)[0][1] for t in time]
-    # Qs = [q0 + (q1-q0)*t for t in ts]
-    # dQs = np.vstack([np.zeros_like(q0)] + [np.diff(Qs, axis=0)/dt])
-    # #dQs = [dq*dt for dt in dts]
-    # #print(dQs[0], dQs[-1])
-    # return Qs, dQs
-
 def angdistance(a, b):
     return a.angdist(b, metric=3)*2
 
-def duration_from_distance(x0, x1, angular_velocity=None,
-                                   cartesian_speed=None):
-    pose0 = to_pose(x0)
-    pose1 = to_pose(x1)
-
-    if angular_velocity is None:
-        angular_velocity = cfg.default_angular_velocity
-    if cartesian_speed is None:
-        cartesian_speed = cfg.default_cartesian_speed
-
-    angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
-    dist = np.linalg.norm(pose0.t - pose1.t)
-
-    def fitts_id(d, w=1):
-        return np.log2(d/w + 1)
-
-    duration = max(angdist/angular_velocity, dist/cartesian_speed)
-    print('fitts comp', duration, duration*fitts_id(duration))
-    return duration * (1+fitts_id(duration)) # max(cfg.min_approach_duration, duration+fitts_id(duration))
 
 
 def linear_approach(x0, x1, duration=0,
@@ -297,165 +243,119 @@ def trapezoidal_approach(x0, x1,
                          cartesian_speed=None,
                          debug=False):
     ''' Approach trajectory in task space using a trapezoidal speed profile'''
+    return plan_poses_time_optimal([x0, x1])
+    # pose0 = to_pose(x0)
+    # pose1 = to_pose(x1)
+    # print('Trapezoidal approach from', pose0, 'to', pose1)
 
-    pose0 = to_pose(x0)
-    pose1 = to_pose(x1)
-    print('Trapezoidal approach from', pose0, 'to', pose1)
+    # print(np.array2string(np.array(pose0), separator=','))
+    # print(np.array2string(np.array(pose1), separator=','))
+    # #print(repr(np.array(pose1)))
+    # print('pose0 valid', SE3.isvalid(np.array(pose0)))
+    # print('pose1 valid', SE3.isvalid(np.array(pose1)))
 
-    print(np.array2string(np.array(pose0), separator=','))
-    print(np.array2string(np.array(pose1), separator=','))
-    #print(repr(np.array(pose1)))
-    print('pose0 valid', SE3.isvalid(np.array(pose0)))
-    print('pose1 valid', SE3.isvalid(np.array(pose1)))
+    # angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
+    # dist = np.linalg.norm(pose0.t - pose1.t)
 
-    angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
-    dist = np.linalg.norm(pose0.t - pose1.t)
+    # if angular_velocity is None:
+    #     angular_velocity = cfg.default_angular_velocity
 
-    if angular_velocity is None:
-        angular_velocity = cfg.default_angular_velocity
+    # if cartesian_speed is None:
+    #     cartesian_speed = cfg.default_cartesian_speed
 
-    if cartesian_speed is None:
-        cartesian_speed = cfg.default_cartesian_speed
+    # # Use angular velocity if it is the limiting factor
+    # if angdist/angular_velocity > dist/cartesian_speed:
+    #     v_max = angular_velocity # * angdist
+    #     d = angdist
+    # else:
+    #     v_max = cartesian_speed
+    #     d = dist
 
-    # Use angular velocity if it is the limiting factor
-    if angdist/angular_velocity > dist/cartesian_speed:
-        v_max = angular_velocity # * angdist
-        d = angdist
-    else:
-        v_max = cartesian_speed
-        d = dist
+    # # Use trapezoidal planner to compute trajectory parameterization
+    # # Might not be ideal for orientations?
+    # a_max = v_max/cfg.acceleration_time
 
-    # Use trapezoidal planner to compute trajectory parameterization
-    # Might not be ideal for orientations?
-    a_max = v_max/cfg.acceleration_time
+    # dt = cfg.dt
+    # tr = trapezoidal.trapezoidal_profile([0.0], [d], [0], [0], [v_max], [a_max])
+    # timesteps = int(tr.time / dt)
+    # time = np.linspace(0, tr.time, timesteps)
+    # ts = [tr(t)[0][2]/d for t in time] # Assumin
 
-    dt = cfg.dt
-    tr = trapezoidal.trapezoidal_profile([0.0], [d], [0], [0], [v_max], [a_max])
-    timesteps = int(tr.time / dt)
-    time = np.linspace(0, tr.time, timesteps)
-    ts = [tr(t)[0][2]/d for t in time] # Assumin
-
-    print('trapezoidal ts:', ts)
-    #print(pose0, pose1)
-    approach = SE3_interp(pose0, pose1, ts)
-    if len(approach):
-        print('approach', to_pose(approach[0]), 'to ', to_pose(approach[-1] ))
-    else:
-        print('empty approach')
-    return approach
+    # print('trapezoidal ts:', ts)
+    # #print(pose0, pose1)
+    # approach = SE3_interp(pose0, pose1, ts)
+    # if len(approach):
+    #     print('approach', to_pose(approach[0]), 'to ', to_pose(approach[-1] ))
+    # else:
+    #     print('empty approach')
+    # return approach
 
     # approach = [pose0.interp(pose1, t) for t in ts]
     # return pose_traj_to_posorn(approach)
+def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None, accel_time=None, tol=0.0):
+    if max_speed is None:
+        max_speed = cfg.default_cartesian_speed
+    if max_angular_velocity is None:
+        max_angular_velocity = cfg.default_angular_velocity
+    if accel_time is None:
+        accel_time = cfg.acceleration_time
+
+    from trajectory_smoothing import TrajectorySmoother
+
+    # Convert to relative axis angle representation
+    # interpolation will occur along specified angles
+    n = len(keypoints)
+    keypoints = [to_pos_orn(p) for p in keypoints]
+    angles = [0.0]
+    axes = []
+    orientations = []
+    for a, b in zip(keypoints, keypoints[1:]):
+        q1 = UnitQuaternion(a[3:])
+        q2 = UnitQuaternion(b[3:])
+        angle, axis = (q2 * q1.inv()).angvec()
+        angles.append(angle)
+        axes.append(axis)
+        orientations.append(q1)
+    orientations.append(UnitQuaternion(keypoints[-1][3:]))
+    angles = np.cumsum(angles)
+
+    keypoints = [np.concatenate([p[:3], [a]]) for p, a in zip(keypoints, angles)]
+
+    dof = 4
+    max_velocity = np.concatenate([geom.normalize(np.ones(3, dtype=np.float32))*max_speed,
+                                   [max_angular_velocity]])
+    max_acceleration = max_velocity/accel_time
+
+    smoother = TrajectorySmoother(
+        dof, max_velocity, max_acceleration, tol
+    )
+
+    result = smoother.smooth_interpolate(np.array(keypoints), interpolation_dt=cfg.dt, traj_dt=0.001)
+
+    res = []
+    for p, idx in zip(result.position, result.segment_indices):
+        angle = p[3] - angles[idx]
+        aa = UnitQuaternion.AngVec(angle, axes[idx])
+        o = aa * orientations[idx]
+        res.append(np.concatenate([p[:3], np.array(o)]))
+
+    return np.array(res)
 
 def approach(a, b, *args, **kwargs):
     return trapezoidal_approach(a, b, *args, **kwargs)
 
-
 def approach_sequence(seq, *args, **kwargs):
-    #path, _, _ = plan_polylines_time_optimal([np.array(seq)], *args, **kwargs)
-    traj = []
-    for a, b in zip(seq, seq[1:]):
-        traj += approach(a, b, *args, **kwargs)
-    return traj
+    return plan_poses_time_optimal(seq, *args, **kwargs)
+    # #path, _, _ = plan_polylines_time_optimal([np.array(seq)], *args, **kwargs)
+    # traj = []
+    # for a, b in zip(seq, seq[1:]):
+    #     traj += approach(a, b, *args, **kwargs)
+    # return traj
 
 def pose_traj_to_posorn(trajectory):
     ''' Convert a trajectory made of SE3 poses to pos+quaternions'''
     return [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in trajectory]
 
-def gauss_approach(x0, x1, duration=-1,
-                   angular_velocity=None,
-                   cartesian_speed=None,
-                   easing=5,
-                   debug=False):
-    pose0 = to_pose(x0)
-    pose1 = to_pose(x1)
-
-    # if angular_velocity is None:
-    #     angular_velocity = cfg.default_angular_velocity
-    # if cartesian_speed is None:
-    #     cartesian_speed = cfg.default_cartesian_speed
-
-    # if angular_velocity is None:
-    #     angular_velocity = cfg.default_angular_velocity
-    # if cartesian_speed is None:
-    #     cartesian_speed = cfg.default_cartesian_speed
-
-    if duration <= 0.0:
-        duration = duration_from_distance(pose0, pose1,
-                                          angular_velocity,
-                                          cartesian_speed)
-
-    # angular_approach_step = angular_velocity*cfg.dt
-    # pos_approach_step = cartesian_speed*cfg.dt
-
-    # if duration<=0:
-    #     print(pose0, pose1)
-    #     dist = np.linalg.norm(pose0.t - pose1.t)
-    #     print(dist)
-    #     try:
-    #         angdist = abs(pose0.angdist(pose1))
-    #     except ValueError as e:
-    #         print(e)
-    #         angdist = 0
-
-    #     if debug:
-    #         pdb.set_trace()
-    #     # Compute approach steps based on distance
-    #     ang_approach_steps = int(angdist/angular_approach_step)
-    #     pos_approach_steps = int(dist/pos_approach_step)
-    #     n = max(ang_approach_steps, pos_approach_steps)
-    # else:
-
-    n = int(duration/cfg.dt)
-    if n > 0:
-        return SE3_interp(pose0, pose1, gaussspace(0, 1, n, easing=easing))
-        #approach = [pose0.interp(pose1, t) for t in gaussspace(0, 1, n, easing=easing)]
-        #return pose_traj_to_posorn(approach)
-    return []
-
-
-def adaptive_subdivide(P, max_len=5):
-    ''' Subdivide a polyline so its segments are not longer than max_len'''
-    Q = [P[0]]
-    for a, b in zip(P, P[1:]):
-        l = geom.distance(a, b)
-        if l > max_len:
-            n = max(int(l/max_len), 3)
-            for t in np.linspace(0, 1, n)[1:-1]:
-                Q.append(a + (b - a)*t)
-        Q.append(b)
-    return np.array(Q)
-
-
-def split_polyline_at_angle(P, angle_tol=90):
-    ''' Split polyline at points where the turning angle is greater than angle_tol degrees'''
-    tol = geom.radians(angle_tol)
-    A = geom.turning_angles(P, all_points=True)
-    I = np.where(np.abs(A) > tol)[0]
-    I = [0] + list(I) + [len(P)-1]
-    splitted = []
-    for a, b in zip(I, I[1:]):
-        splitted.append(P[a:b+1])
-    return splitted
-
-
-def split_chain(chain, angle_tol=10):
-    tol = geom.radians(angle_tol)
-    beziers = bezier.chain_to_beziers(chain)
-    chunks = [[beziers[0]]]
-    bez = beziers[0]
-    prev = bez[-1] - bez[-2]
-    for bez in beziers[1:]:
-        next = bez[1] - bez[0]
-        theta = abs(geom.angle_between(prev, next))
-        #print(theta)
-        if theta > tol:
-            #if np.linalg.norm(bez[0] - bez[1]) < tol:
-            chunks.append([bez])
-        else:
-            chunks[-1].append(bez)
-        prev = bez[-1] - bez[-2]
-    return [bezier.beziers_to_chain(chunk) for chunk in chunks]
 
 def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0):
     from trajectory_smoothing import TrajectorySmoother
@@ -489,10 +389,10 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
                 Q = np.array(P)
                 A = geom.degrees(geom.turning_angles(Q))
                 L = geom.chord_lengths(Q)
-                print('Min angle:', np.min(A))
-                print('Max angle:', np.max(A))
-                print('Min length:', np.max(L))
-                print('Max length:', np.max(L))
+                # print('Min angle:', np.min(A))
+                # print('Max angle:', np.max(A))
+                # print('Min length:', np.max(L))
+                # print('Max length:', np.max(L))
             else:
                 print("Success %d"%(i+1))
                 print("%d points"%len(result.position))
@@ -506,6 +406,7 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
     print("Finished planning")
     return trajectories, velocities, accelerations
 
+
 def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5, angle_tolerance=10, subd=3, maxiter=300, tol=0.0):
     '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
     with a given maximum speed and max acceleration time
@@ -513,7 +414,7 @@ def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5, angle_toleran
     trajectories = []
     for chain in chains:
         chunk_traj = []
-        for chunk in split_chain(chain, angle_tolerance):
+        for chunk in bezier.split_chain(chain, angle_tolerance):
             #if tol > 0:
             #    pts = bezier.bezier_piecewise(chunk, subd=20)
             #    beziers = fitCurve(pts, tol)
@@ -522,6 +423,7 @@ def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5, angle_toleran
         trajectories.append(np.vstack(chunk_traj))
         #trajectories += chunk_traj
     return trajectories
+
 
 def plan_polylines_jerk(polylines, simp, max_speed, max_accel_time=0.5, angle_tolerance=10, subd=3, maxiter=300, tol=0.0):
     '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
@@ -618,6 +520,7 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
         pdb.set_trace()
     return Y, P
 
+
 def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300):
     '''Given a (2d) cubic Bezier chain, compute a minimum jerk trajectory that tracks the curve
     with a given maximum speed and max acceleration time
@@ -693,16 +596,20 @@ def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300
         pdb.set_trace()
     return Y
 
+
 def rownorm(dP):
     return np.sqrt(np.sum(dP**2, axis=1)) 
+
 
 def compute_speed(X, dt):
     D = np.diff(X, axis=0)/dt
     return rownorm(D)
 
+
 def compute_accel(X, dt):
     D = np.diff(X, axis=0, n=2)/(dt**2)
     return rownorm(D)
+
 
 def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
     ''' Create a pen lifting motion between two points assumed to lie on the XY plane'''

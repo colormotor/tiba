@@ -22,6 +22,8 @@ import numpy as np
 import numbers
 import matplotlib
 
+from . import trajectory_utils as tu
+
 import plotly.io as pio
 pio.renderers.default = 'browser'
 
@@ -186,6 +188,17 @@ def bar(*args, **kwargs):
 
 def plot3d(*args, **kwargs):
     glob.fig.add_plot(Plot3d(*args, **kwargs))
+
+def pose(pose, size=0.1, colors=['r', 'g', 'b'], **kwargs):
+    pose = np.array(tu.to_pose(pose))
+    p = pose[:3, 3]
+    x = pose[:3, 0]
+    y = pose[:3, 1]
+    z = pose[:3, 2]
+
+    stroke3d([p, p + x*size], colors[0], **kwargs)
+    stroke3d([p, p + y*size], colors[1], **kwargs)
+    stroke3d([p, p + z*size], colors[2], **kwargs)
 
 def stroke(X, color=None, **kwargs):
     print(type(X))

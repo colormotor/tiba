@@ -36,7 +36,7 @@ reload(ilqr)
 cfg = config.cfg
 
 class FrankaButton:
-    ''' Keeps track of the state of a robot button'''
+    ''' Keeps track of the state of a robot button, given its name'''
     def __init__(self, button='circle'):
         self.button = button
         self.state = False
@@ -182,43 +182,44 @@ class MotionEditor:
         print('Cur position set to %s'%list(self.positions.keys())[self.cur_position])
         return True
 
-    def gui(self, imgui, itiba):
+    def gui(self, imgui, itiba, show_motions=False):
         names = list(self.motions.keys())
         if self.cur_motion >= len(names):
             self.cur_motion = -1
 
-        ui.imgui_text_separator("Recorded Motions")
-        clicked, self.cur_motion = imgui.listbox("Motion Label", self.cur_motion, names)
-        if clicked:
-            print(self.cur_motion)
+        if show_motions:
+            ui.imgui_text_separator("Recorded Motions")
+            clicked, self.cur_motion = imgui.listbox("Motion Label", self.cur_motion, names)
+            if clicked:
+                print(self.cur_motion)
 
-        if imgui.button("Add Motion"):
-            imgui.open_popup('Add motion')
+            if imgui.button("Add Motion"):
+                imgui.open_popup('Add motion')
 
-        imgui.set_next_window_size(300, 200)
-        if imgui.begin_popup_modal('Add motion').opened:
-            imgui.text("Select name")
-            changed, self.new_motion_name = imgui.input_text('', self.new_motion_name, 512)
+            imgui.set_next_window_size(300, 200)
+            if imgui.begin_popup_modal('Add motion').opened:
+                imgui.text("Select name")
+                changed, self.new_motion_name = imgui.input_text('', self.new_motion_name, 512)
 
-            if imgui.button('OK'):
-                self.add_motion(self.new_motion_name)
-                imgui.close_current_popup()
-            imgui.same_line()
-            if imgui.button('Cancel'):
-                imgui.close_current_popup()
-            imgui.end_popup()
+                if imgui.button('OK'):
+                    self.add_motion(self.new_motion_name)
+                    imgui.close_current_popup()
+                imgui.same_line()
+                if imgui.button('Cancel'):
+                    imgui.close_current_popup()
+                imgui.end_popup()
 
-        if self.get_cur_motion():
-            imgui.same_line()
-            if imgui.button("Delete"):
-                self.delete_motion(names[self.cur_motion])
             if self.get_cur_motion():
-                imgui.text(names[self.cur_motion])
-                self.motion_gui(imgui, itiba, names[self.cur_motion])
+                imgui.same_line()
+                if imgui.button("Delete"):
+                    self.delete_motion(names[self.cur_motion])
+                if self.get_cur_motion():
+                    imgui.text(names[self.cur_motion])
+                    self.motion_gui(imgui, itiba, names[self.cur_motion])
 
-        names = list(self.positions.keys())
-        if self.cur_position >= len(names):
-            self.cur_position = -1
+            names = list(self.positions.keys())
+            if self.cur_position >= len(names):
+                self.cur_position = -1
 
         ui.imgui_text_separator("Key positions")
         clicked, self.cur_position = imgui.listbox("Position Label", self.cur_position, names)
@@ -233,12 +234,14 @@ class MotionEditor:
             if imgui.button("Del"):
                 self.delete_position(names[self.cur_position])
 
+        res = ''
         if self.get_cur_position():
             #print("Selected position")
             imgui.same_line()
             if ui.imgui_color_button('Go'):
                 q = self.get_cur_position()
                 itiba.goto_joint_position(q)
+                res = 'goto:' + names[self.cur_position]
 
         imgui.set_next_window_size(300, 200)
         if imgui.begin_popup_modal('Add position').opened:
@@ -253,7 +256,7 @@ class MotionEditor:
                 imgui.close_current_popup()
             imgui.end_popup()
 
-
+        return res #
 
     def motion_gui(self, imgui, itiba, key):
         motion = self.motions[key]
@@ -418,6 +421,11 @@ class TibaInterface:
     def set_programming_mode(self, desk, flag):
         ''' Set the robot in programming mode
         Urls adapted from https://github.com/TimSchneider42/franky/blob/321a6b3c5cc8fc49b1e4fae9dde0cf130bb03657/franky/robot_web_session.py
+        local Desk must have control with:
+        desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+        if not desk.has_control():
+            desk.take_control(True)
+            desk.activate_fci()
         '''
         if flag:
             url = '/desk/api/operating-mode/programming'
@@ -456,7 +464,7 @@ class TibaInterface:
             time.sleep(delay)
 
     def motion_gui(self, imgui):
-        self.editor.gui(imgui, self)
+        return self.editor.gui(imgui, self)
 
     def read_states(self):
         if self.panda is None:
@@ -533,7 +541,8 @@ class TibaInterface:
         if self.panda is not None:
             print("Actually moving the robot")
             self.panda.move_to_joint_position(np.array(q))
-        self.robot.q = q
+        else:
+            self.robot.q = q
 
     def play_motion(self, motion, delay=2.0):
         ''' Play a pre-recorded motion'''
@@ -687,7 +696,7 @@ class TibaInterface:
             self.motions[-1].dQs += list(dQ)
             update_state(self.motions[-1].Qs[-1])
 
-        def tool_align():
+        def tool_align(y):
             dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
@@ -695,9 +704,12 @@ class TibaInterface:
             self.motions[-1].dQs += list(dQs)
             update_state(self.motions[-1].Qs[-1])
 
-        def hand_align_pick_tool():
+        def tool_align_dip():
+            tool_align([-1, 0, 0])
+
+        def hand_align(y):
             dest_pose = self.robot.get_pos(state.q, 'tiba_hand_tcp')
-            dest_pose = tu.align_pose_zy(dest_pose, [0, 0, -1], [0, -1, 0])
+            dest_pose = tu.align_pose_zy(dest_pose, [0, 0, -1], y)
             dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             print('Initial position', state.pose)
@@ -705,6 +717,9 @@ class TibaInterface:
             self.motions[-1].Qs += list(Qs)
             self.motions[-1].dQs += list(dQs)
             update_state(self.motions[-1].Qs[-1])
+
+        def hand_align_pick_tool():
+            hand_align([0, -1, 0])
 
         def move_xyz(v):
             #print(state.pose)

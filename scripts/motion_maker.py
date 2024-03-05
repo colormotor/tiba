@@ -88,7 +88,7 @@ def load_svg(path):
     tol = 0.1
     for chain in draft_in: #[2:4]:
         if params.bezier_split_angle > 0:
-            chunks = tu.split_chain(chain, angle_tol=params.bezier_split_angle)
+            chunks = bezier.split_chain(chain, angle_tol=params.bezier_split_angle)
         else:
             chunks = [chain]
         chunk_beziers = []
@@ -102,8 +102,8 @@ def load_svg(path):
         for chain in chunk_beziers:
             #chain = bezier.beziers_to_chain(chunk_beziers)
             P = bezier.cubic_bezier_adaptive(chain, tol)
-            P = tu.adaptive_subdivide(P, 5)
-            draft += tu.split_polyline_at_angle(P, 160)
+            P = geom.adaptive_subdivide(P, 5)
+            draft += geom.split_polyline_at_angle(P, 160)
         #draft.append(P)
         # print('chain len:', len(chain))
         # draft.append(bezier.beziers_to_chain(beziers))

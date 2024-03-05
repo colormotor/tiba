@@ -1,25 +1,38 @@
 {
     "params": {
         "seed": 5,
+        "svg_path": "/Users/colormotor/develop/robotics/modules/tiba/scripts/tiba.svg",
+        "gui_hue": 0.5529999732971191,
+        "bezier_split_angle": 159.6060028076172,
         "traj": {
-            "sigma": 0.5,
+            "sigma": 0.5260000228881836,
             "isotropy": 0.5,
             "angle": 0.0
         },
+        "config": {
+            "tool": 3,
+            "cart_planner": 2,
+            "dce_thresh": 416,
+            "max_iterations": 307,
+            "isotropy": 0.4729999899864197,
+            "angle": 50.0,
+            "smoothing": 0.843999981880188,
+            "order": 3
+        },
         "drawing": {
-            "plane_offset": 1.6469999551773071,
-            "padding": 246,
-            "penup_mm": 26,
-            "pos_offset_x": 0.5289999842643738,
-            "pos_offset_y": 0.1289999932050705
+            "plane_offset": -0.6899999976158142,
+            "padding": 450,
+            "penup_mm": 43,
+            "pos_offset_x": -0.09399999678134918,
+            "pos_offset_y": 0.04699999839067459
         },
         "tsm": {
-            "dist": 0.8820000290870667,
-            "xoffset": 0.16500000655651093,
-            "voffset": -0.3409999907016754,
-            "rotx": 271,
-            "roty": 0,
-            "rotz": 176
+            "dist": 1.3499983549118042,
+            "xoffset": 0.2560001611709595,
+            "voffset": -0.5549997687339783,
+            "rotx": 4,
+            "roty": 51,
+            "rotz": -176
         }
     },
     "presets": {},

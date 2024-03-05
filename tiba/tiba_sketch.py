@@ -18,6 +18,7 @@ import numpy as np
 from importlib import reload
 import importlib
 
+
 from motor import lqt
 import imgui
 from polygonsoup import utils, svg, bezier, plut
@@ -26,8 +27,10 @@ import pdb
 import time
 import threading
 
+
 from . import interface
 reload(interface)
+
 
 from .interface import TibaInterface
 from .robot import TibaRobot, tools
@@ -37,6 +40,8 @@ from .config import cfg
 from . import trajectory_utils as tu
 from . import draw, geom, config, ui
 from .gfx import renderer
+
+
 reload(renderer)
 reload(tu)
 reload(planner)
@@ -637,15 +642,15 @@ class TibaSketch:
         if 'drawing' in self.flags:
             ui.imgui_text_separator('Robot Actions')
             if imgui.button('Home'):
-                self.msg_pub.publish('exec:Home')
-            imgui.same_line()
-            if imgui.button('Pick Tool'):
-                self.msg_pub.publish('exec:Pick')
-            imgui.same_line()
-            if imgui.button('Release Tool'):
-                self.msg_pub.publish('exec:Release')
-            if imgui.button('Try dip'):
-                self.dip_trajectory()
+                self.msg_pub.publish('goto:Home')
+            # imgui.same_line()
+            # if imgui.button('Pick Tool'):
+            #     self.msg_pub.publish('exec:Pick')
+            # imgui.same_line()
+            # if imgui.button('Release Tool'):
+            #     self.msg_pub.publish('exec:Release')
+            # if imgui.button('Try dip'):
+            #     self.dip_trajectory()
 
             ui.imgui_text_separator('Trajectory')
 
@@ -787,8 +792,6 @@ class TibaSketch:
                 self.trajectories_computed = False
                 self.dirty = False
 
-        #if state.has_ros:
-        #    rospy.spin_once()
 
     def draw(self):
         c = self.sketch.canvas
