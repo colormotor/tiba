@@ -3,6 +3,7 @@ import rospy
 from std_msgs.msg import String
 from trajectory_msgs.msg import JointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
+from sensor_msgs.msg import JointState
 
 import numpy as np
 import importlib, time, threading
@@ -78,7 +79,12 @@ def msg_callback(data):
     if 'start:' in data.data:
         itiba.read_states()
         send_joint_state()
-    respub.publish("Received message")
+
+    if 'getq' in data.data:
+        print("Received request for joint state")
+        send_joint_state()
+
+    #respub.publish("Received message")
 
 def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
@@ -110,11 +116,17 @@ def jtraj_callback(data):
 
 def send_joint_state(verbose=False):
     itiba.read_states()
-    p = JointTrajectoryPoint()
-    p.positions = itiba.robot.q
+    p = JointState()
+    p.position = itiba.robot.q
+    #p.name = "Tiba joint state"
+    #p = JointTrajectoryPoint()
+    #p.positions = itiba.robot.q
     if verbose:
         print('Sending joint state')
     qpub.publish(p)
+    #respub.publish("YO this is a very long message why not the joint pub fuck cuckasdas asd asdasd asd asdasdasd asd asd asd asdasd ad")
+    if verbose:
+        print('Finish sending joint state')
 
 def joint_pos_sender_thread():
     time.sleep(0.5);
@@ -123,6 +135,7 @@ def joint_pos_sender_thread():
         if not state.executing:
             send_joint_state(False)
         time.sleep(0.1)
+    print('Joint thread ended')
 
 def main():
     print('__________________________________________')
@@ -146,7 +159,8 @@ def main():
     rospy.init_node('tiba_server', anonymous=True)
     rospy.Subscriber("/tiba/msg", String, msg_callback)
     rospy.Subscriber("/tiba/jtraj", JointTrajectory, jtraj_callback)
-    qpub = rospy.Publisher("/tiba/q", JointTrajectoryPoint, queue_size=10)
+    #qpub = rospy.Publisher("/tiba/q", JointTrajectoryPoint, queue_size=10) #, queue_size=1)
+    qpub = rospy.Publisher("/tiba/q", JointState, queue_size=10) #, queue_size=1)
     respub = rospy.Publisher("/tiba/response", String, queue_size=10)
 
     print("Publishing")

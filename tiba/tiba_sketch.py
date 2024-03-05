@@ -635,7 +635,8 @@ class TibaSketch:
            q = self.robot.q
            print('TCP: ', list(tcp))
            print('q: ', list(q))
-
+           hand = self.robot.get_pose(None, 'tiba_hand_tcp')
+           print('Hand TCP pos', list(hand.t))
         button_color = [1.0, 0.5, 0.0, 1.0]
 
 

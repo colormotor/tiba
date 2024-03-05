@@ -732,6 +732,19 @@ class TibaInterface:
             self.motions[-1].dQs += list(dQs)
             update_state(self.motions[-1].Qs[-1])
 
+        def goto_xyz_hand(pos):
+            #print(state.pose)
+            dest_pose = np.array(state.pose)
+            dest_pose = self.robot.pen_tcp_frame_to_hand(dest_pose)
+            dest_pose[:3, 3] = pos
+            dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
+            #print(dest_pose)
+            trajectories = [tu.approach_sequence([state.pose, dest_pose])]
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            self.motions[-1].Qs += list(Qs)
+            self.motions[-1].dQs += list(dQs)
+            update_state(self.motions[-1].Qs[-1])
+
         def goto_xyz(pos):
             #print(state.pose)
             dest_pose = np.array(state.pose)

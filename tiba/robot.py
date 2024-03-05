@@ -61,6 +61,11 @@ tools = {
     },
 
     'Calli-brush-01': {
+        'tip_dist_mm': 72.0,
+        'tip_height_mm': 5.0
+    },
+
+    'Calli-brush-02': {
         'tip_dist_mm': 74.0,
         'tip_height_mm': 0.0
     }
