@@ -11,7 +11,7 @@
             "elbow": true
         },
         "config": {
-            "tool": 4,
+            "tool": 3,
             "cart_planner": 0,
             "dce_thresh": 250,
             "max_iterations": 450,
@@ -24,9 +24,9 @@
             "dist": 2.4499995708465576,
             "xoffset": -0.1300000101327896,
             "voffset": -0.23000000417232513,
-            "rotx": -13,
-            "roty": -6,
-            "rotz": -179
+            "rotx": -18,
+            "roty": -16,
+            "rotz": -177
         }
     },
     "presets": {},
