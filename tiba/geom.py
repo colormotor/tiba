@@ -92,6 +92,15 @@ def distance(a, b):
 def distance_sq(a, b):
     return np.dot(b-a, b-a)
 
+def tangents(P, closed=False):
+    if closed:
+        P = np.vstack([P, P[0]])
+    return np.diff(P, axis=0)
+
+def perp(x):
+    ''' 2d perpendicular vector'''
+    return np.dot([[0,-1],[1, 0]], x)
+
 def turning_angles(P, closed=False, all_points=False, N=None):
     if len(P) <= 2:
         return np.zeros(len(P))
@@ -694,8 +703,8 @@ class ArcBall:
 ##
 def split_polyline_at_angle(P, angle_tol=90):
     ''' Split polyline at points where the turning angle is greater than angle_tol degrees'''
-    tol = geom.radians(angle_tol)
-    A = geom.turning_angles(P, all_points=True)
+    tol = radians(angle_tol)
+    A = turning_angles(P, all_points=True)
     I = np.where(np.abs(A) > tol)[0]
     I = [0] + list(I) + [len(P)-1]
     splitted = []

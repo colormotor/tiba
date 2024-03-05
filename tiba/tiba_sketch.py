@@ -355,8 +355,8 @@ class TibaSketch:
             try:
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
-                rospy.Subscriber('/tiba/q', JointTrajectoryPoint, self.state_callback)
                 rospy.Subscriber('/tiba/response', String, self.response_callback)
+                rospy.Subscriber('/tiba/q', JointTrajectoryPoint, self.state_callback)
                 rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
                 self.send_msg('start: Tiba sketch connecting')
             except rospy.exceptions.ROSException as e:
@@ -376,7 +376,7 @@ class TibaSketch:
         print("Received response: ", data.data)
 
     def state_callback(self, data):
-        # print("Received state")
+        print("Received state")
         self.robot.q = np.array(data.positions)
         #self.itiba.Qs = []
         #self.steps, self.fk_points = [], []
