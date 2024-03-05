@@ -113,7 +113,7 @@ def load_svg(path):
         if len(draft) > 1:
             # Sort from top left first
             draft = sorted(draft, key=lambda P: np.min(P[:, 1]) + np.min(P[:, 0]))
-            draft = spatial.sort_paths(draft, reversable=False)
+            draft = spatial.sort_paths(draft, reversable=True)
         tsketch.set_draft(draft)
     except (RuntimeWarning, ValueError) as e:
         print('Sort paths failed')

@@ -642,6 +642,14 @@ class TibaSketch:
 
 
         if 'drawing' in self.flags:
+            ui.imgui_text_separator("Scripts")
+            script = self.script_gui()
+            if script:
+                args = script['args'] if 'args' in script else {}
+                self.plan_script(script['file'], **args)
+                if self.itiba.Qs:
+                    self.itiba.plot_trajectory_stats()
+
             ui.imgui_text_separator('Robot Actions')
             if imgui.button('Home'):
                 self.msg_pub.publish('goto:Home')
