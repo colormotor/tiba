@@ -41,7 +41,6 @@ from . import trajectory_utils as tu
 from . import draw, geom, config, ui
 from .gfx import renderer
 
-
 reload(renderer)
 reload(tu)
 reload(planner)
@@ -61,22 +60,22 @@ import multiprocessing, sys
 
 
 state = lambda: None
-state.has_ros = False
+# state.has_ros = False
 
-rosloader = importlib.find_loader('rospy')
-# Load ROS if available, not strictly necessary if not using robot
-if rosloader is not None:
-    print("Loading ros")
-    import rospy
-    from std_msgs.msg import String
-    from trajectory_msgs.msg import JointTrajectory
-    from trajectory_msgs.msg import JointTrajectoryPoint
-    from sensor_msgs.msg import JointState
-    from std_msgs.msg import Float64MultiArray
-    from std_msgs.msg import Time
-    from std_msgs.msg import Header
-    from std_msgs.msg import Duration
-    state.has_ros = True
+# rosloader = importlib.find_loader('rospy')
+# # Load ROS if available, not strictly necessary if not using robot
+# if rosloader is not None:
+#     print("Loading ros")
+#     import rospy
+#     from std_msgs.msg import String
+#     from trajectory_msgs.msg import JointTrajectory
+#     from trajectory_msgs.msg import JointTrajectoryPoint
+#     from sensor_msgs.msg import JointState
+#     from std_msgs.msg import Float64MultiArray
+#     from std_msgs.msg import Time
+#     from std_msgs.msg import Header
+#     from std_msgs.msg import Duration
+#     state.has_ros = True
 
 # # GUI helpers
 # def imgui_title(text):
@@ -350,39 +349,39 @@ class TibaSketch:
         self.draft = []
         self.clear()
 
-        print("#################################################")
-        print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
-        if state.has_ros:
-            try:
-                self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
-                self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
-                rospy.Subscriber('/tiba/response', String, self.response_callback)
-                rospy.Subscriber('/tiba/q', JointState, self.state_callback)
-                rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
-                self.send_msg('start: Tiba sketch connecting')
-            except rospy.exceptions.ROSException as e:
-                print("Ros issue")
-                state.has_ros = False
+        # print("#################################################")
+        # print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
+        # if state.has_ros:
+        #     try:
+        #         self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
+        #         self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
+        #         rospy.Subscriber('/tiba/response', String, self.response_callback)
+        #         rospy.Subscriber('/tiba/q', JointState, self.state_callback)
+        #         rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
+        #         self.send_msg('start: Tiba sketch connecting')
+        #     except rospy.exceptions.ROSException as e:
+        #         print("Ros issue")
+        #         state.has_ros = False
 
         self.threads = []
 
     def release(self):
         self.v3d.release()
 
-    def send_msg(self, data):
-        print("Sending msg", data)
-        self.msg_pub.publish(data)
+    # def send_msg(self, data):
+    #     print("Sending msg", data)
+    #     self.msg_pub.publish(data)
 
-    def response_callback(self, data):
-        print("Received response: ", data.data)
+    # def response_callback(self, data):
+    #     print("Received response: ", data.data)
 
-    def state_callback(self, data):
-        #print("Received state")
-        self.robot.q = np.array(data.position)
-        #self.itiba.Qs = []
-        #self.steps, self.fk_points = [], []
-        #self.trajectories_computed = False
-        #self.trajectories = []
+    # def state_callback(self, data):
+    #     #print("Received state")
+    #     self.robot.q = np.array(data.position)
+    #     #self.itiba.Qs = []
+    #     #self.steps, self.fk_points = [], []
+    #     #self.trajectories_computed = False
+    #     #self.trajectories = []
 
     #@staticmethod
     def add_parameters(self, params_to_update):
@@ -479,20 +478,20 @@ class TibaSketch:
         P = np.array(P)[I]
         self.v3d.polyline(P)
 
-    def send_joint_trajectory(self, Qs, dQs):
-        jtraj = JointTrajectory()
-        jtraj.header = Header()
-        jtraj.header.stamp = rospy.Time.now()
-        jtraj.joint_names = ['panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6',
-                                'panda_joint7']
-        for i, (q, dq) in enumerate(zip(Qs, dQs)):
-            p = JointTrajectoryPoint()
-            p.positions = q
-            p.velocities = dq
-            #p.time_from_start = Duration(0, int(1e+9*cfg.robot_dt*i))
-            jtraj.points.append(p)
-        self.jtraj_pub.publish(jtraj)
-        rospy.loginfo("Sent joint trajectory")
+    # def send_joint_trajectory(self, Qs, dQs):
+    #     jtraj = JointTrajectory()
+    #     jtraj.header = Header()
+    #     jtraj.header.stamp = rospy.Time.now()
+    #     jtraj.joint_names = ['panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6',
+    #                             'panda_joint7']
+    #     for i, (q, dq) in enumerate(zip(Qs, dQs)):
+    #         p = JointTrajectoryPoint()
+    #         p.positions = q
+    #         p.velocities = dq
+    #         #p.time_from_start = Duration(0, int(1e+9*cfg.robot_dt*i))
+    #         jtraj.points.append(p)
+    #     self.jtraj_pub.publish(jtraj)
+    #     rospy.loginfo("Sent joint trajectory")
 
     def params_changed(self, *args):
         for key in args:
@@ -567,8 +566,8 @@ class TibaSketch:
             print("No draft")
             return
 
-        max_speed=cfg.default_cartesian_speed
-        accel_time=cfg.acceleration_time
+        max_speed = cfg.default_cartesian_speed
+        accel_time = cfg.acceleration_time
         traj_callback = self.trajectory_callback
         trajectory_includes_penup = False
 
@@ -628,7 +627,7 @@ class TibaSketch:
             self.itiba.launch_simulator()
         imgui.same_line()
         if imgui.button('Say hello'):
-            self.send_msg('hello!!!')
+            self.itiba.send_msg('hello!!!')
         imgui.same_line()
         if imgui.button('Print pose'):
            tcp = self.robot.pen_tcp_pos(self.robot.q)
@@ -638,8 +637,6 @@ class TibaSketch:
            hand = self.robot.get_pose(None, 'tiba_hand_tcp')
            print('Hand TCP pos', list(hand.t))
         button_color = [1.0, 0.5, 0.0, 1.0]
-
-
 
         if 'drawing' in self.flags:
             ui.imgui_text_separator("Scripts")
@@ -652,7 +649,8 @@ class TibaSketch:
 
             ui.imgui_text_separator('Robot Actions')
             if imgui.button('Home'):
-                self.msg_pub.publish('goto:Home')
+                self.itiba.send_msg('goto:Home')
+                #self.msg_pub.publish('goto:Home')
             # imgui.same_line()
             # if imgui.button('Pick Tool'):
             #     self.msg_pub.publish('exec:Pick')
@@ -722,7 +720,7 @@ class TibaSketch:
                             if 'no_server' in self.flags:
                                 self.itiba.execute()
                             else:
-                                self.send_joint_trajectory(self.itiba.Qs, self.itiba.dQs)
+                                self.itiba.send_joint_trajectory() #self.itiba.Qs, self.itiba.dQs)
                             imgui.close_current_popup()
                         imgui.same_line()
                         if imgui.button('Cancel'):
