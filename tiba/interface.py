@@ -415,6 +415,9 @@ class TibaInterface:
                 print("Ros issue")
                 state.has_ros = False
 
+    def has_ros(self):
+        return state.has_ros
+
     def send_msg(self, data):
         print("Sending msg", data)
         self.msg_pub.publish(data)
@@ -700,7 +703,7 @@ class TibaInterface:
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
         self.plan_task_trajectories(trajectories, rest)
 
-    def compute_task_trajectories(self, trajectories, rest=0.5, q=None):
+    def compute_task_trajectories(self, trajectories, rest=0.5, q=None, tip_frame='tiba_pen_tcp'):
         ''' Plan trajectories for the robot given in task space as
         a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
@@ -711,6 +714,7 @@ class TibaInterface:
         planner = ilqr.iLQRPlannerVelocity(self.robot.urdf_file,
                                            q,
                                            subsample=int(cfg.dt/cfg.robot_dt),
+                                           tip_frame=tip_frame)
                                            )
         Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits)
         return Qs, dQs
@@ -727,6 +731,7 @@ class TibaInterface:
         state = lambda: None
         state.q = self.robot.q
         state.pose = self.robot.pen_tcp_pose(state.q)
+        state.hand_pose = self.robot.hand_tcp_pose(state.q)
 
         # Clear joint trajectory
         self.motions = [Motion([], [])]
@@ -749,6 +754,7 @@ class TibaInterface:
         def update_state(q):
             state.q = q
             state.pose = self.robot.pen_tcp_pose(state.q)
+            state.hand_pose = self.robot.hand_tcp_pose(state.q)
             print('Updated pose to', state.pose)
 
         def joint_move(q):
@@ -779,10 +785,10 @@ class TibaInterface:
         def hand_align(y):
             dest_pose = self.robot.get_pos(state.q, 'tiba_hand_tcp')
             dest_pose = tu.align_pose_zy(dest_pose, [0, 0, -1], y)
-            dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
-            trajectories = [tu.approach_sequence([state.pose, dest_pose])]
+            #dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
+            trajectories = [tu.approach_sequence([state.hand_pose, dest_pose])]
             print('Initial position', state.pose)
-            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp')
             self.motions[-1].Qs += list(Qs)
             self.motions[-1].dQs += list(dQs)
             update_state(self.motions[-1].Qs[-1])
@@ -803,13 +809,10 @@ class TibaInterface:
 
         def goto_xyz_hand(pos):
             #print(state.pose)
-            dest_pose = np.array(state.pose)
-            dest_pose = self.robot.pen_tcp_frame_to_hand(dest_pose)
+            dest_pose = np.array(state.hand_pose)
             dest_pose[:3, 3] = pos
-            dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
-            #print(dest_pose)
-            trajectories = [tu.approach_sequence([state.pose, dest_pose])]
-            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            trajectories = [tu.approach_sequence([state.hand_pose, dest_pose])]
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp')
             self.motions[-1].Qs += list(Qs)
             self.motions[-1].dQs += list(dQs)
             update_state(self.motions[-1].Qs[-1])

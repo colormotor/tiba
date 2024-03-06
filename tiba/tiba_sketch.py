@@ -306,6 +306,7 @@ class TibaSketch:
         self.flags = flags
         self.arcball = geom.ArcBall()
         self.thread_funcs = []
+        self.itiba = None
 
     def init(self, sketch,
              callback=None,
@@ -704,7 +705,7 @@ class TibaSketch:
 
             if self.itiba.motions: #Qs:
                 imgui.separator()
-                if not state.has_ros:
+                if not self.itiba.has_ros:
                     if ui.imgui_color_button('Simulate trajectory'):
                         #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
                         self.itiba.simulate()

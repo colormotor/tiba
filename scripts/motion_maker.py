@@ -50,16 +50,16 @@ threads = []
 def response_callback(self, data):
     print('Received response:', data.data)
 
-def state_callback(self, data):
-    print('Received q:', data.position)
-    tsketch.itiba.state_callback(data)
+def state_callback(data):
+    #print('Received q:', data.position)
+    if tsketch.itiba is not None:
+        tsketch.itiba.state_callback(data)
 
 rosloader = importlib.find_loader('rospy')
 if rosloader is not None:
     import rospy
     from sensor_msgs.msg import JointState
     from std_msgs.msg import String
-
 
 def setup():
     # Load parameters here for standalone
@@ -75,10 +75,11 @@ def setup():
         tsketch.init(sketch)
 
         if rosloader is not None:
+            print("Initializing ROS")
             rospy.Subscriber('/tiba/response', String, response_callback)
-            rospy.Subscriber('/tiba/q', JointState, tsketch.itiba.state_callback)
-            rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
-
+            rospy.Subscriber('/tiba/q', JointState, state_callback)
+            rospy.init_node('motion_generator', log_level=rospy.ERROR) #
+            tsketch.itiba.send_msg('start: Tiba sketch connecting')
     except Exception as e:
         print(e)
         assert(False)

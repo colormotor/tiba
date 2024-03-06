@@ -170,6 +170,11 @@ class TibaRobot(Robot):
     def get_frame(self, q, name):
         return np.array(self.get_pose(q, name))
 
+    def hand_tcp_pose(self, q=None):
+        if q is None:
+            q = self.q
+        return self.get_pose(q, 'tiba_hand_tcp')
+
     def pen_tcp_pose(self, q=None):
         if q is None:
             q = self.q
