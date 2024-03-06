@@ -45,8 +45,21 @@ def random_q():
 #robot = TibaRobot(60, 0, 0) # Molotow
 # robot = TibaRobot(74, 0, 15) # Small brush
 tsketch = TibaSketch()
-
 threads = []
+
+def response_callback(self, data):
+    print('Received response:', data.data)
+
+def state_callback(self, data):
+    print('Received q:', data.position)
+    tsketch.itiba.state_callback(data)
+
+rosloader = importlib.find_loader('rospy')
+if rosloader is not None:
+    import rospy
+    from sensor_msgs.msg import JointState
+    from std_msgs.msg import String
+
 
 def setup():
     # Load parameters here for standalone
@@ -60,6 +73,12 @@ def setup():
 
     try:
         tsketch.init(sketch)
+
+        if rosloader is not None:
+            rospy.Subscriber('/tiba/response', String, response_callback)
+            rospy.Subscriber('/tiba/q', JointState, tsketch.itiba.state_callback)
+            rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
+
     except Exception as e:
         print(e)
         assert(False)
