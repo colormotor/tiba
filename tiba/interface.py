@@ -35,6 +35,26 @@ reload(ilqr)
 
 cfg = config.cfg
 
+state = lambda: None
+state.has_ros = False
+
+rosloader = importlib.find_loader('rospy')
+# Load ROS if available, not strictly necessary if not using robot
+if rosloader is not None:
+    print("Loading ros")
+    import rospy
+    from std_msgs.msg import String
+    from trajectory_msgs.msg import JointTrajectory
+    from trajectory_msgs.msg import JointTrajectoryPoint
+    from sensor_msgs.msg import JointState
+    from std_msgs.msg import Float64MultiArray
+    from std_msgs.msg import Time
+    from std_msgs.msg import Header
+    from std_msgs.msg import Duration
+    state.has_ros = True
+
+
+
 class FrankaButton:
     ''' Keeps track of the state of a robot button, given its name'''
     def __init__(self, button='circle'):
@@ -381,6 +401,50 @@ class TibaInterface:
         self.scripts_file = scripts_file
         self.reload_scripts()
 
+        print("#################################################")
+        print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
+        if state.has_ros:
+            try:
+                self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
+                self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
+                rospy.Subscriber('/tiba/response', String, self.response_callback)
+                rospy.Subscriber('/tiba/q', JointState, self.state_callback)
+                rospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True)
+                self.send_msg('start: Tiba sketch connecting')
+            except rospy.exceptions.ROSException as e:
+                print("Ros issue")
+                state.has_ros = False
+
+    def send_msg(self, data):
+        print("Sending msg", data)
+        self.msg_pub.publish(data)
+
+    def send_joint_trajectory(self, Qs=None, dQs=None):
+        if Qs is None:
+            Qs = self.Qs
+        if dQs is None:
+            dQs = self.dQs
+        jtraj = JointTrajectory()
+        jtraj.header = Header()
+        jtraj.header.stamp = rospy.Time.now()
+        jtraj.joint_names = ['panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6',
+                                'panda_joint7']
+        for i, (q, dq) in enumerate(zip(Qs, dQs)):
+            p = JointTrajectoryPoint()
+            p.positions = q
+            p.velocities = dq
+            #p.time_from_start = Duration(0, int(1e+9*cfg.robot_dt*i))
+            jtraj.points.append(p)
+        self.jtraj_pub.publish(jtraj)
+        rospy.loginfo("Sent joint trajectory")
+
+    def response_callback(self, data):
+        print("Received response: ", data.data)
+
+    def state_callback(self, data):
+        self.robot.q = np.array(data.position)
+
+
     def launch_simulator(self):
         env = swift.Swift()
         env.launch(realtime=True)
@@ -486,7 +550,6 @@ class TibaInterface:
         self.delay(delay)
 
         for motion in self.motions:
-
             if motion.grasp is not None:
                 if motion.grasp == False:
                     self.ungrasp()
