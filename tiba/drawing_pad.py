@@ -93,6 +93,12 @@ class DrawingPad:
         scaled_box[1] = scaled_box[0] + self.scale*size
         self.scaled_box = scaled_box
 
+    def align_pose_to_pad(self, pose):
+        z = self.frame[:3,2]
+        pose = tu.align_frame_z(pose, -z)
+        return pose
+        #return np.array(UnitQuaternion(SE3(tcp_frame)))
+
     def get_pen_orientation(self, robot, q):
         z = self.frame[:3,2]
         tcp_frame = robot.pen_tcp_frame(q)

@@ -63,6 +63,9 @@ tsketch = TibaSketch(flags=['no_server'])
 
 def on_event(event):
     print(event)
+    if tsketch.itiba is None:
+        print("Interface not initialized yet")
+        return
     robot = tsketch.robot
     itiba = tsketch.itiba
     print('Grasped: ', itiba.grasped)
@@ -244,11 +247,11 @@ def gui():
         #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
         #tu.to_pose(cur_pos) #cur_frame #tu.to_pose(
         dest_pos = tu.align_pos_zy(cur_pos, [0, 0, -1], [0, -1, 0]) # On left (pick pens)
-        cur_frame = robot.pen_tcp_pose() #robot.hand_frame_to_pen_tcp(tu.to_pose(cur_pos))
-        dest_frame = robot.hand_frame_to_pen_tcp(tu.to_pose(dest_pos))
+        #cur_frame = robot.pen_tcp_pose() #robot.hand_frame_to_pen_tcp(tu.to_pose(cur_pos))
+        #dest_frame = robot.hand_frame_to_pen_tcp(tu.to_pose(dest_pos))
 
-        trajectories = [tu.approach_sequence([cur_frame, dest_frame])]
-        tsketch.plan_task_trajectories(trajectories)
+        trajectories = [tu.approach_sequence([cur_pos, dest_pos])]
+        tsketch.plan_task_trajectories(trajectories, tip_frame='tiba_hand_tcp')
         tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
         #
     if imgui.button('Align pen for dip'):
@@ -269,7 +272,18 @@ def gui():
         trajectories = [tu.approach_sequence([cur_pos, dest_pos])]
         tsketch.plan_task_trajectories(trajectories)
         tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+        #
+
         #tsketch.itiba.set_programming_mode(desk, state.programming)
+    if imgui.button('Align pen to pad'):
+        #tsketch.itiba.set_programming_mode(desk, False)
+        robot = tsketch.robot
+        cur_pose = robot.pen_tcp_pose()
+        dest_pose = tsketch.itiba.pad.align_pose_to_pad(cur_pose)
+        trajectories = [tu.approach_sequence([cur_pose, dest_pose])]
+        tsketch.plan_task_trajectories(trajectories)
+        tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+        #
 
     # if imgui.button('Try script'):
     #     #tsketch.plan_script('motions/dip.py', dip_radius_mm=7.5, clean_radius_mm=34.0) #dip_radius_mm=7.5, clean_radius_mm=14.0)

@@ -526,8 +526,8 @@ class TibaSketch:
         self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
         self.trajectories_computed = True
 
-    def plan_task_trajectories(self, trajectories):
-        self.itiba.plan_task_trajectories(trajectories)
+    def plan_task_trajectories(self, trajectories, tip_frame='tiba_pen_tcp'):
+        self.itiba.plan_task_trajectories(trajectories, tip_frame=tip_frame)
         self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
         self.trajectories_computed = True
 

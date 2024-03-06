@@ -237,9 +237,9 @@ class MotionEditor:
                     imgui.text(names[self.cur_motion])
                     self.motion_gui(imgui, itiba, names[self.cur_motion])
 
-            names = list(self.positions.keys())
-            if self.cur_position >= len(names):
-                self.cur_position = -1
+        names = list(self.positions.keys())
+        if self.cur_position >= len(names):
+            self.cur_position = -1
 
         ui.imgui_text_separator("Key positions")
         clicked, self.cur_position = imgui.listbox("Position Label", self.cur_position, names)
@@ -714,13 +714,13 @@ class TibaInterface:
         planner = ilqr.iLQRPlannerVelocity(self.robot.urdf_file,
                                            q,
                                            subsample=int(cfg.dt/cfg.robot_dt),
-                                           tip_frame=tip_frame)
+                                           tip_frame=tip_frame
                                            )
         Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits)
         return Qs, dQs
 
-    def plan_task_trajectories(self, trajectories, rest=0.1, q=None):
-        Qs, dQs = self.compute_task_trajectories(trajectories, rest, q)
+    def plan_task_trajectories(self, trajectories, rest=0.1, q=None, tip_frame='tiba_pen_tcp'):
+        Qs, dQs = self.compute_task_trajectories(trajectories, rest, q, tip_frame)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
     def plan_script(self, path, **kwargs):
