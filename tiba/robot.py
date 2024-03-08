@@ -73,6 +73,10 @@ tools = {
     'Calli-brush-02': {
         'tip_dist_mm': 74.0,
         'tip_height_mm': 0.0
+    },
+
+    'Squeezer': {
+        'is_squeezer': True
     }
 }
 
@@ -102,16 +106,22 @@ class TibaRobot(Robot):
 
     def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5, angle=15.0,
                  pressure_range=0.0,
+                 is_squeezer=False,
                  limits=fr3_limits):
         path = os.path.join(os.path.dirname(__file__), '../urdf/franka_description/')
-        self.xacro_file = os.path.join(path, 'tiba.urdf.xacro')
+        if is_squeezer:
+            self.xacro_file = os.path.join(path, 'tiba_squeeze.urdf.xacro')
+            mappings = {'angle': 45.0}
+        else:
+            self.xacro_file = os.path.join(path, 'tiba.urdf.xacro')
+            mappings={'tip_dist_mm': tip_dist_mm,
+                      'tip_height_mm': tip_height_mm,
+                      'angle': angle}
+
         self.urdf_file = os.path.join(path, 'tiba_test.urdf')
         xacro_to_urdf(self.xacro_file, self.urdf_file,
                       tld=path,
-                      mappings={'tip_dist_mm': tip_dist_mm,
-                                'tip_height_mm': tip_height_mm,
-                                'angle': angle})
-
+                        mappings=mappings)
         links, name, urdf_string, urdf_filepath = self.URDF_read(self.urdf_file,
                                                                  tld=path)
         # print(links)

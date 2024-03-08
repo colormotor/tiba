@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="hand">
+  <!-- safety_distance: Minimum safety distance in [m] by which the collision volumes are expanded and which is enforced during robot motions -->
+  <xacro:macro name="holder_squeeze" params="connected_to:='' arm_id:='panda' rpy:='0 0 0' xyz:='0 0 0' angle:='45.0' safety_distance:=0">
+    <xacro:property name="theta" value="${(pi / 180.0) * angle}" />
+    <xacro:property name="length" value="${66.609/1000}" />
+    <xacro:unless value="${connected_to == ''}">
+      <joint name="${arm_id}_holder_tcp_joint" type="fixed">
+        <origin rpy="0 ${-pi/2} 0" xyz="0 0 0"/>
+        <parent link="${connected_to}"/>
+        <child link="${arm_id}_holder"/>
+      </joint>
+    </xacro:unless>
+    <link name="${arm_id}_holder">
+      <visual>
+        <geometry>
+          <mesh filename="./meshes/visual/holder.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="${arm_id}_holder_base_joint" type="fixed">
+      <!-- Move origin to one end  -->
+      <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/>
+      <parent link="${arm_id}_holder"/>
+      <child link="${arm_id}_holder_base_link"/>
+    </joint>
+    <link name="${arm_id}_holder_base_link" />
+
+    <joint name="${arm_id}_pen_joint" type="fixed">
+      <!-- Find height based on horizontal distance from end to tip of tool -->
+      <origin rpy="0.0 ${theta + pi/2} 0.0" xyz="0.0 0.0 0.0"/>
+      <parent link="${arm_id}_holder_base_link"/>
+      <child link="${arm_id}_pen"/>
+    </joint>
+    <link name="${arm_id}_pen">
+      <visual>
+        <geometry>
+          <cylinder length="${length*2}" radius="0.002"/>
+        </geometry>
+      </visual>
+    </link>
+    <link name='${arm_id}_pen_tcp'>
+      <visual>
+        <geometry>
+          <sphere radius="0.02"/>
+        </geometry>
+        <material name="tipcolor">
+            <color rgba="1 1 1 1"/>
+        </material>
+      </visual>
+    </link>
+    <joint name="${arm_id}_pen_tcp_joint" type="fixed">
+      <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 ${length}" /> 
+      <parent link="${arm_id}_pen"/>
+      <child link="${arm_id}_pen_tcp"/>
+    </joint>
+  </xacro:macro>
+</robot>
