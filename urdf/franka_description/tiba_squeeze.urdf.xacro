@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
+  <xacro:arg name="tip_dist_mm" default="52" />
+  <xacro:arg name="tip_height_mm" default="12.5" />
+  <xacro:arg name="angle" default="45.0" />
+
+  <xacro:arg name="pad_rot" default="3.12860235 0.55984526 -3.12626225"/>
+  <xacro:arg name="pad_pos" default="0.62997504 -0.03598302 0.24842281"/>
+
+  <xacro:arg name="pad_thickness" default="0.05" />
+
+  <xacro:property name="pad_thickness" value="$(arg pad_thickness)" />
+
+  <xacro:include filename="./panda_arm.xacro"/>
+  <xacro:include filename="./hand.xacro"/>
+  <xacro:include filename="./holder_squeeze.xacro"/>
+
+  <!-- box shaped table as base for the 2 Pandas -->
+  <link name="base">
+    <visual>
+      <origin rpy="0 0 0" xyz="0.45 0 -0.499"/>
+      <geometry>
+        <box size="2 1 1"/>
+      </geometry>
+      <material name="White">
+        <color rgba="1.0 1.0 1.0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.45 0 -0.5"/>
+      <geometry>
+        <box size="2 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="drawing_pad">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 ${pad_thickness/2}"/>
+      <geometry>
+        <box size="1.3 1.2 $(arg pad_thickness)"/>
+      </geometry>
+      <material name="Red">
+        <color rgba="1.0 0.0 0.0 0.7"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 ${pad_thickness/2}"/>
+      <geometry>
+        <box size="1.3 1.2 $(arg pad_thickness)"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="pad_link" type="fixed">
+      <parent link="base"/>
+      <child link="drawing_pad"/>
+      <origin rpy="$(arg pad_rot)" xyz="$(arg pad_pos)"/>
+  </joint>
+
+  <!-- arm with gripper -->
+  <xacro:panda_arm arm_id="tiba" connected_to="base"  xyz="0 0 0.0" safety_distance="0.03"/>
+  <xacro:hand arm_id="tiba" rpy="0 0 ${-pi/4}" connected_to="tiba_link8" safety_distance="0.03"/>
+  <xacro:holder_squeeze arm_id="tiba" connected_to="tiba_hand_tcp"  angle="$(arg angle)" safety_distance="0.03"/>
+</robot>
