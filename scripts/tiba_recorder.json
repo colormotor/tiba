@@ -5,13 +5,13 @@
         "gripper_mm": 16.631000518798828,
         "guiding": {
             "x": true,
-            "y": false,
+            "y": true,
             "z": true,
-            "rot": false,
+            "rot": true,
             "elbow": true
         },
         "config": {
-            "tool": 3,
+            "tool": 7,
             "cart_planner": 0,
             "dce_thresh": 250,
             "max_iterations": 450,
@@ -24,9 +24,9 @@
             "dist": 2.4499995708465576,
             "xoffset": -0.1300000101327896,
             "voffset": -0.23000000417232513,
-            "rotx": -18,
-            "roty": -16,
-            "rotz": -177
+            "rotx": -65,
+            "roty": -74,
+            "rotz": -99
         }
     },
     "presets": {},
