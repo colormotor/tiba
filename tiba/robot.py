@@ -140,6 +140,7 @@ class TibaRobot(Robot):
         self.qd_lim = np.array(
             [2.62, 2.62, 2.62, 2.62, 5.26, 4.18, 5.26]
         )
+        self.qdd_lim = np.array([10.0]*7)
 
         self.qr = np.array([-0.07348355578820649,
                             -0.6406848793249571,

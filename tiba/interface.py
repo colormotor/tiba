@@ -32,6 +32,7 @@ from . import utils, geom, ui
 
 from importlib import reload
 reload(ilqr)
+reload(drawing_pad)
 
 cfg = config.cfg
 
@@ -717,9 +718,16 @@ class TibaInterface:
                                            tip_frame=tip_frame
                                            )
         Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits)
+
+        # planner = ilqr.iLQRPlannerAcceleration(self.robot.urdf_file,
+        #                                        q,
+        #                                        subsample=int(cfg.dt/cfg.robot_dt),
+        #                                        tip_frame=tip_frame
+        #                                        )
+        # Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, qd_lim=self.robot.qd_lim)
         return Qs, dQs
 
-    def plan_task_trajectories(self, trajectories, rest=0.1, q=None, tip_frame='tiba_pen_tcp'):
+    def plan_task_trajectories(self, trajectories, rest=0.5, q=None, tip_frame='tiba_pen_tcp'):
         Qs, dQs = self.compute_task_trajectories(trajectories, rest, q, tip_frame)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
@@ -839,7 +847,7 @@ class TibaInterface:
             pts.append(p0)
 
             paths, _, _ = tu.plan_polylines_time_optimal([np.array(pts)],
-                                                                  max_speed=cfg.default_cartesian_speed,
+                                                                  max_speed=cfg.cartesian_speed,
                                                                   accel_time=cfg.acceleration_time,
                                                                   tol=0.01)
             orn = tu.to_pos_orn(state.pose)[3:]

@@ -76,13 +76,18 @@ def setup():
 
         if rosloader is not None:
             print("Initializing ROS")
-            rospy.Subscriber('/tiba/response', String, response_callback)
-            rospy.Subscriber('/tiba/q', JointState, state_callback)
-            rospy.init_node('motion_generator', log_level=rospy.ERROR) #
-            tsketch.itiba.send_msg('start: Tiba sketch connecting')
+            try:
+                rospy.Subscriber('/tiba/response', String, response_callback)
+                rospy.Subscriber('/tiba/q', JointState, state_callback)
+                rospy.init_node('motion_generator', log_level=rospy.ERROR) #
+                tsketch.itiba.send_msg('start: Tiba sketch connecting')
+            except Exception as e:
+                print(e)
+                tsketch.itiba.has_ros = False
+
     except Exception as e:
         print(e)
-        assert(False)
+        # assert(False)
     load_svg(params.svg_path)
 
 # def load_svg():
@@ -248,6 +253,16 @@ def draw():
         #polyline(bezier.bezier_piecewise(P)) # + np.random.uniform(-30, 30, 2), 3))
 
     tsketch.draw()
+
+    fr = tsketch.robot.pen_tcp_frame()
+    pose = tsketch.robot.pen_tcp_pose()
+    #print(np.array(pose))
+    #print('Frame is valid:', SE3.isvalid(np.array(pose)))
+    text_size(15)
+    fill(1)
+    for i in range(3):
+        text([10, 60 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
+
 
 def draw_gl():
     tsketch.draw_gl()

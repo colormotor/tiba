@@ -211,13 +211,18 @@ def plan_polylines(planning_callback,
     config.progress_max = len(samples)
     if not trajectory_includes_penups:
         # Plan each trajectory in 2d and then concatenate lifting motions
+        samples = [np.hstack([P, np.zeros((len(P), 1))]) for P in samples]
+        up = np.array([0, 0, penup_distance])
+        samples = ([np.array([samples[0][0]+up, samples[0][0]])]
+                            + samples
+                            + [np.array([samples[-1][-1], samples[-1][-1]+up])])
         paths, simplified = planning_callback(samples,
                                               penup_distance=penup_distance,
                                               max_speed=max_speed,
                                               accel_time=accel_time,
                                               params=params)
         paths = [P for P in paths if len(P) > 1]
-        paths = [np.hstack([P, np.zeros((len(P), 1))]) for P in paths]
+
         print('lens', [len(P) for P in paths])
         if not paths:
             return []
@@ -229,6 +234,7 @@ def plan_polylines(planning_callback,
                 if geom.distance(P1[-1], P2[0]) > 2e-3:
                     trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=accel_time))
                 trajectories.append(P2)
+
     else:
         # Create one motor plan with pen-ups and plan single trajectory
         trajectories, simplified = planning_callback(samples,
@@ -679,8 +685,8 @@ class TibaSketch:
                     time.sleep(0.2)
                     cur_pos = self.robot.pen_tcp_pos(self.robot.q)
                     trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.robot, self.robot.qr)
-                    # trajectories = [tu.rest_inout(traj, 1) for traj in trajectories]
-                    trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
+                    #trajectories = [tu.rest_inout(traj, 3) for traj in trajectories]
+                    trajectories += [tu.rest_inout(tu.trapezoidal_approach(trajectories[-1][-1], cur_pos), 2)] # [tu.approach(cur_pos, trajectories[-1][-1])]
                     self.itiba.plan_task_trajectories(trajectories)
                     self.task_trajectories_augmented = trajectories
 
