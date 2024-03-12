@@ -116,7 +116,6 @@ class iLQRPlannerVelocity:
 
         config.state.progress = 0
 
-        rest = 10.0
         cartesian_approaches = True
         if not cartesian_approaches:
             approach = tu.rest_inout(tu.trapezoidal_approach(x0, trajectories[0][0]), rest*0.5)
