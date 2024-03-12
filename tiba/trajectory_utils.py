@@ -345,7 +345,7 @@ def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None
         res.append(np.concatenate([p[:3], np.array(o)]))
 
     print('trap vel', result.velocity)
-    res = [keypoints[0]] + res + [keypoints[-1]]
+    # res = [keypoints[0]] + res + [keypoints[-1]]
     return np.array(res)
 
 def approach(a, b, *args, **kwargs):
