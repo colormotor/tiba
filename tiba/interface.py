@@ -705,7 +705,7 @@ class TibaInterface:
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
         self.plan_task_trajectories(trajectories, rest)
 
-    def compute_task_trajectories(self, trajectories, rest=0.5, q=None, tip_frame='tiba_pen_tcp'):
+    def compute_task_trajectories(self, trajectories, rest=0.25, q=None, tip_frame='tiba_pen_tcp'):
         ''' Plan trajectories for the robot given in task space as
         a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
@@ -728,7 +728,7 @@ class TibaInterface:
         # Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, qd_lim=self.robot.qd_lim)
         return Qs, dQs
 
-    def plan_task_trajectories(self, trajectories, rest=0.5, q=None, tip_frame='tiba_pen_tcp'):
+    def plan_task_trajectories(self, trajectories, rest=0.25, q=None, tip_frame='tiba_pen_tcp'):
         Qs, dQs = self.compute_task_trajectories(trajectories, rest, q, tip_frame)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
