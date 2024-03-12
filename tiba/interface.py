@@ -573,9 +573,10 @@ class TibaInterface:
             i = 0
             print('Starting control loop')
             ctrl = controllers.JointPosition()
-            Kp = np.array([600, 600, 600, 600, 250, 150, 50]) #*0.5
+            #Kp = np.array([600, 600, 600, 600, 250, 150, 50]) #*0.5
+            Kp = np.array([600, 600, 600, 600, 250, 50, 50]) #*0.5
             #Kp = np.array([600, 600, 600, 600, 250, 20, 50]) #*0.5
-            Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
+            #Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
             Kv = .5 * np.sqrt(2*Kp)
             ctrl.set_stiffness(Kp)
             ctrl.set_damping(Kv)
