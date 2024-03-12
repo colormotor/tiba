@@ -121,7 +121,7 @@ class iLQRPlannerVelocity:
             approach = tu.rest_inout(tu.trapezoidal_approach(x0, trajectories[0][0]), rest*0.5)
             linked_trajectories.append(approach)
 
-        # rest = 10.0
+        #rest = 5.0
 
         for i, traj in enumerate(trajectories):
             if len(traj) < 2:
@@ -155,6 +155,7 @@ class iLQRPlannerVelocity:
                 traj = tu.rest_inout(traj, rest)
             linked_trajectories.append(traj)
 
+        linked_trajectories = [np.vstack([np.array(P).astype(dtype) for P in linked_trajectories])]
         # linked_trajectories += [tu.rest_inout(trajectories[0], rest*0.5)]
         # linked_trajectories = [np.array(traj).astype(dtype) for traj in linked_trajectories]
         # Plan
@@ -179,6 +180,7 @@ class iLQRPlannerVelocity:
             else:
                 sys = PosOrnPlannerSys(self.rbt, keypoints, cmd_penalties, horizon, 1, cfg.dt)
 
+            print('cart d', np.diff(np.array(states), axis=0)[:10])
             planner = ILQRRecursive(sys)
             u0_t = np.zeros(nb_control_vars).astype(dtype)
             u0 = np.tile(u0_t, horizon-1)
@@ -192,12 +194,14 @@ class iLQRPlannerVelocity:
                     True, True, cb)
 
                 print("Shapes, ", len(Q_batch), len(dQ_batch))
+                #dQ_batch = list(np.diff(np.array(Q_batch), axis=0)/cfg.dt)
                 dQ_batch = [np.zeros(nb_control_vars)] + dQ_batch
                 print('Dq_ends', dQ_batch[1], dQ_batch[-1])
 
-                rep = 4
-                Q_batch = [Q_batch[0]]*rep + Q_batch + [Q_batch[-1]]*rep
-                dQ_batch = [np.zeros(nb_control_vars)]*rep + dQ_batch + [np.zeros(nb_control_vars)]*rep
+                # rep = 4
+                # Q_batch = [Q_batch[0]]*rep + Q_batch + [Q_batch[-1]]*rep
+
+                # dQ_batch = [np.zeros(nb_control_vars)]*rep + dQ_batch + [np.zeros(nb_control_vars)]*rep
 
                 print("Before subsample")
 
