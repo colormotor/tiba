@@ -93,17 +93,23 @@ class DrawingPad:
         scaled_box[1] = scaled_box[0] + self.scale*size
         self.scaled_box = scaled_box
 
+
     def align_pose_to_pad(self, pose):
         z = self.frame[:3,2]
+        # pose = tu.align_pose_zy(pose, -z, geom.normalize([1.0, 0.0, 0.0]))
         pose = tu.align_frame_z(pose, -z)
         return pose
         #return np.array(UnitQuaternion(SE3(tcp_frame)))
 
     def get_pen_orientation(self, robot, q):
         z = self.frame[:3,2]
-        tcp_frame = robot.pen_tcp_frame(q)
-        tcp_frame = tu.align_frame_z(tcp_frame, -z)
-        return np.array(UnitQuaternion(SE3(tcp_frame)))
+        tcp_pose = robot.pen_tcp_pose(q)
+        tcp_pose = self.align_pose_to_pad(tcp_pose)
+        return np.array(UnitQuaternion(SE3(tcp_pose)))
+
+        #tcp_frame = robot.pen_tcp_frame(q)
+        #tcp_frame = tu.align_frame_z(tcp_frame, -z)
+        #return np.array(UnitQuaternion(SE3(tcp_frame)))
 
     def augment_with_pen_orientation(self, trajectories, robot, q):
         ''' Augment 3d cartesian trajectories with a fixed pen orientation perpendicular to pad
