@@ -51,8 +51,8 @@ tools = {
     },
 
     'Molotow': {
-        'tip_dist_mm': 45.0,
-        'tip_height_mm': 11.5
+        'tip_dist_mm': 44.0,
+        'tip_height_mm': 11.0
     },
 
     'Molotow Thin': {
