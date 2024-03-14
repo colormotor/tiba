@@ -13,7 +13,7 @@ class Config:
         self.default_grasp_mm = 34.0
         #self.dt = 0.001
         self.dt = 0.01
-        self.robot_dt = 0.01 #0.001
+        self.robot_dt = 0.001
 
     @property
     def cartesian_speed(self):

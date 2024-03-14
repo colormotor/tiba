@@ -122,7 +122,7 @@ class iLQRPlannerVelocity:
 
         cartesian_approaches = True
 
-        #rest = 0.1
+        rest = 0.1
         for i, traj in enumerate(trajectories):
             if len(traj) < 2:
                 continue
@@ -202,12 +202,17 @@ class iLQRPlannerVelocity:
                 Q_batch = list(Q_batch)
                 dQ_batch = list(dQ_batch)
 
-                rep = 10
+                rep = 100
                 dQ_approach = [dq0 + (dQ_batch[0] - dq0)*t for t in np.linspace(0, 1, rep)]
                 Q_approach = [q0 + (Q_batch[0] - q0)*t for t in np.linspace(0, 1, rep)]
 
+                # print('lens', len(dQ_batch), len(Q_batch))
                 dQ_batch = dQ_approach + dQ_batch
-                Q_batch = Q_approach[1:] + Q_batch # One extra sample for positions
+                Q_batch = Q_approach + Q_batch # One extra sample for positions
+
+
+                # dQ_batch = dQ_batch + [dQ_batch[-1] + (np.zeros(7) - dQ_batch[-1])*t for t in np.linspace(0, 1, rep)]
+                # Q_batch = Q_batch + [np.array(Q_batch[-1])]*rep #
 
 
                 # print("After subsample")
