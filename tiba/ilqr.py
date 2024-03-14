@@ -102,60 +102,39 @@ class iLQRPlannerVelocity:
              r=1e-5,
              weights=np.ones(7),
              rest = 0.1,
-             limits=[]):
+             limits=[],
+             get_trajectories=False):
         if (is_number(trajectories[0][0])): # Single trajectory case
             trajectories = [trajectories]
         Q = np.diag(weights).astype(dtype)
         trajectories = list(trajectories)
         # Add approaches between trajectories
-        x0 = np.concatenate([self.rbt.get_ee_pos(), self.rbt.get_ee_orn()])
+        x0 = tu.to_pos_orn(tu.to_pose(np.concatenate([self.rbt.get_ee_pos(), self.rbt.get_ee_orn()])))
+
         print('Initial position (KDL)', tu.to_pose(x0))
         print('Initial trajectory position ', tu.to_pose(trajectories[0][0]))
+        print('x0', x0, 'x0_traj', trajectories[0][0])
+        print('rest is', rest)
 
         linked_trajectories = []
 
         config.state.progress = 0
 
         cartesian_approaches = True
-        if not cartesian_approaches:
-            approach = tu.rest_inout(tu.trapezoidal_approach(x0, trajectories[0][0]), rest*0.5)
-            linked_trajectories.append(approach)
 
-        #rest = 5.0
-
+        #rest = 0.1
         for i, traj in enumerate(trajectories):
             if len(traj) < 2:
                 continue
             if cartesian_approaches:
                 approach = tu.trapezoidal_approach(x0, traj[0])
                 if len(approach) > 1:
-                    linked_trajectories.append(tu.rest_inout(approach, rest*0.5))
-                    #print("Approach 0", tu.to_pose(approach[0]))
-                    #print("Approach 1", tu.to_pose(approach[-1]))
-                    print('Approach dist', tu.to_pose(approach[-1]) - tu.to_pose(traj[0]))
-                    x0 = approach[-1]
-                if rest > 0.0:
-                    # TODO double check rest. Seems to give some acceleration artefacts
+                    linked_trajectories.append(tu.rest_inout(approach, rest))
 
-                    traj = tu.rest_inout(traj, rest*0.5)
-                    print('Rest dist', tu.to_pose(x0) - tu.to_pose(traj[0]))
-                    #print("Traj 0", tu.to_pose(traj[0]))
-                    # dX = np.diff(traj, axis=0)/cfg.dt
-                    # speed = np.sqrt(np.sum(dX**2, axis=1))
-                    # try:
-                    #     if np.max(speed) > 2:
-                    #         pdb.set_trace()
-                    #         print('Oh shit')
-                    # except:
-                    #     pdb.set_trace()
-                    #     print('ooooo')
-                x0 = traj[-1]
-            #break
-            else:
-                traj = tu.rest_inout(traj, rest)
-            linked_trajectories.append(traj)
+            linked_trajectories.append(tu.rest_inout(traj, rest))
+            x0 = traj[-1]
 
-        linked_trajectories = [np.vstack([np.array(P).astype(dtype) for P in linked_trajectories])]
+        # linked_trajectories = [np.vstack([np.array(P).astype(dtype) for P in linked_trajectories])]
         # linked_trajectories += [tu.rest_inout(trajectories[0], rest*0.5)]
         # linked_trajectories = [np.array(traj).astype(dtype) for traj in linked_trajectories]
         # Plan
@@ -166,16 +145,18 @@ class iLQRPlannerVelocity:
 
         q0 = self.q0
         dq0 = self.dq0
+
         for tindex, states in enumerate(linked_trajectories):
 
             print('Planning trajectory %d of %d'%(tindex+1, len(linked_trajectories)))
             timesteps = list(range(len(states)))
             self.rbt.set_conf(q0, dq0, True)
-            keypoints = [PosOrnKeypoint(state[:3], state[3:], Q, i) for i, state in enumerate(states)]
-            horizon = len(timesteps)
+            start = 0
+            keypoints = [PosOrnKeypoint(state[:3], state[3:], Q, i+start) for i, state in enumerate(states)]
+            horizon = len(timesteps)+start
             cmd_penalties = list(r*np.ones(nb_control_vars))
 
-            if limits:
+            if False: #limits:
                 sys = PosOrnPlannerSys(self.rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, cfg.dt)
             else:
                 sys = PosOrnPlannerSys(self.rbt, keypoints, cmd_penalties, horizon, 1, cfg.dt)
@@ -193,16 +174,20 @@ class iLQRPlannerVelocity:
                     num_iter,
                     True, True, cb)
 
-                print("Shapes, ", len(Q_batch), len(dQ_batch))
+                #print("Shapes, ", len(Q_batch), len(dQ_batch))
                 #dQ_batch = list(np.diff(np.array(Q_batch), axis=0)/cfg.dt)
-                dQ_batch = [np.zeros(nb_control_vars)] + dQ_batch
+
                 print('Dq_ends', dQ_batch[1], dQ_batch[-1])
 
-                # rep = 4
-                # Q_batch = [Q_batch[0]]*rep + Q_batch + [Q_batch[-1]]*rep
+                # The iLQR optimizer seems to create non zero velocities at the start of the trajectory
+                # hacky fix
 
-                # dQ_batch = [np.zeros(nb_control_vars)]*rep + dQ_batch + [np.zeros(nb_control_vars)]*rep
+                # #
+                # dQ_approach = dQ_batch + [dQ_batch[-1] + (np.zeros(7) - dQ_batch[-1])*t for t in np.linspace(0, 1, rep)]
+                # Q_approach = Q_approach + [np.array(Q_approach[-1])]*rep #
 
+                #Q_batch = [Q_batch[0]]*rep + Q_batch + [Q_batch[-1]]*rep
+                #dQ_batch = [np.zeros(nb_control_vars)]*rep + dQ_batch + [np.zeros(nb_control_vars)]*rep
                 print("Before subsample")
 
                 acc = np.diff(np.array(dQ_batch), axis=0)/cfg.dt
@@ -212,11 +197,19 @@ class iLQRPlannerVelocity:
                     #pdb.set_trace()
                 print('Max accel local:', np.max(np.abs(acc)))
 
-                #Q_batch, dQ_batch = subsample_polynomial([Q_batch, dQ_batch], self.subsample)
                 n = len(Q_batch)
                 Q_batch, dQ_batch = tu.bspline((n-1)*self.subsample+1, Q_batch, der=1, duration=(n-1)*cfg.dt)
                 Q_batch = list(Q_batch)
                 dQ_batch = list(dQ_batch)
+
+                rep = 10
+                dQ_approach = [dq0 + (dQ_batch[0] - dq0)*t for t in np.linspace(0, 1, rep)]
+                Q_approach = [q0 + (Q_batch[0] - q0)*t for t in np.linspace(0, 1, rep)]
+
+                dQ_batch = dQ_approach + dQ_batch
+                Q_batch = Q_approach[1:] + Q_batch # One extra sample for positions
+
+
                 # print("After subsample")
                 # acc = np.diff(np.array(dQ_batch), axis=0)/cfg.robot_dt
                 # if np.any(np.abs(acc) > 4):
@@ -249,10 +242,24 @@ class iLQRPlannerVelocity:
             config.state.progress = tindex+1
 
 
-        q0 = self.q0
+        # dq0 = self.dq0
+        # Qs_joined = []
+        # dQs_joined = []
+
+        # q0 = self.q0
+        # dq0 = self.dq0
         # Qs_joined = []
         # dQs_joined = []
         # for Q, dQ in zip(Qs, dQs):
+        #     Qapproach = [q0 + t*(Q[0] - q0) for t in np.linspace(0, 1, 10)]
+
+        #     if Qapproach:
+        #         print('Join approach', len(Qapproach))
+        #         Qs_joined.append(Qapproach)
+        #         dQs_joined.append(dQapproach)
+        #     Qs_joined.append(Q)
+        #     dQs_joined.append(dQ)
+
         #     Qapproach, dQapproach = tu.joint_trajectory_time_optimal([q0, Q[0]], dt=cfg.dt)
         #     if Qapproach:
         #         print('Join approach', len(Qapproach))
@@ -270,6 +277,8 @@ class iLQRPlannerVelocity:
         #     n = len(Qs)
         #     Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=1, duration=(n-1)*cfg.dt)
         #     print('Splined shapes', Qs.shape, dQs.shape)
+        if get_trajectories:
+            return Qs, dQs, linked_trajectories
         return Qs, dQs
 
 
@@ -290,7 +299,8 @@ class iLQRPlannerAcceleration:
              weights=np.ones(6),
              rest = 0.1,
              limits=[],
-             qd_lim=None):
+             qd_lim=None,
+             get_trajectories=False):
         if (is_number(trajectories[0][0])): # Single trajectory case
             trajectories = [trajectories]
         Qtarget = np.zeros((12, 12)).astype(dtype)
@@ -307,42 +317,17 @@ class iLQRPlannerAcceleration:
         config.state.progress = 0
 
         cartesian_approaches = True
-        if not cartesian_approaches:
-            approach = tu.trapezoidal_approach(x0, trajectories[0][0])
-            linked_trajectories.append(approach)
-
-        rest = 10.0
+        rest = 0.0
         for i, traj in enumerate(trajectories):
             if len(traj) < 2:
                 continue
             if cartesian_approaches:
                 approach = tu.trapezoidal_approach(x0, traj[0])
                 if len(approach) > 1:
-                    linked_trajectories.append(tu.rest_inout(approach, rest*0.5))
-                    print('Approach with %d steps'%len(approach))
-                    #print("Approach 0", tu.to_pose(approach[0]))
-                    #print("Approach 1", tu.to_pose(approach[-1]))
-                else:
-                    print('No approach')
-                if False: #rest > 0.0:
-                    # TODO double check rest. Seems to give some acceleration artefacts
+                    linked_trajectories.append(approach)
 
-                    traj = tu.rest_inout(traj, rest*0.5)
-                    #print("Traj 0", tu.to_pose(traj[0]))
-                    # dX = np.diff(traj, axis=0)/cfg.dt
-                    # speed = np.sqrt(np.sum(dX**2, axis=1))
-                    # try:
-                    #     if np.max(speed) > 2:
-                    #         pdb.set_trace()
-                    #         print('Oh shit')
-                    # except:
-                    #     pdb.set_trace()
-                    #     print('ooooo')
-                x0 = traj[-1]
-            #break
-            else:
-                traj = tu.rest_inout(traj, rest)
-            linked_trajectories.append(traj)
+            linked_trajectories.append(tu.rest_inout(traj, rest))
+            x0 = traj[-1]
 
 
         # Plan
@@ -359,9 +344,9 @@ class iLQRPlannerAcceleration:
             states = np.hstack([states, np.zeros_like(states)])
 
             Qtargets = [np.array(Qtarget) for _ in states]
-            for i in range(5):
-                Qtargets[i][6:,6:] = np.eye(6)*1
-                Qtargets[-1-i][6:,6:] = np.eye(6)*1
+            for i in range(1):
+                Qtargets[i][6:,6:] = np.eye(6)*100
+                Qtargets[-1-i][6:,6:] = np.eye(6)*100
             print('Planning trajectory %d of %d'%(tindex+1, len(linked_trajectories)))
             print('States shape:', states.shape)
             timesteps = list(range(len(states)))
@@ -399,10 +384,10 @@ class iLQRPlannerAcceleration:
                 dQs.append(list(QdQs_batch[:, 7:]))
                 ddQs.append([np.zeros(7)] + ddQs_batch)
 
-                rep = 5
-                Qs[-1] = [Qs[-1][0]]*rep + Qs[-1] + [Qs[-1][-1]]*rep
-                dQs[-1] = [np.zeros(7)]*rep + dQs[-1] + [np.zeros(7)]*rep
-                ddQs[-1] = [np.zeros(7)]*rep + ddQs[-1] + [np.zeros(7)]*rep
+                # rep = 5
+                # Qs[-1] = [Qs[-1][0]]*rep + Qs[-1] + [Qs[-1][-1]]*rep
+                # dQs[-1] = [np.zeros(7)]*rep + dQs[-1] + [np.zeros(7)]*rep
+                # ddQs[-1] = [np.zeros(7)]*rep + ddQs[-1] + [np.zeros(7)]*rep
                 print('accel size', np.array(ddQs_batch).shape)
 
                 q0 = QdQs_batch[-1][:7]
@@ -441,6 +426,10 @@ class iLQRPlannerAcceleration:
             Qs, dQs = subsample_polynomial([Qs, dQs, ddQs], self.subsample)
             #Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=1, duration=(n-1)*cfg.dt)
             print('Splined shapes', Qs.shape, dQs.shape)
+
+        if get_trajectories:
+            return Qs, dQs, linked_trajectories
+        return Qs, dQs
 
         Qs = np.array(Qs).astype(dtype)
         dQs = np.array(dQs).astype(dtype)

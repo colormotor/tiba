@@ -186,6 +186,11 @@ class TibaRobot(Robot):
             q = self.q
         return self.get_pose(q, 'tiba_hand_tcp')
 
+    def hand_tcp_pos(self, q=None):
+        if q is None:
+            q = self.q
+        return self.get_pos(q, 'tiba_hand_tcp')
+
     def pen_tcp_pose(self, q=None):
         if q is None:
             q = self.q

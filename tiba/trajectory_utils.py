@@ -251,11 +251,11 @@ def trapezoidal_approach(x0, x1,
     pose1 = to_pose(x1)
     print('Trapezoidal approach from', pose0, 'to', pose1)
 
-    print(np.array2string(np.array(pose0), separator=','))
-    print(np.array2string(np.array(pose1), separator=','))
+    #print(np.array2string(np.array(pose0), separator=','))
+    #print(np.array2string(np.array(pose1), separator=','))
     #print(repr(np.array(pose1)))
-    print('pose0 valid', SE3.isvalid(np.array(pose0)))
-    print('pose1 valid', SE3.isvalid(np.array(pose1)))
+    #print('pose0 valid', SE3.isvalid(np.array(pose0)))
+    #print('pose1 valid', SE3.isvalid(np.array(pose1)))
 
     angdist = abs(angdistance(pose0, pose1)) #pose0.angdist(pose1))
     dist = np.linalg.norm(pose0.t - pose1.t)
@@ -284,18 +284,23 @@ def trapezoidal_approach(x0, x1,
     time = np.linspace(0, tr.time, timesteps)
     ts = [tr(t)[0][2]/d for t in time] # Assumin
 
-    print('trapezoidal ts:', ts)
+    #print('trapezoidal ts:', ts)
     #print(pose0, pose1)
     approach = SE3_interp(pose0, pose1, ts)
     if len(approach):
         print('approach', to_pose(approach[0]), 'to ', to_pose(approach[-1] ))
     else:
         print('empty approach')
+    if approach:
+        res = approach
+        print('diffs', to_pos_orn(x0) - res[0], to_pos_orn(x1) - res[-1])
+        #res = [np.array(keypoints[0])] + res + [np.array(keypoints[-1])]
     return approach
 
     # approach = [pose0.interp(pose1, t) for t in ts]
     # return pose_traj_to_posorn(approach)
 def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None, accel_time=None, tol=0.0):
+    #assert(False)
     if max_speed is None:
         max_speed = cfg.cartesian_speed
     if max_angular_velocity is None:
@@ -344,14 +349,18 @@ def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None
         o = aa * orientations[idx]
         res.append(np.concatenate([p[:3], np.array(o)]))
 
-    print('trap vel', result.velocity)
-    # res = [keypoints[0]] + res + [keypoints[-1]]
+    #print('trap vel', result.velocity)
+    if res:
+        print('diffs', keypoints[0] - res[0], keypoints[-1] - res[-1])
+        #res = [np.array(keypoints[0])] + res + [np.array(keypoints[-1])]
     return np.array(res)
 
 def approach(a, b, *args, **kwargs):
     return trapezoidal_approach(a, b, *args, **kwargs)
 
 def approach_sequence(seq, *args, **kwargs):
+    if len(seq)==2:
+        return approach(seq[0], seq[1], *args, **kwargs)
     return plan_poses_time_optimal(seq, *args, **kwargs)
     # #path, _, _ = plan_polylines_time_optimal([np.array(seq)], *args, **kwargs)
     # traj = []
@@ -673,10 +682,10 @@ def tsp_glyph(n, r1=0.5, r2=1.0, center=[0,0]):
 def plan_polylines_lqt(S, max_speed, accel_time, penups=True, penup_variability=0.4, **kwargs):
     trajectories = []
     for P in S:
-        if penups:
-            variability = [1, penup_variability] + [1 for _ in P[1:-1]] + [penup_variability, 1]
-        else:
-            variability = []
+        variability = []
+        # if penups:
+        #     variability = [1, penup_variability] + [1 for _ in P[1:-1]] + [penup_variability, 1]
+
         trajectory = plan_lqt(P, max_speed, accel_time, variability=variability, **kwargs)
         trajectories.append(trajectory)
     return trajectories
@@ -748,14 +757,14 @@ def semitied_lqt(P, **kwargs):
     P = P.T
     dim = params['dim']
     Sigma = []
-    cov = np.eye(dim)*(params['sigma']**2)
+    cov = np.eye(dim)*((0.2)**2) # Penup hack
     cov[:2,:2] = lqt.make_sigma(geom.radians(params['angle']), [params['isotropy']*params['sigma'], params['sigma']])
 
     for p in P.T:
         Sigma.append(cov)
-    if params['variability']:
-        print(params['variability'])
-        Sigma = [w*s for w, s in zip(params['variability'], Sigma)]
+    # if params['variability']:
+    #     print(params['variability'])
+    #     Sigma = [w*s for w, s in zip(params['variability'], Sigma)]
 
     Sigma = np.array(Sigma).T
     sys = lqt.DynamicalSystem(params['order'], params['subd'], segment_duration=params['segment_duration'], dim=params['dim'])

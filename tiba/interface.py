@@ -29,6 +29,8 @@ import swift
 from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
 from . import utils, geom, ui
+from . import matplotlyb as ply
+
 
 from importlib import reload
 reload(ilqr)
@@ -700,11 +702,11 @@ class TibaInterface:
             #                             trajectories=task_trajectories,
             #                             filename=self.plot_path)
 
-    def plan_pad_trajectories(self, trajectories, rest=0.05):
+    def plan_pad_trajectories(self, trajectories, rest=0.0):
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
         self.plan_task_trajectories(trajectories, rest)
 
-    def compute_task_trajectories(self, trajectories, rest=0.25, q=None, tip_frame='tiba_pen_tcp'):
+    def compute_task_trajectories(self, trajectories, rest=0.0, q=None, tip_frame='tiba_pen_tcp'):
         ''' Plan trajectories for the robot given in task space as
         a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
@@ -717,17 +719,20 @@ class TibaInterface:
                                            subsample=int(cfg.dt/cfg.robot_dt),
                                            tip_frame=tip_frame
                                            )
-        Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits)
+        Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, get_trajectories=True)
+
 
         # planner = ilqr.iLQRPlannerAcceleration(self.robot.urdf_file,
         #                                        q,
         #                                        subsample=int(cfg.dt/cfg.robot_dt),
         #                                        tip_frame=tip_frame
         #                                        )
-        # Qs, dQs = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, qd_lim=self.robot.qd_lim)
+        # Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, qd_lim=self.robot.qd_lim, get_trajectories=True)
+
+        plot_cartesian_trajectories(linked_trajectories)
         return Qs, dQs
 
-    def plan_task_trajectories(self, trajectories, rest=0.25, q=None, tip_frame='tiba_pen_tcp'):
+    def plan_task_trajectories(self, trajectories, rest=0.0, q=None, tip_frame='tiba_pen_tcp'):
         Qs, dQs = self.compute_task_trajectories(trajectories, rest, q, tip_frame)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
@@ -877,3 +882,40 @@ class TibaInterface:
             print('Error in script: ' + path)
             print(e)
             traceback.print_exc()
+
+
+def plot_cartesian_trajectories(trajectories):
+    return
+
+    ply.figure(title='Cartesian trajectory')
+
+    Tv = 0.0
+    Ta = 0.0
+    trajectories = [np.array(P) for P in trajectories]
+
+    for i, X in enumerate(trajectories):
+        velocity = np.diff(X, axis=0) / cfg.dt
+        acceleration = np.diff(velocity, axis=0) / cfg.dt
+        #speed = velocities[i] #tu.compute_speed(X, cfg.dt)
+        #accel = accelerations[i] #tu.compute_accel(X, cfg.dt)
+        tv = np.linspace(0, (len(velocity)-1)*cfg.dt, len(velocity)) + Tv
+        ta = np.linspace(0, (len(acceleration)-1)*cfg.dt, len(acceleration)) + Ta
+        ply.subplot(1, 1, title='Velocity')
+        ply.plot(tv, velocity[:,0], color=ply.categorical_color(i))
+        ply.plot(tv, velocity[:,1], color=ply.categorical_color(i))
+        ply.plot(tv, velocity[:,2], color='b', alpha=0.5)
+        ply.subplot(1, 2, title='Acceleration')
+        ply.plot(ta, acceleration[:,0], color=ply.categorical_color(i))
+        ply.plot(ta, acceleration[:,1], color=ply.categorical_color(i))
+        ply.plot(ta, acceleration[:,2], color='b', alpha=0.5)
+        Tv = tv[-1] + cfg.dt
+        Ta = ta[-1] + cfg.dt
+
+    ply.subplot(2, 1, title='Trajectory 2d')
+    ply.stroke(trajectories, 'k')
+    ply.axis_equal(True)
+
+    ply.subplot(2, 2, title='Trajectory 3d')
+    for X in trajectories:
+        ply.stroke3d(X)
+    ply.show()
