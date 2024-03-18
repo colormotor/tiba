@@ -372,6 +372,15 @@ def pose_traj_to_posorn(trajectory):
     ''' Convert a trajectory made of SE3 poses to pos+quaternions'''
     return [np.concatenate([pose.t, np.array(UnitQuaternion(pose))]) for pose in trajectory]
 
+def cleanup(traj, tol=0.01):
+    ''' Remove redundant waypoints'''
+    if len(traj) < 2:
+        return traj
+    res = [traj[0]]
+    for a, b in zip(traj, traj[1:]):
+        if np.linalg.norm(res[-1] - b) > tol:
+            res.append(b)
+    return np.array(res)
 
 def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0):
     from trajectory_smoothing import TrajectorySmoother
@@ -402,13 +411,18 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
             result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
             if not result.success:
                 print('Smoothing failed in trajectory smoothing, attempt %d of %d'%(i+1, nattempt))
-                Q = np.array(P)
-                A = geom.degrees(geom.turning_angles(Q))
-                L = geom.chord_lengths(Q)
+                #A = geom.degrees(geom.turning_angles(Q))
+                #L = geom.chord_lengths(Q)
                 # print('Min angle:', np.min(A))
                 # print('Max angle:', np.max(A))
                 # print('Min length:', np.max(L))
                 # print('Max length:', np.max(L))
+                # P = cleanup(P, tol)
+                #P = np.array([P[j] for j in range(0, len(P), 2)])
+                # smoother = TrajectorySmoother(
+                #     dof, max_velocity, max_acceleration, tol
+                # )
+
             else:
                 print("Success %d"%(i+1))
                 print("%d points"%len(result.position))
@@ -467,7 +481,8 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     dim = P.shape[1]
     print('Input polyline with %d points'%len(P))
     if simp > 0:
-       P = simplify.dce(P, simp)
+       _, I = simplify.dce(P, simp, get_indices=True)
+       P = P[I]
     #print('simp', P, simp)
     # Ps = P
     # #Ps = simplify.dce(P, simplify_tol)
@@ -483,8 +498,8 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     n = max(len(P)*2, 100) #chain)* #10 # Pretty arbitrary
     traj, psg, Q, dQ, ddQ = todorov.min_jerk_todorov(P, n, get_vel_acc=True, maxiter=maxiter)
     opsg = psg
-    # Check that passage times are strictly increasing
 
+    # Check that passage times are strictly increasing
     if len(psg) > 1:
         dpsg = np.maximum(np.diff(psg), 1e-3)
         if np.any(dpsg < 0):
@@ -494,7 +509,6 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
             print("Passage times exceed total time")
             psg = psg/psg[-1]*(n-1e-3)
 
-    print('Q', Q.shape, 'dQ', dQ.shape, 'ddQ', ddQ.shape)
     # Add zero boundary conditions and initial and final time
     dQ = np.vstack([np.zeros(dim), dQ, np.zeros(dim)])
     ddQ = np.vstack([np.zeros(dim), ddQ, np.zeros(dim)])
@@ -502,24 +516,24 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
 
     # Use passage times, velocity and acceleration to compute piecewise polynomial
     derivs = np.dstack([Q, dQ, ddQ])
+    bps = []
     try:
-        bpx = BPoly.from_derivatives(T, np.vstack([derivs[:,0, i] for i in range(3)]).T)
-        bpy = BPoly.from_derivatives(T, np.vstack([derivs[:,1, i] for i in range(3)]).T)
+        for i in range(dim):
+            bps.append(BPoly.from_derivatives(T, np.vstack([derivs[:, i, j] for j in range(3)]).T))
     except ValueError as e:
         print(e)
         print('T', T)
         pdb.set_trace()
 
-    dbpx = bpx.derivative()
-    dbpy = bpy.derivative()
-    ddbpx = dbpx.derivative()
-    ddbpy = dbpy.derivative()
+    dbps = [bp.derivative() for bp in bps]
+    ddbps = [dbp.derivative() for dbp in dbps]
 
     # Estimate maximum speed and acceleration
     x_test = np.linspace(0, T[-1], n)
-    Y = np.vstack([bpx(x_test), bpy(x_test)]).T
-    dY = np.vstack([dbpx(x_test), dbpy(x_test)]).T
-    ddY = np.vstack([ddbpx(x_test), ddbpy(x_test)]).T
+    Y = np.vstack([bp(x_test) for bp in bps]).T
+    dY = np.vstack([bp(x_test) for bp in dbps]).T
+    ddY = np.vstack([bp(x_test) for bp in ddbps]).T
+
     smax = np.max(rownorm(dY))
     amax = np.max(rownorm(ddY))
 
@@ -533,7 +547,7 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
 
     x = np.arange(0, T[-1], dt*div)
     # Compute trajectory
-    Y = np.vstack([bpx(x), bpy(x)]).T
+    Y = np.vstack([bp(x) for bp in bps]).T
     if len(Y)==2:
         pdb.set_trace()
     return Y, P
@@ -696,7 +710,7 @@ def plan_lqt(P, max_speed, accel_time, **kwargs):
     default_params = dict(angle=0,
                           sigma=1.0,
                           order=3,
-                          opt_x0=True,
+                          opt_x0=False,
                           stop_motion=True,
                           isotropy=1,
                           activation_sigma=0.5,
@@ -757,7 +771,7 @@ def semitied_lqt(P, **kwargs):
     P = P.T
     dim = params['dim']
     Sigma = []
-    cov = np.eye(dim)*((0.2)**2) # Penup hack
+    cov = np.eye(dim)*((0.1)**2) # Penup hack
     cov[:2,:2] = lqt.make_sigma(geom.radians(params['angle']), [params['isotropy']*params['sigma'], params['sigma']])
 
     for p in P.T:

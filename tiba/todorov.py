@@ -23,6 +23,8 @@ from __future__ import division
 from scipy.optimize import fmin
 import numpy as np
 import sys
+import pdb
+
 
 def print_same_line(s):
     sys.stdout.write("\r" + str(s))
@@ -45,8 +47,8 @@ def min_jerk_todorov( pos, dur, vel=None, acc=None, psg=None, maxiter=5000, get_
 
     t0 = np.array([0, dur])
 
-
     # optimize passage times if necessary
+    print('Dim:', D, 'vel:', vel, 'acc:', acc, 't0:', t0)
     if psg is None:
         if N < 2:
             raise ValueError("At least two points are required")
@@ -102,10 +104,13 @@ def mjCOST(t, x, v0, a0, t0):
 
     tt = np.concatenate([[t0[0]],t,[t0[1]]])
     T = np.diff(tt) #(1,D))
-    T = np.vstack([T, T]).T
-    
+    #T = np.vstack([T, T]).T
+    T = np.vstack([T]*D).T
+
+
     xx0 = x[0:N-1,:]
     xx1 = x[1:N,:]
+
 
     j=(3*(3*aa0**2*T**4-2*aa0*aa1*T**4+3*aa1**2*T**4+24*aa0*T**3*vv0-
       16*aa1*T**3*vv0 + 64*T**2*vv0**2 + 16*aa0*T**3*vv1 -           
@@ -114,6 +119,7 @@ def mjCOST(t, x, v0, a0, t0):
       240*T*vv1*xx0 +240*xx0**2 - 40*aa0*T**2*xx1 + 40*aa1*T**2*xx1- 
       240*T*vv0*xx1 - 240*T*vv1*xx1 - 480*xx0*xx1 + 240*xx1**2)/T**5)
 
+    #pdb.set_trace()
     J = np.sum(np.sum(np.abs(j)))
     return J
 
@@ -145,9 +151,10 @@ def mjTRJ(tx, x, v0, a0, t0, P):
         if( t > tt[ii+1] ):
             ii = ii+1 
         T = (tt[ii+1]-tt[ii])
-        T = np.vstack([T, T]).T #*np.ones((1,D)) 
+        #T = np.vstack([T, T]).T #*np.ones((1,D))
+        T = np.vstack([T]*D).T
         t = (t-tt[ii]) #*np.ones((1,D))
-        t = np.vstack([t, t]).T
+        t = np.vstack([t]*D).T
         aa0 = aa[ii,:]; aa1 = aa[ii+1,:]
         vv0 = vv[ii,:]; vv1 = vv[ii+1,:]
         xx0 =  x[ii,:]; xx1 = x[ii+1,:]
