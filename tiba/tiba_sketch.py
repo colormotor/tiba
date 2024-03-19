@@ -111,7 +111,7 @@ def plan_trapezoidal(samples,
     paths, velocities_, accelerations_ = tu.plan_polylines_time_optimal(samples,
                                                                   max_speed=max_speed,
                                                                   accel_time=accel_time,
-                                                                  tol=0.01)
+                                                                  tol=0.1)
     return paths, samples
 
 def ema(data, alpha):
@@ -166,7 +166,7 @@ def plan_calligraphic(samples,
                                         sigma=params.config.smoothing,
                                         penups=True,
                                         order=params.config.order,
-                                        opt_x0=True,
+                                        opt_x0=False,
                                         subd=5,
                                         angle=params.config.angle)
     # Clip zs to zero
@@ -242,6 +242,7 @@ def plan_polylines(planning_callback,
                                                      max_speed=max_speed,
                                                      accel_time=accel_time,
                                                      params=params)
+
 
     velocities = [np.diff(P, axis=0) / cfg.dt for P in trajectories]
     accelerations = [np.diff(P, n=2, axis=0) / (cfg.dt**2) for P in trajectories]
@@ -410,7 +411,7 @@ class TibaSketch:
         if 'drawing' in self.flags:
             params.update({'Drawing':  {
               'Plane offset': (0.0, {'min':-20,'max': 20}),
-              'Padding': (80, {'min':0.0, 'max':450}),
+              'Padding': (80, {'min':0.0, 'max':850}),
               'Penup mm': (50, {'min':0.0, 'max':200}),
               'Pos offset x': (0.0, {'min': -1, 'max': 1}),
               'Pos offset y': (0.0, {'min': -1, 'max': 1}),
@@ -567,6 +568,12 @@ class TibaSketch:
         # self.trajectories_computed = True
         # print('Dip trajectory')
 
+    def get_fitted_draft_and_trajectories(self):
+        if self.trajectories_computed:
+            return self.draft_fitted, self.trajectories_2d
+        else:
+            return self.draft, None
+
     def compute_trajectories(self, debug=False):
         params = self.params
         if not self.draft:
@@ -587,18 +594,25 @@ class TibaSketch:
             elif planner_names[params.config.cart_planner] == 'Calligraphic':
                 traj_callback = plan_calligraphic
                 trajectory_includes_penup = True
+                max_speed *= 2
             elif planner_names[params.config.cart_planner] == 'Test simplify':
                 traj_callback = plan_simplify_test
         if traj_callback is None:
             raise ValueError('No trajectory callback')
 
-        time.sleep(0.2)
+        time.sleep(0.01)
         draft = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=0.0)
+
+
         trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                       params.drawing.penup_mm/1000,
                                       trajectory_includes_penup,
                                       params,
                                       debug=debug)
+
+        self.trajectories_2d = [np.array(P)[:,:2] for P in trajectories]
+        self.draft_fitted = [np.array(P)[:,:2] for P in draft]
+
         self.trajectories = self.pad.fit_to_frame(trajectories)
         self.trajectories_computed = True
 
@@ -670,9 +684,9 @@ class TibaSketch:
             ui.imgui_text_separator('Trajectory')
 
             if imgui.button('Compute trajectories only'):
-                self.threads.append(threading.Thread(target=lambda: self.compute_trajectories(debug=True),
-                                                    name="Planning trajectories"))
-                #self.compute_trajectories(debug=True)
+                # self.threads.append(threading.Thread(target=lambda: self.compute_trajectories(debug=True),
+                #                                     name="Planning trajectories"))
+                self.compute_trajectories(debug=True)
 
             must_plan = False
 
@@ -798,7 +812,7 @@ class TibaSketch:
         # Udate drawing pad data
         if 'drawing' in self.flags:
             self.pad.offset = params.drawing.plane_offset / 1000
-            self.pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
+            self.pad.pos_offset = [params.drawing.pos_offset_y, params.drawing.pos_offset_x]
             self.pad.update()
 
             if self.dirty or self.params_changed(*self.params_to_check):

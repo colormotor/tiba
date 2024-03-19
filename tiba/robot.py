@@ -166,6 +166,11 @@ class TibaRobot(Robot):
 
         self.pressure_range = pressure_range
 
+    def jacobian(self, q, name):
+        if q is None:
+            q = self.q
+        return self.jacobe(q, start='base', end=name)
+
     def get_pose(self, q, name):
         if q is None:
             q = self.q
@@ -195,6 +200,11 @@ class TibaRobot(Robot):
         if q is None:
             q = self.q
         return self.get_pose(q, 'tiba_pen_tcp')
+
+    def pen_tcp_jacobian(self, q=None):
+        if q is None:
+            q = self.q
+        return self.jacobian(q, 'tiba_pen_tcp')
 
     def pen_tcp_pos(self, q=None):
         if q is None:

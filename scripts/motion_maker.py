@@ -110,7 +110,7 @@ def load_svg(path):
     dest_rect = geom.make_rect(0, 0, width, height)
     draft_in = geom.transform_to_rect(draft, dest_rect)
     draft = []
-    tol = 0.1
+    tol = 0.2
     for chain in draft_in: #[2:4]:
         if params.bezier_split_angle > 0:
             chunks = bezier.split_chain(chain, angle_tol=params.bezier_split_angle)
@@ -235,10 +235,20 @@ def draw():
     fill(1, 0.5)
     rectangle(draft_box)
     no_fill()
-    S = geom.transform_to_rect(tsketch.draft, draft_box, 10)
+
+    draft, trajectories = tsketch.get_fitted_draft_and_trajectories()
+
+    mat = geom.rect_in_rect_transform(geom.bounding_box(draft), draft_box, 10)
+    S = geom.affine_transform(mat, draft)
     for i, P in enumerate(S):
-        stroke(0) #*plut.default_color(i), 0.5)
+        stroke(0, 0.5)
         polyline(P)
+
+    if trajectories is not None:
+        S = geom.affine_transform(mat, trajectories)
+        for i, P in enumerate(S):
+            stroke(0) #*plut.default_color(i), 0.5)
+            polyline(P)
 
     stroke(1.0, 0.0, 0.0, 0.2)
     if len(S) > 0:

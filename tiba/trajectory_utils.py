@@ -481,7 +481,7 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     dim = P.shape[1]
     print('Input polyline with %d points'%len(P))
     if simp > 0:
-       _, I = simplify.dce(P, simp, get_indices=True)
+       _, I = simplify.dce(P[:,:2], simp, get_indices=True)
        P = P[I]
     #print('simp', P, simp)
     # Ps = P
