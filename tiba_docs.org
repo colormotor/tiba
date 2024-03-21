@@ -1,6 +1,7 @@
 #+title: Tiba-robot package
 
 * Package install
+** Client/server installation (no robot)
 The dependency installation procedure depends on the [[https://docs.conda.io/en/latest/][conda package mananger]]. One ideal way to install conda is to use the reduced [[https://github.com/conda-forge/miniforge][miniforge]] installer. To speed up installation, it is recommended to install mamba alongside conda (since "vanilla" conda is written in Python and can be extremely slow). To install mamba use:
 ```
 conda install conda-forge::mamba
@@ -31,6 +32,29 @@ For describing robot poses and kinematics calculations we use [[https://github.c
 ```
 mamba install conda-forge::roboticstoolbox-python
 ```
+** Server installation (for Franka robot)
+First install [[https://github.com/frankaemika/libfranka][libfranka]] for the FR3 (modified version of [[https://frankaemika.github.io/docs/installation_linux.html][these instructions]]. First clone
+#+begin_example
+git clone --recursive https://github.com/frankaemika/libfranka
+cd libfranka
+#+end_example
+The unusual step here is that we will install within the conda environment with
+#+begin_example
+conda activate ros_env
+mkdir build; cd build;
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX:PATH=$CONDA_PREFIX ..
+cmake --build .
+make install
+#+end_example
+
+Now *with the conda environment still active** and in another directory of choice:
+#+begin_example
+https://github.com/colormotor/panda-py.git
+cd panda-py
+pip install .
+#+end_example
+
+
 
 ** Interface with the robot
 *** Tiba server

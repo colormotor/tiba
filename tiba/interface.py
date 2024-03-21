@@ -364,10 +364,11 @@ class MotionEditor:
         v3d.restore_viewport()
 
 class Motion:
-    def __init__(self, Qs, dQs, grasp=None):
+    def __init__(self, Qs, dQs, grasp=None, is_drawing=False):
         self.Qs = list(Qs)
         self.dQs = list(dQs)
         self.grasp = grasp
+        self.is_drawing = is_drawing
 
 class TibaInterface:
     def __init__(self, panda, gripper,
@@ -545,13 +546,87 @@ class TibaInterface:
         self.robot.q = self.panda.get_robot().read_once().q # panda.q
         self.grasped = self.gripper.read_once().is_grasped
 
+    def _exec_joint_motion(self, motion):
+        from panda_py import controllers
+
+        Q = motion.Qs
+        dQ = motion.dQs
+
+        print('Moving to initial position')
+        self.panda.move_to_joint_position(Q[0])
+        self.delay(0.15)
+        i = 0
+        print('Starting control loop')
+        ctrl = controllers.JointPosition()
+        Kp = np.array([600, 600, 600, 600, 250, 150, 50]) #*0.5
+        # Kp = np.array([600, 600, 600, 600, 250, 50, 50]) #*0.5
+        #Kp = np.array([600, 600, 600, 600, 250, 20, 50]) #*0.5
+        #Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
+        Kv = 0.5*np.sqrt(2.0*Kp)
+        ctrl.set_stiffness(Kp)
+        ctrl.set_damping(Kv)
+        panda = self.panda
+        dq_thresh = 0.001
+        dq0 = np.zeros(7)
+
+        panda.start_controller(ctrl)
+        with panda.create_context(frequency=1000) as ctx:
+            while ctx.ok():
+                if i < len(dQ):
+                    ctrl.set_control(Q[i], dQ[i])
+                    i += 1
+                else:
+                    ctrl.set_control(Q[-1], dq0)
+                    dq = panda.get_state().dq
+                    if abs(np.max(dq)) < dq_thresh:
+                        break
+
+        print('Stopping controller')
+        self.panda.stop_controller()
+
+    def _exec_drawing_motion(self, motion):
+        from panda_py import controllers
+
+        Q = motion.Qs
+        dQ = motion.dQs
+
+        print('Moving to initial position')
+        self.panda.move_to_joint_position(Q[0])
+
+        self.delay(0.5)
+        print('Starting cartesian impedance control loop')
+        ctrl = controllers.JointPosition()
+        Kp = np.diag([800, 800, 50, 10, 10, 10])
+        stiffness_orientation = self.pad.get_pen_orientation(self.robot, Q[0]) #self.robot.q)
+        ctrl = controllers.CartesianImpedance(impedance=Kp, filter_coeff=1.0,
+                                              stiffness_orientation=stiffness_orientation)
+
+        # Get trajectory in 'hand space'
+        X = [self.robot.hand_tcp_pos(q) for q in Q]
+        n = len(X)
+        i = 0
+        dq_thresh = 0.001
+
+        panda = self.panda
+        panda.start_controller(ctrl)
+        with panda.create_context(frequency=1000) as ctx:
+            while ctx.ok():
+                if i < len(n):
+                    ctrl.set_control(X[i][:3], X[i][3:], Q[i])
+                    i += 1
+                else:
+                    ctrl.set_control(X[-1][:3], X[-1][3:], Q[-1])
+                    dq = panda.get_state().dq
+                    if abs(np.max(dq)) < dq_thresh:
+                        break
+        print('Stopping cartesian impedance controller')
+        self.panda.stop_controller()
+
     def execute(self, delay=2.0):
         ''' Execute the current joint motion'''
         if self.panda is None:
             print("No panda, can't execute")
             return
-
-        from panda_py import controllers
 
         self.delay(delay)
 
@@ -566,40 +641,11 @@ class TibaInterface:
 
             #Q = self.Qs
             #dQ = self.dQs
-            Q = motion.Qs
-            dQ = motion.dQs
+            if motion.is_drawing:
+                self._exec_drawing_motion(motion)
+            else:
+                self._exec_joint_motion(motion)
 
-            print('Moving to initial position')
-            self.panda.move_to_joint_position(Q[0])
-            self.delay(0.5)
-            i = 0
-            print('Starting control loop')
-            ctrl = controllers.JointPosition()
-            Kp = np.array([600, 600, 600, 600, 250, 150, 50]) #*0.5
-            # Kp = np.array([600, 600, 600, 600, 250, 50, 50]) #*0.5
-            #Kp = np.array([600, 600, 600, 600, 250, 20, 50]) #*0.5
-            #Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
-            Kv = 1.0 * 2 * np.sqrt(2)
-            ctrl.set_stiffness(Kp)
-            ctrl.set_damping(Kv)
-            panda = self.panda
-            dq_thresh = 0.001
-            dq0 = np.zeros(7)
-
-            panda.start_controller(ctrl)
-            with panda.create_context(frequency=1000) as ctx:
-                while ctx.ok():
-                    if i < len(dQ):
-                        ctrl.set_control(Q[i], dQ[i])
-                        i += 1
-                    else:
-                        ctrl.set_control(Q[-1], dq0)
-                        dq = panda.get_state().dq
-                        if abs(np.max(dq)) < dq_thresh:
-                            break
-                q = panda.q
-            print('Stopping controller')
-            self.panda.stop_controller()
             #time.sleep(0.5)
             print('Finished motion')
         return q
