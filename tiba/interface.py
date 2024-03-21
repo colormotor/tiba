@@ -594,16 +594,27 @@ class TibaInterface:
         self.panda.move_to_joint_position(Q[0])
 
         self.delay(0.5)
-        print('Starting cartesian impedance control loop')
+        print('Starting Cartesian impedance control loop')
         ctrl = controllers.JointPosition()
         Kp = np.diag([800, 800, 50, 10, 10, 10])
+
+        # NB pandapy uses the Eigen (memory) convention of putting w first in Quaternions
+        def eigen_quat(q):
+            return [q[1], q[2], q[3], q[0]]
+
         stiffness_orientation = self.pad.get_pen_orientation(self.robot, Q[0]) #self.robot.q)
         ctrl = controllers.CartesianImpedance(impedance=Kp, filter_coeff=1.0,
-                                              stiffness_orientation=stiffness_orientation)
+                                              stiffness_orientation=eigen_quat(stiffness_orientation))
 
         # Get trajectory in 'hand space'
-        X = [self.robot.hand_tcp_pos(q) for q in Q]
-        n = len(X)
+        Pos = []
+        Orn = []
+        for q in Q:
+            x = self.robot.hand_tcp_pos(q)
+            Pos.append(x[:3])
+            Orn.append(eigen_quat(x[3:]))
+
+        n = len(Q)
         i = 0
         dq_thresh = 0.001
 
@@ -612,14 +623,14 @@ class TibaInterface:
         with panda.create_context(frequency=1000) as ctx:
             while ctx.ok():
                 if i < n:
-                    ctrl.set_control(X[i][:3], X[i][3:], Q[i])
+                    ctrl.set_control(Pos[i], Orn[i], Q[i])
                     i += 1
                 else:
-                    ctrl.set_control(X[-1][:3], X[-1][3:], Q[-1])
+                    ctrl.set_control(Pos[-1], Orn[-1], Q[-1])
                     dq = panda.get_state().dq
                     if abs(np.max(dq)) < dq_thresh:
                         break
-        print('Stopping cartesian impedance controller')
+        print('Stopping Cartesian impedance controller')
         self.panda.stop_controller()
 
     def execute(self, delay=2.0, force_drawing=False):
