@@ -622,7 +622,7 @@ class TibaInterface:
         print('Stopping cartesian impedance controller')
         self.panda.stop_controller()
 
-    def execute(self, delay=2.0):
+    def execute(self, delay=2.0, force_drawing=False):
         ''' Execute the current joint motion'''
         if self.panda is None:
             print("No panda, can't execute")
@@ -641,7 +641,7 @@ class TibaInterface:
 
             #Q = self.Qs
             #dQ = self.dQs
-            if motion.is_drawing:
+            if motion.is_drawing or force_drawing:
                 self._exec_drawing_motion(motion)
             else:
                 self._exec_joint_motion(motion)
