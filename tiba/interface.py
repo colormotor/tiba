@@ -562,7 +562,7 @@ class TibaInterface:
         # Kp = np.array([600, 600, 600, 600, 250, 50, 50]) #*0.5
         #Kp = np.array([600, 600, 600, 600, 250, 20, 50]) #*0.5
         #Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
-        Kv = 0.5*np.sqrt(2.0*Kp)
+        Kv = 1.0*2.0*np.sqrt(Kp) #0.5*np.sqrt(2.0*Kp)
         ctrl.set_stiffness(Kp)
         ctrl.set_damping(Kv)
         panda = self.panda
@@ -611,7 +611,7 @@ class TibaInterface:
         panda.start_controller(ctrl)
         with panda.create_context(frequency=1000) as ctx:
             while ctx.ok():
-                if i < len(n):
+                if i < n:
                     ctrl.set_control(X[i][:3], X[i][3:], Q[i])
                     i += 1
                 else:
@@ -648,7 +648,7 @@ class TibaInterface:
 
             #time.sleep(0.5)
             print('Finished motion')
-        return q
+        return np.array(self.panda.q)
 
     def play_cur_motion(self, delay=2.0):
         ''' Play the currently selected motion'''
