@@ -616,7 +616,7 @@ class TibaInterface:
 
         n = len(Q)
         i = 0
-        dq_thresh = 0.001
+        dq_thresh = 0.0001
 
         panda = self.panda
         panda.start_controller(ctrl)
@@ -628,7 +628,8 @@ class TibaInterface:
                 else:
                     ctrl.set_control(Pos[-1], Orn[-1], Q[-1])
                     dq = panda.get_state().dq
-                    if abs(np.max(dq)) < dq_thresh:
+                    i += 1
+                    if abs(np.max(dq)) < dq_thresh and i > (n+1000):
                         break
         print('Stopping Cartesian impedance controller')
         self.panda.stop_controller()
