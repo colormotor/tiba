@@ -42,6 +42,23 @@ For describing robot poses and kinematics calculations we use [[https://github.c
 mamba install conda-forge::roboticstoolbox-python
 #+end_example
 
+*** Install path planning utilities
+The package provides path planning functionalities and these partially depend on two external libraries:
+- https://github.com/colormotor/trajectory_smoothing For time-optimal path parametrization (TOPP, useful to draw arbitrary SVG paths)
+- https://github.com/colormotor/ilqr_planner For path plannning and inverse kinematics computations using iterative linear quadratic regulation (iLQR), developed at the Idiap research institute.
+Both are forks with some slight modifications of the original codes.
+
+With the conda environment active, install the TOPP package with:
+#+begin_example
+pip install trajectory_smoothing@git+https://github.com/colormotor/trajectory_smoothing.git
+#+end_example
+
+Then in a directory of choice clone [[https://github.com/colormotor/ilqr_planner][ilqr_planner]], navigate to the directory and install with:
+#+begin_example
+git submodule update --init --recursive
+./build.sh
+#+end_example
+
 *** Install py5canvas for interactive visualization
 The Tiba system relies on graphic interface software to create/visualize trajectories and to setup interaction with the robot. For more rapid development, the programs to do so are implemented in Python using the [[https://github.com/colormotor/py5canvas][py5canvas]] API, which is a Python framework similar in spirit to Processing/p5js. To install it:
 #+begin_example
