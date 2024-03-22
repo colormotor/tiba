@@ -5,7 +5,7 @@ import threading
 
 import numpy as np
 import importlib
-from motor import lqt
+from tiba import lqt
 import imgui
 # from tiba import utils, geom, svg
 import roboticstoolbox as rtb

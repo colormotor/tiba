@@ -17,7 +17,7 @@ import numpy as np
 from importlib import reload
 import importlib
 
-from motor import lqt
+from tiba import lqt
 import imgui
 from . import utils, svg, bezier
 import roboticstoolbox as rtb
