@@ -33,7 +33,7 @@ class DrawingPad:
         Calculating the plane is relatively fast so it can be done on the fly when needed.
         This box is used to determine the area over which a drawing will be made.
     '''
-    def __init__(self, path='pad.pkl'):
+    def __init__(self, path='drawing_pad.json'):
         self.path = os.path.expanduser(path)
         self.frame = np.eye(4)
         self.offset = 0.0
@@ -56,11 +56,12 @@ class DrawingPad:
         self.save()
 
     def save(self):
-        utils.save_pkl(self.points, self.path)
+        utils.save_json({'points': self.points}, self.path)
 
     def load(self):
         try:
-            self.points = utils.load_pkl(self.path)
+            pad_data = utils.load_json(self.path)
+            self.points = np.array(pad_data['points']) # utils.load_pkl(self.path)
         except FileNotFoundError as e:
             print(e)
 

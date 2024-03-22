@@ -373,7 +373,7 @@ class Motion:
 class TibaInterface:
     def __init__(self, panda, gripper,
                  motion_path='motions_desk.json',
-                 pad_path='pad.pkl',
+                 pad_path='drawing_pad.json',
                  scripts_file='./motions/motions.yaml',
                  plot_path='trajectory.png'):
 
