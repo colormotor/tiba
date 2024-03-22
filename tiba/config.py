@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from polygonsoup import geom, utils
+from . import geom, utils
 import yaml
 
 class Config:
     def __init__(self):
         self.default_angular_velocity = geom.radians(30) #(np.pi/5)
-        self.default_cartesian_speed = 300/1000.0  #(np.pi/5)
+        self.default_cartesian_speed = 100/1000.0  #(np.pi/5)
         self.default_joint_speed = 20.0
         self.speed_factor = 1.0
         self.acceleration_time = 0.4

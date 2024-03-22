@@ -13,29 +13,24 @@ Creates a UI for sending drawings to the robot and controlling it.
 Requires https://github.com/colormotor/py5canvas to be installed
 '''
 
-
 import numpy as np
 from importlib import reload
 import importlib
 
-
 from motor import lqt
 import imgui
-from polygonsoup import utils, svg, bezier, plut
+from . import utils, svg, bezier
 import roboticstoolbox as rtb
 import pdb
 import time
 import threading
 
-
 from . import interface
 reload(interface)
-
 
 from .interface import TibaInterface
 from .robot import TibaRobot, tools
 from . import matplotlyb as ply
-from . import planner
 from .config import cfg
 from . import trajectory_utils as tu
 from . import draw, geom, config, ui
@@ -43,12 +38,12 @@ from .gfx import renderer
 
 reload(renderer)
 reload(tu)
-reload(planner)
 reload(draw)
 reload(ply)
 reload(geom)
 reload(ui)
-from .draw import View3d, SketchView3d, GlView3d, plotly_plot
+
+from .draw import View3d, SketchView3d, GlView3d
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
@@ -904,7 +899,7 @@ class TibaSketch:
 
         if self.pad.is_valid():
             for i, trajectory in enumerate(self.trajectories):
-                v3d.color(plut.default_color(i))
+                v3d.color(ply.default_color(i))
                 self.draw_trajectory_3d(trajectory)
 
             if self.itiba.motions: #Qs:

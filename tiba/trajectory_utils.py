@@ -15,7 +15,7 @@ trajectory_utils - Trajectory generation utilities
 from importlib import reload
 import numpy as np
 import networkx as nx
-from polygonsoup import geom, bezier, simplify
+from . import geom, bezier, simplify
 from itertools import combinations
 from scipy.special import erf
 from spatialmath import SE3, SO3, UnitQuaternion
