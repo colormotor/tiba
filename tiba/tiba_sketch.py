@@ -398,7 +398,7 @@ class TibaSketch:
                 'Max iterations' : (450, {'min':50, 'max':1000, 'hide':True}),
                 'Isotropy': (1.0, {'min':0.0, 'max':1.0, 'hide':True}),
                 'Angle': (50.0, {'min':-90.0, 'max':90.0, 'hide':True}),
-                'Smoothing': (0.0, {'min':0.01, 'max':5.0, 'hide':True}),
+                'Smoothing': (0.0, {'min':0.01, 'max':15.0, 'hide':True}),
                 'Order': (3, {'min':2, 'max':5, 'hide':True}),
             }
         })

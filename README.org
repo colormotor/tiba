@@ -157,3 +157,5 @@ source rosmaster.sh
 The Panda-py backend is implemented with Eigen, which has a really confusing convention with Quaternions. In Eigen the API exposes quaternions in the order $w, xi, yj, zk$  (scalar first), but internally the memory layout is $xi, yj, zk, w$. This means that doing an assigment from a vector, e.g. ~Eigen::Quaterniond q = Eigen::Vector4d(0.0, 0.0, 0.0, 1.0)~ will follow the second convention.
 
 Because Panda-py exposes all orientations as ~Eigen::Vector4d~ (since these get automatically exposed as numpy arrays/lists in the Python bindings), this means that Panda-py specific functions require this order. This differs from spatialmath/roboticstoobox, as well as the ilqr_planner code. Making an error can lead to unexpected behavior of the robot so quite dangerous.
+* Resources
+- [[https://rcfs.ch][Robotics codes from scratch]]

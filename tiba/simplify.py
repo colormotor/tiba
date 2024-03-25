@@ -303,7 +303,7 @@ def dce(P, maxvalue, num=0, keep_end=1, closed=False, get_indices=False, keep=[]
     delval=[]
     if perimeter is None:
         #pdb.set_trace()
-        peri=np.sum(chord_lengths(P, closed))
+        peri=np.sum(geom.chord_lengths(P, closed))
     else:
         #pdb.set_trace()
         peri = perimeter

@@ -27,12 +27,13 @@ reload(spatial)
 
 np.set_printoptions(suppress=True)
 
+
 params = {'Seed': (5, {'min': 0, 'max': 100}),
           'svg_path': ('abr.svg', {'hide': True}),
           'GUI hue': (0.12, {'min':0, 'max': 1.0}),
           'Bezier split angle': (46.0, {'hide': True}),
           'Traj': {
-              'Sigma': (0.5, {'min': 0.1, 'max':3.0}),
+              'Sigma': (0.5, {'min': 0.1, 'max':13.0}),
               'Isotropy': (0.5, {'min': 0.1, 'max':1.0}),
               'Angle': (0.0, {'min': -90, 'max':90}),
               }
@@ -127,8 +128,8 @@ def load_svg(path):
         for chain in chunk_beziers:
             #chain = bezier.beziers_to_chain(chunk_beziers)
             P = bezier.cubic_bezier_adaptive(chain, tol)
-            P = geom.adaptive_subdivide(P, 5)
-            draft += geom.split_polyline_at_angle(P, 160)
+            #P = geom.adaptive_subdivide(P, 5)
+            draft += [P] # geom.split_polyline_at_angle(P, 160)
         #draft.append(P)
         # print('chain len:', len(chain))
         # draft.append(bezier.beziers_to_chain(beziers))

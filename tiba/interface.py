@@ -18,7 +18,7 @@ import numpy as np
 import os, sys, time
 import traceback
 import yaml
-
+import pdb
 import roboticstoolbox as rtb
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
@@ -778,6 +778,7 @@ class TibaInterface:
                                            subsample=int(cfg.dt/cfg.robot_dt),
                                            tip_frame=tip_frame
                                            )
+        #
         Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, get_trajectories=True)
 
 
@@ -788,7 +789,7 @@ class TibaInterface:
         #                                        )
         # Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, qd_lim=self.robot.qd_lim, get_trajectories=True)
 
-        plot_cartesian_trajectories(linked_trajectories)
+        #plot_cartesian_trajectories(linked_trajectories)
         return Qs, dQs
 
     def plan_task_trajectories(self, trajectories, rest=0.0, q=None, tip_frame='tiba_pen_tcp'):
