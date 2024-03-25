@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 from importlib import reload
 
-import threading
+import threading, pdb
 
 import numpy as np
 import importlib
-from motor import lqt
+from tiba import lqt
 import imgui
-# from polygonsoup import utils, geom, svg
+# from tiba import utils, geom, svg
 import roboticstoolbox as rtb
 import tiba
 import pdb
@@ -350,6 +350,15 @@ def gui():
                 if imgui.button('Cancel'):
                     imgui.close_current_popup()
                 imgui.end_popup()
+        if imgui.button('Break'):
+            from PyLQR.sim import KDLRobot
+            q = tsketch.itiba.Qs[-1]
+            rbt = KDLRobot(tsketch.robot.urdf_file, 'tiba_link0', 'tiba_pen_tcp', q, np.zeros(7))
+            hrbt = KDLRobot(tsketch.robot.urdf_file, 'tiba_link0', 'tiba_hand_tcp', q, np.zeros(7))
+            robot = tsketch.robot
+            x0 = tu.to_pos_orn(tu.to_pose(np.concatenate([rbt.get_ee_pos(), rbt.get_ee_orn()])))
+            hx0 = tu.to_pos_orn(tu.to_pose(np.concatenate([hrbt.get_ee_pos(), hrbt.get_ee_orn()])))
+            pdb.set_trace()
 
     if 'guiding' in sketch.gui.changed:
         print('Guiding params')

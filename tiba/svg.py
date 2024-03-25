@@ -18,8 +18,7 @@ Since the pip version does not support rectangles (at this time at least).
 from importlib import reload
 import svgpathtools as svg
 import numpy as np
-import polygonsoup.bezier as bezier
-import polygonsoup.geom as geom
+from . import geom, bezier
 import pdb
 
 def to_pt(c):

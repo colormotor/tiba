@@ -3,7 +3,7 @@ import moderngl as mgl
 import numpy as np
 import numbers
 import os
-from polygonsoup import geom
+from .. import geom
 import pdb
 
 def is_number(x):

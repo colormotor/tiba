@@ -17,8 +17,8 @@
         },
         "drawing": {
             "plane_offset": 0.0,
-            "padding": 429,
-            "penup_mm": 55,
+            "padding": 103,
+            "penup_mm": 24,
             "pos_offset_x": 0.0,
             "pos_offset_y": 0.0
         },

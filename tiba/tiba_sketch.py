@@ -13,29 +13,24 @@ Creates a UI for sending drawings to the robot and controlling it.
 Requires https://github.com/colormotor/py5canvas to be installed
 '''
 
-
 import numpy as np
 from importlib import reload
 import importlib
 
-
-from motor import lqt
+from tiba import lqt
 import imgui
-from polygonsoup import utils, svg, bezier, plut
+from . import utils, svg, bezier
 import roboticstoolbox as rtb
 import pdb
 import time
 import threading
 
-
 from . import interface
 reload(interface)
-
 
 from .interface import TibaInterface
 from .robot import TibaRobot, tools
 from . import matplotlyb as ply
-from . import planner
 from .config import cfg
 from . import trajectory_utils as tu
 from . import draw, geom, config, ui
@@ -43,12 +38,12 @@ from .gfx import renderer
 
 reload(renderer)
 reload(tu)
-reload(planner)
 reload(draw)
 reload(ply)
 reload(geom)
 reload(ui)
-from .draw import View3d, SketchView3d, GlView3d, plotly_plot
+
+from .draw import View3d, SketchView3d, GlView3d
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 import roboticstoolbox as rtb
@@ -403,7 +398,7 @@ class TibaSketch:
                 'Max iterations' : (450, {'min':50, 'max':1000, 'hide':True}),
                 'Isotropy': (1.0, {'min':0.0, 'max':1.0, 'hide':True}),
                 'Angle': (50.0, {'min':-90.0, 'max':90.0, 'hide':True}),
-                'Smoothing': (0.0, {'min':0.01, 'max':5.0, 'hide':True}),
+                'Smoothing': (0.0, {'min':0.01, 'max':15.0, 'hide':True}),
                 'Order': (3, {'min':2, 'max':5, 'hide':True}),
             }
         })
@@ -904,7 +899,7 @@ class TibaSketch:
 
         if self.pad.is_valid():
             for i, trajectory in enumerate(self.trajectories):
-                v3d.color(plut.default_color(i))
+                v3d.color(ply.default_color(i))
                 self.draw_trajectory_3d(trajectory)
 
             if self.itiba.motions: #Qs:

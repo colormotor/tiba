@@ -186,7 +186,7 @@ batch = Pos(-150, 0, 0)*batch
 batch.export_stl('batch.stl')
 show_all()
 # %%
-from polygonsoup import geom, plut
+from . import geom
 import matplotlib.pyplot as plt
 plut.figure((5,5))
 plut.draw_line([0, 0], [-h, 0], 'r')
@@ -197,9 +197,9 @@ plut.show()
 # %%
 
 
-from polygonsoup import geom, plut
+from . import geom
 import matplotlib.pyplot as plt
-from polygonsoup.geom import vec
+from .geom import vec
 plut.figure((5,5))
 rect = geom.make_rect(0, -thickness/2, h, thickness)
 theta = geom.radians(angle)
