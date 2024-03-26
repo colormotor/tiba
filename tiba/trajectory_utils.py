@@ -26,7 +26,6 @@ from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
 from collections import defaultdict
 from math import hypot
-import motor.lqt as lqt
 from . import trapezoidal, todorov
 reload(trapezoidal)
 reload(todorov)

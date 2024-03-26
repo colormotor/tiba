@@ -104,7 +104,7 @@ def jtraj_callback(data):
     if has_robot:
         print('Executing')
         state.executing = True
-        itiba.execute() #force_drawing=True)
+        itiba.execute(force_drawing=False)
         state.executing = False
         print('Execution done')
     else:

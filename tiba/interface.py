@@ -596,7 +596,7 @@ class TibaInterface:
         self.delay(0.5)
         print('Starting Cartesian impedance control loop')
         ctrl = controllers.JointPosition()
-        Kp = np.diag([800, 800, 50, 10, 10, 10])
+        Kp = np.diag([800, 800, 150, 30, 30, 30])
 
         # NB pandapy uses the Eigen (memory) convention of putting w first in Quaternions
         def eigen_quat(q):
@@ -604,6 +604,7 @@ class TibaInterface:
 
         stiffness_orientation = self.pad.get_pen_orientation(self.robot, Q[0]) #self.robot.q)
         ctrl = controllers.CartesianImpedance(impedance=Kp, filter_coeff=1.0,
+                                              nullspace_stiffness=5.0,
                                               stiffness_orientation=eigen_quat(stiffness_orientation))
 
         # Get trajectory in 'hand space'

@@ -16,9 +16,9 @@ The dependency installation procedure depends on the [[https://docs.conda.io/en/
 #+begin_example
 conda install conda-forge::mamba
 #+end_example
-With mamba installed, create a conda environment for the dependencies and install [[https://www.ros.org][ROS]] through [[https://github.com/RoboStack/ros-noetic][RoboStack]] with:
+With mamba installed, create a conda environment for the dependencies and install [[https://www.ros.org][ROS]] through [[https://github.com/RoboStack/ros-noetic][RoboStack]] with (Note the official instructions don't specify the python version, which seems to be important):
 #+begin_example
-mamba create -n ros_env
+mamba create -n ros_env python=3.9
 mamba activate ros_env
 
 # this adds the conda-forge channel to the new created environment configuration
@@ -40,6 +40,11 @@ mamba activate ros_env
 For describing robot poses and kinematics calculations we use [[https://github.com/petercorke/robotics-toolbox-python][Robotics Toolbox Python]]. With the ROS environment active, install it with:
 #+begin_example
 mamba install conda-forge::roboticstoolbox-python
+#+end_example
+
+Installl other deps:
+#+begin_example
+mamba install plotly, networkx, tqdm
 #+end_example
 
 *** Install path planning utilities
@@ -101,6 +106,40 @@ https://github.com/colormotor/panda-py.git
 cd panda-py
 pip install .
 #+end_example
+
+*** Install Franka ROS
+First create a ROS workspace, by creating a directory (we will call it ~catkin_ws~) and create a subdirectory ~src~ within it. Again we will not follow the exact instructions because we want to use the latest version of libfranka and Robostack for ROS. From the ~catkin_ws~ directory and with *the ros conda environment active*:
+#+begin_example
+git clone --recursive https://github.com/frankaemika/franka_ros src/franka_ros
+rosdep install --from-paths src --ignore-src --rosdistro noetic -y --skip-keys libfranka
+catkin build --cmake-args -DCMAKE_BUILD_TYPE=Release
+#+end_example
+Then activate the workspace with
+#+begin_example
+source devel/setup.bash
+#+end_example
+*** Install realsense stuff
+#+begin_example
+
+mamba install ros-noetic-realsense2-camera
+#+end_example
+
+
+*** Install easy-hand-eye
+#+begin_example
+mamba install ros-noetic-moveit-resources-panda-description ros-noetic-moveit-resources-panda-moveit-config ros-noetic-panda-moveit-config
+mamba install transforms3d
+mamba install ros-noetic-moveit-visual-tools
+cd src
+git clone https://github.com/pal-robotics/aruco_ros.git
+git checkout noetic-devel
+cd ..
+catkin build aruco_ros
+rosdep install -ir --from-paths src --skip-keys libfranka
+catkin build
+#+end_example
+
+
 
 
 
