@@ -481,7 +481,7 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
         ply.line([0, -l], [t[-1], -l], ply.categorical_color(i), ls=':')
         ply.line([0, l], [t[-1], l], ply.categorical_color(i), ls=':')
 
-    #limit = cfg.default_joint_speed
+    #limit = cfg.joint_speed
     #ply.rectangle([0, -limit], [len(dQs), limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(1, 3)
@@ -501,7 +501,7 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     #t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
     #ply.plot(t, acc[:,0], 'k', alpha=0.7)
 
-    limit = cfg.default_cartesian_speed
+    limit = cfg.cartesian_speed
     ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(2, 1, title='Joint acceleration (rad/s^2)')
@@ -519,7 +519,7 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     #     ply.plot(t, acc[:,i], ['r', 'g', 'b'][i], alpha=0.7)
     # #ply.plot(t, tu.rownorm(acc), 'k', lw=2)
 
-    #limit = cfg.default_cartesian_speed / cfg.acceleration_time
+    #limit = cfg.cartesian_speed / cfg.acceleration_time
     #ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(2, 3)

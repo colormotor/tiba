@@ -575,7 +575,7 @@ class TibaSketch:
             print("No draft")
             return
 
-        max_speed = cfg.default_cartesian_speed
+        max_speed = cfg.cartesian_speed
         accel_time = cfg.acceleration_time
         traj_callback = self.trajectory_callback
         trajectory_includes_penup = False
@@ -653,6 +653,8 @@ class TibaSketch:
            hand = self.robot.get_pose(None, 'tiba_hand_tcp')
            print('Hand TCP pos', list(hand.t))
         button_color = [1.0, 0.5, 0.0, 1.0]
+
+        _, cfg.speed_factor = imgui.slider_float('Speed factor', cfg.speed_factor, 0.1, 1.0)
 
         if 'drawing' in self.flags:
             ui.imgui_text_separator("Scripts")
