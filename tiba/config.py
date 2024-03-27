@@ -4,9 +4,9 @@ import yaml
 
 class Config:
     def __init__(self):
-        self.default_angular_velocity = geom.radians(30) #(np.pi/5)
-        self.default_cartesian_speed = 250/1000.0  #(np.pi/5)
-        self.default_joint_speed = 20.0
+        self._default_angular_velocity = geom.radians(30) #(np.pi/5)
+        self._default_cartesian_speed = 250/1000.0  #(np.pi/5)
+        self._default_joint_speed = geom.radians(20.0)
         self.speed_factor = 1.0
         self.acceleration_time = 0.4
         self.joint_acceleration_time = 1.0
@@ -17,7 +17,15 @@ class Config:
 
     @property
     def cartesian_speed(self):
-        return self.default_cartesian_speed*self.speed_factor
+        return self._default_cartesian_speed*self.speed_factor
+
+    @property
+    def joint_speed(self):
+        return self._default_joint_speed*self.speed_factor
+
+    @property
+    def angular_velocity(self):
+        return self._default_angular_velocity*self.speed_factor
 
     def load(self, filename):
         with open(filename, 'r') as f:

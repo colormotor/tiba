@@ -154,7 +154,7 @@ def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=0, dt
     Q = np.array(Q)
 
     if max_speed is None:
-        max_speed = geom.radians(cfg.default_joint_speed)
+        max_speed = cfg.joint_speed
     if accel_time is None:
         accel_time = cfg.joint_acceleration_time
     max_accel = max_speed / accel_time
@@ -193,9 +193,9 @@ def joint_trajectory_time_optimal(Q_, max_speed=None, accel_time=None, tol=0, dt
 
 def joint_approach(q0, q1, speed=None):
     if speed is None:
-        speed = cfg.default_joint_speed
+        speed = cfg.joint_speed
 
-    return joint_trajectory_time_optimal([q0, q1]) #, max_speed=geom.radians(speed))
+    return joint_trajectory_time_optimal([q0, q1], speed) #, max_speed=geom.radians(speed))
 
 def angdistance(a, b):
     return a.angdist(b, metric=3)*2
@@ -211,7 +211,7 @@ def linear_approach(x0, x1, duration=0,
     pose1 = to_pose(x1)
 
     if angular_velocity is None:
-        angular_velocity = cfg.default_angular_velocity
+        angular_velocity = cfg.angular_velocity
     if cartesian_speed is None:
         cartesian_speed = cfg.cartesian_speed
 
@@ -260,10 +260,10 @@ def trapezoidal_approach(x0, x1,
     dist = np.linalg.norm(pose0.t - pose1.t)
 
     if angular_velocity is None:
-        angular_velocity = cfg.default_angular_velocity
+        angular_velocity = cfg.angular_velocity
 
     if cartesian_speed is None:
-        cartesian_speed = cfg.default_cartesian_speed
+        cartesian_speed = cfg.cartesian_speed
 
     # Use angular velocity if it is the limiting factor
     if angdist/angular_velocity > dist/cartesian_speed:
@@ -303,7 +303,7 @@ def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None
     if max_speed is None:
         max_speed = cfg.cartesian_speed
     if max_angular_velocity is None:
-        max_angular_velocity = cfg.default_angular_velocity
+        max_angular_velocity = cfg.angular_velocity
     if accel_time is None:
         accel_time = cfg.acceleration_time
 
