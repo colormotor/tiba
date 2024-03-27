@@ -770,7 +770,7 @@ def semitied_lqt(P, **kwargs):
     P = P.T
     dim = params['dim']
     Sigma = []
-    cov = np.eye(dim)*((0.1)**2) # Penup hack
+    cov = np.eye(dim)*((0.9)**2) # Penup hack
     cov[:2,:2] = lqt.make_sigma(geom.radians(params['angle']), [params['isotropy']*params['sigma'], params['sigma']])
 
     for p in P.T:
