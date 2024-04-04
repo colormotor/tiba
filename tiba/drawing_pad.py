@@ -44,7 +44,7 @@ class DrawingPad:
         self.scale = [1.0, 1.0]
 
     def clear(self):
-        self.points.clear()
+        self.points = [] #.clear()
         self.save()
 
     def add_point(self, p):

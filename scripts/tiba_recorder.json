@@ -11,10 +11,11 @@
             "elbow": true
         },
         "config": {
-            "tool": 7,
+            "tool": 5,
             "cart_planner": 0,
             "dce_thresh": 250,
             "max_iterations": 450,
+            "topp_tol": 100.0,
             "isotropy": 1.0,
             "angle": 50.0,
             "smoothing": 0.0,
@@ -24,9 +25,9 @@
             "dist": 2.4499995708465576,
             "xoffset": -0.1300000101327896,
             "voffset": -0.23000000417232513,
-            "rotx": -13,
-            "roty": -40,
-            "rotz": -160
+            "rotx": -8,
+            "roty": 22,
+            "rotz": 165
         }
     },
     "presets": {},

@@ -653,7 +653,7 @@ class TibaInterface:
                     self.grasp()
                 else:
                     self.grasp(motion.grasp)
-                time.sleep(0.5)
+                time.sleep(1.0)
 
             #Q = self.Qs
             #dQ = self.dQs
