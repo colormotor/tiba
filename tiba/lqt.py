@@ -835,7 +835,6 @@ def stepwise(m, n):
 def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, iterative=False, stop_movement=True, alpha=0., psg=None, clamp=False, diag=0.):
     if type(Sigma)==list:
         Sigma = np.dstack(Sigma)
-    
     if periodic:
         P = np.hstack([P, P[:,:1]])
         Sigma = np.dstack([Sigma, Sigma[:,:,:1]])
@@ -889,7 +888,21 @@ def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, iterati
         Q[t] = Lambda[i]
 
     if iterative:
-        return np.array(MuQ).T, block_diag(*Q), [] #np.array(Q)
+        Q = block_diag(*Q)
+        if stop_movement:
+            print("STOP MOVEMENT")
+            # TODO add constraint here
+            # i = (n-1)*cDim
+            # K = np.zeros((cDim, n*cDim))
+            # K[:, i:i+cDim] = np.diag(np.concatenate([np.zeros(dim), np.ones(cDim-dim)]))
+            # print('stopit')
+            amt = 1
+            i = (n-1)*cDim
+            Q[i:i+cDim,i:i+cDim] = np.eye(cDim)*amt
+            i = 0
+            Q[i:i+cDim,i:i+cDim] = np.eye(cDim)*amt
+
+        return np.array(MuQ).T, Q, [] #np.array(Q)
     
     MuQ = np.hstack(MuQ).reshape(-1,1)
     Q = block_diag(*Q)
@@ -904,6 +917,7 @@ def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, iterati
     else:
         K = None
         if stop_movement:
+            print("STOP MOVEMENT")
             # TODO add constraint here
             # i = (n-1)*cDim
             # K = np.zeros((cDim, n*cDim))
@@ -975,6 +989,7 @@ def sparse_reference(sys, P, Sigma, activation_sigma, periodic=False, stop_movem
     else:
         K = None
         if stop_movement:
+            print("STOP MOVEMENT")
             # TODO add constraint here
             # i = (n-1)*cDim
             # K = np.zeros((cDim, n*cDim))

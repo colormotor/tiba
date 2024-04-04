@@ -765,7 +765,7 @@ def plan_lqt_bezier(Cp, ctrl_ratio, max_speed, accel_time, **kwargs):
     dim  = Cp.shape[1]
     default_params = dict(order=3,
                           opt_x0=False,
-                          stop_motion=True,
+                          stop_movement=True,
                           activation_sigma=0.5,
                           subd=5) # Assuming duration of 0.5
     default_params.update(kwargs)
@@ -801,12 +801,12 @@ def plan_lqt_bezier(Cp, ctrl_ratio, max_speed, accel_time, **kwargs):
     Y = np.vstack([p(x) for p in bp]).T
     return Y
 
-def bezier_lqt(Cp, ctrl_ratio=2.2, **kwargs):
+def bezier_lqt(Cp, ctrl_ratio=7.5, **kwargs):
     ''' Mimic a cubic Bezier curve with isotropic Gaussians and a stepwise tracking reference'''
     params = dict(activation_sigma=0.5,
                   d=3.,
                   order=3,
-                  sigma=7,
+                  sigma=10,
                   segment_duration=0.5,
                   opt_x0=False,
                   stop_movement=True,
@@ -848,13 +848,14 @@ def bezier_lqt(Cp, ctrl_ratio=2.2, **kwargs):
         Sigma[:,:,i*3+2] = np.eye(dim)*sigma*ctrl_ratio
         Sigma[:,:,i*3+3] = np.eye(dim)*sigma
 
-    Sigma[:,:,0] = np.eye(dim) #0.05
-    Sigma[:,:,-1] = np.eye(dim) #0.05
+    #Sigma[:,:,0] = np.eye(dim)*2 #0.05
+    #Sigma[:,:,-1] = np.eye(dim)*2 #0.05
 
     iterative = params['iterative']
     if params['periodic']:
         iterative = False
     sys = lqt.DynamicalSystem(params['order'], params['subd'], segment_duration=params['segment_duration'], dim=dim)
+    print("Stop?", params['stop_movement'])
     ref = lqt.cartesian_reference(sys, Mu, Sigma,
                                   activation_sigma=params['activation_sigma'],
                                   stop_movement=params['stop_movement'],
