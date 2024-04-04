@@ -701,6 +701,120 @@ class ArcBall:
 
 ## Curves and interpolation
 ##
+def smoothing_spline(n, pts, der=0, ds=0., closed=False, w=None, smooth_k=0, degree=3, alpha=1.):
+    ''' Computes a smoothing B-spline for a sequence of points.
+    Input:
+    n, number of interpolating points
+    pts, sequence of points (dim X m)
+    der, derivative order
+    ds, if non-zero an approximate arc length parameterisation is used with distance ds between points,
+    and the parameter n is ignored.
+    closed, if True spline is periodic
+    w, optional weights
+    smooth_k, smoothing parameter,
+    degree, spline degree,
+    alpha, parameterisation (1, uniform, 0.5 centripetal)
+    '''
+    if closed:
+        pts = np.vstack([pts, pts[0]])
+
+    if w is None:
+        w = np.ones(pts.shape[0])
+    elif is_number(w):
+        w = np.ones(pts.shape[0])*w
+
+    dim = pts.shape[1]
+    degree = min(degree, pts.shape[0]-1)
+
+    if pts.shape[0] < 2:
+        print('Insufficient points for smoothing spline, returning original')
+        return pts
+
+    if ds != 0:
+        D = np.diff(pts, axis=0)
+        s = np.sqrt(np.sum([D[:,i]**2 for i in range(dim)], axis=0))+1e-5
+        l = np.sum(s)
+        s = s**(alpha)
+        u = np.cumsum(np.concatenate([[0.], s]))
+        u = u / u[-1]
+
+        spl, u = splprep(pts.T, w=w, u=u, k=degree, per=closed, s=smooth_k)
+        n = max(2, int(l / ds))
+        t = np.linspace(u[0], u[-1], n)
+    else:
+        u = np.linspace(0, 1, pts.shape[0])
+        spl, u = splprep(pts.T, u=u, w=w, k=degree, per=closed, s=smooth_k)
+        t = np.linspace(0, 1, n)
+
+    if type(der)==list:
+        res = []
+        for d in der:
+            res.append(np.vstack(splev(t, spl, der=d)).T)
+        return res
+    res = splev(t, spl, der=der)
+    return np.vstack(res).T
+
+
+
+def curved_offset(spine, widths, n=0, degree=3, closed=False, smooth_k=0):
+    # smoothing spline
+    if n==0:
+        n = spine.shape[0]
+    #print(closed)
+    degree = min(degree, n-1)
+    # parameterization
+    u = np.linspace(0, 1, spine.shape[0]) #geom.cum_chord_lengths(spine)
+    u = u/u[-1]
+    spl, u = splprep(np.vstack([spine.T, widths]), u=u, k=degree, per=closed, s=smooth_k)
+    t = np.linspace(0, 1, n)
+    x, y, w = splev(t, spl)
+    dx, dy, dw = splev(t, spl, der=1)
+
+    centers = np.vstack([x, y])
+    tangents = np.vstack([dx, dy]) / (np.sqrt(dx**2 + dy**2) + 1e-10)
+    normals = np.vstack([-tangents[1,:], tangents[0,:]])
+
+    pts = (centers + normals*w).T
+    if closed:
+        pts = np.vstack([pts, pts[0]])
+
+    res = smoothing_spline(n, pts, smooth_k=smooth_k, closed=closed)
+    if closed:
+        res = np.vstack([res, res[0]])
+
+    return res
+
+def thick_curve(Xw, scalefn=lambda x: x, smooth_k=0):
+    from . import clipper
+    Xw = np.array(Xw)
+    Xw[:,2] = scalefn(Xw[:,2])
+    Ol = curved_offset(Xw[:,:2], Xw[:,2], smooth_k)[::-1]
+    Or = curved_offset(Xw[:,:2], -Xw[:,2], smooth_k)
+    stroke = np.vstack([Ol, Or])
+    return clipper.union(stroke, stroke)
+
+
+def cleanup_contour(X, eps=1e-10, closed=False, get_inds=False):
+    ''' Removes points that are closer then a threshold eps'''
+    if closed:
+        X = np.vstack([X, X[0]])
+    D = np.diff(X, axis=0)
+    inds = np.array(range(X.shape[0])).astype(int)
+    # chord lengths
+    s = np.sqrt(D[:,0]**2 + D[:,1]**2)
+    # Delete values in input with zero distance (due to a bug in interp1d)
+    I = np.where(s<eps)[0]
+
+    if closed:
+        X = X[:-1]
+    if len(I):
+        X = np.delete(X, I, axis=0)
+        inds = np.delete(inds, I)
+    if get_inds:
+        return X, inds
+    return X
+
+
 def split_polyline_at_angle(P, angle_tol=90):
     ''' Split polyline at points where the turning angle is greater than angle_tol degrees'''
     tol = radians(angle_tol)

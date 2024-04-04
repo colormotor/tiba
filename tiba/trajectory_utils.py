@@ -26,7 +26,7 @@ from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
 from collections import defaultdict
 from math import hypot
-from . import trapezoidal, todorov
+from . import trapezoidal, todorov, lqt
 reload(trapezoidal)
 reload(todorov)
 
@@ -649,11 +649,23 @@ def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
     b = np.array(b)
     d = b-a
     up = [0, 0, height]
-    P = np.array([a,  a+d*(1/3)+up, b-d*(1/3)+up, b])
-    u = geom.cum_chord_lengths(P)
-    u = u/u[-1]
+    if geom.distance(a, b) < height:
+        P = np.array([a,  a+d*(1/3)+up, b-d*(1/3)+up, b])
+    else:
+        dd = geom.normalize(d)
+        P = np.array([a, a+dd*height*0.5 + up, (a+b)/2 + up, b-dd*height*0.5+up, b])
+    
+    paths, _, _ = plan_polylines_time_optimal([P],
+                                              max_speed=max_speed,
+                                              accel_time=max_accel_time,
+                                              tol=0.3)
+    return paths[0]
+
+    #u = geom.cum_chord_lengths(P)
+    u = np.linspace(0, 1.0, len(P)) 
+    #u = u/u[-1]
     bc_type='clamped'
-    spl = CubicSpline(u, P, bc_type=bc_type)
+    spl = CubicSpline(u, P) #, bc_type=bc_type)
     dspl = spl.derivative()
     ddspl = spl.derivative(2)
     x_test = np.linspace(0, 1, 100)
@@ -719,8 +731,6 @@ def plan_lqt(P, max_speed, accel_time, **kwargs):
 
     T = np.linspace(0, duration, X.shape[0])
     nderiv = X.shape[1]//dim
-    print("X shape", X.shape)
-    print("nderiv", nderiv)
 
     # Construct piecewise polynomial for each dimension
     bp = [BPoly.from_derivatives(T,
@@ -749,6 +759,116 @@ def plan_lqt(P, max_speed, accel_time, **kwargs):
 
     Y = np.vstack([p(x) for p in bp]).T
     return Y
+
+def plan_lqt_bezier(Cp, ctrl_ratio, max_speed, accel_time, **kwargs):
+    ''' Do semitied LQT planning with max speed and accel constraints'''
+    dim  = Cp.shape[1]
+    default_params = dict(order=3,
+                          opt_x0=False,
+                          stop_motion=True,
+                          activation_sigma=0.5,
+                          subd=5) # Assuming duration of 0.5
+    default_params.update(kwargs)
+    X, duration = bezier_lqt(Cp, ctrl_ratio, **default_params)
+    T = np.linspace(0, duration, X.shape[0])
+    nderiv = X.shape[1]//dim
+
+    # Construct piecewise polynomial for each dimension
+    bp = [BPoly.from_derivatives(T,
+                np.vstack([X[:, j*dim+i] for j in range(nderiv)]).T)
+          for i in range(dim)]
+    # And velocity/accel
+    dbp = [p.derivative(1) for p in bp]
+    ddbp = [p.derivative(2) for p in bp]
+
+    # Estimate maximum speed and acceleration norm for current parameterization
+    max_accel = max_speed / accel_time
+
+    dX = np.vstack([p(T) for p in dbp]).T
+    ddX = np.vstack([p(T) for p in ddbp]).T
+    smax = np.max(rownorm(dX))
+    amax = np.max(rownorm(ddX))
+
+    # Get ratio to reach desired max velocity or acceleration
+    div_s = max_speed/smax
+    div_a = np.sqrt(max_accel/amax)
+    div = min(div_s, div_a)
+
+    # Get new parametrization to achieve desired max, given the timestep
+    dt = cfg.dt
+    x = np.arange(0.0, T[-1], dt*div)
+
+    Y = np.vstack([p(x) for p in bp]).T
+    return Y
+
+def bezier_lqt(Cp, ctrl_ratio=2.2, **kwargs):
+    ''' Mimic a cubic Bezier curve with isotropic Gaussians and a stepwise tracking reference'''
+    params = dict(activation_sigma=0.5,
+                  d=3.,
+                  order=3,
+                  sigma=7,
+                  segment_duration=0.5,
+                  opt_x0=False,
+                  stop_movement=True,
+                  periodic=False,
+                  iterative=True,
+                  subd=10,
+                  alpha=0
+                )
+    params.update(**kwargs)
+    d = params['d']
+    sigma = params['sigma']
+
+    Cp = np.array(Cp).T
+    glob_scale = 1.0
+    m = Cp.shape[1]
+    dim = Cp.shape[0]
+    Cp = Cp*1
+    d = d*glob_scale
+    sigma = sigma*glob_scale
+    Mu = np.zeros((dim,m))
+    Sigma = np.zeros((dim,dim,m))
+    ctrl_ratio *= ctrl_ratio
+    sigma = sigma**2
+    num_bezier = int((m - 1) / 3)
+    for i in range(num_bezier):
+
+        p1,p2,p3,p4 = [Cp[:,j+i*3] for j in range(4)]
+
+        dv = (p1 - p2 + p4 - p3)/2
+
+        dr = 0.0
+        Mu[:,i*3] = p1
+        Mu[:,i*3+3] = p4
+        Mu[:,i*3+1] = p2 + dv*dr #- d1*dr
+        Mu[:,i*3+2] =  p3 + dv*dr #- d2*dr
+
+        Sigma[:,:,i*3]   = np.eye(dim)*sigma
+        Sigma[:,:,i*3+1] = np.eye(dim)*sigma*ctrl_ratio
+        Sigma[:,:,i*3+2] = np.eye(dim)*sigma*ctrl_ratio
+        Sigma[:,:,i*3+3] = np.eye(dim)*sigma
+
+    Sigma[:,:,0] = np.eye(dim) #0.05
+    Sigma[:,:,-1] = np.eye(dim) #0.05
+
+    iterative = params['iterative']
+    if params['periodic']:
+        iterative = False
+    sys = lqt.DynamicalSystem(params['order'], params['subd'], segment_duration=params['segment_duration'], dim=dim)
+    ref = lqt.cartesian_reference(sys, Mu, Sigma,
+                                  activation_sigma=params['activation_sigma'],
+                                  stop_movement=params['stop_movement'],
+                                  clamp=1,
+                                  alpha=params['alpha'],
+                                  iterative=iterative)
+    if iterative:
+        res = lqt.solve_lqt_iterative(sys, ref, params['d'])
+    else:
+        res = lqt.solve_lqt(sys, ref, params['d'])
+
+    X = res['x'].T
+    duration = (X.shape[0]-1)*sys.dt
+    return X, duration
 
 
 def semitied_lqt(P, **kwargs):
@@ -786,9 +906,7 @@ def semitied_lqt(P, **kwargs):
                                     stop_movement=params['stop_movement'], periodic=params['periodic'])
     res = lqt.solve_lqt(sys, ref, params['d'], opt_x0=params['opt_x0']) #, r=1e-43)
     X = res['x'].T
-    print('X', X.shape)
     duration = (X.shape[0]-1)*sys.dt
-    print('duration', duration, sys.dt)
     return X, duration
 
 def distance(a, b):

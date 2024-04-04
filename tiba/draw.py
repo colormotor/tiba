@@ -424,3 +424,57 @@ class GlView3d:
         if pts:
             self.sketch.canvas.text(pts[0][0], text, center=center)
 
+
+
+def plot_cartesian_trajectory_stats(trajectories, max_speed=None, accel_time=None, backend='plotly', figsize=(10,10)):
+    from . import config
+    from . import matplotlyb as ply
+
+    if max_speed is None:
+        max_speed = config.cfg.cartesian_speed
+    if accel_time is None:
+        accel_time = config.cfg.acceleration_time
+
+    velocities = [np.diff(P, axis=0) / config.cfg.dt for P in trajectories]
+    accelerations = [np.diff(P, n=2, axis=0) / (config.cfg.dt**2) for P in trajectories]
+    max_accel = max_speed / accel_time
+
+    ply.figure(figsize=figsize, title='Cartesian trajectory')
+
+    Tv = 0.0
+    Ta = 0.0
+
+    for i, X in enumerate(trajectories):
+        #speed = velocities[i] #tu.compute_speed(X, cfg.dt)
+        #accel = accelerations[i] #tu.compute_accel(X, cfg.dt)
+        tv = np.linspace(0, (len(velocities[i])-1)*config.cfg.dt, len(velocities[i])) + Tv
+        ta = np.linspace(0, (len(accelerations[i])-1)*config.cfg.dt, len(accelerations[i])) + Ta
+        ply.subplot(1, 1, title='Velocity')
+        ply.plot(tv, velocities[i][:,0], color=ply.categorical_color(i))
+        ply.plot(tv, velocities[i][:,1], color=ply.categorical_color(i))
+        ply.plot(tv, velocities[i][:,2], color='b', alpha=0.5)
+        ply.subplot(1, 2, title='Acceleration')
+        ply.plot(ta, accelerations[i][:,0], color=ply.categorical_color(i))
+        ply.plot(ta, accelerations[i][:,1], color=ply.categorical_color(i))
+        ply.plot(ta, accelerations[i][:,2], color='b', alpha=0.5)
+        Tv = tv[-1] + config.cfg.dt
+        Ta = ta[-1] + config.cfg.dt
+
+    ply.subplot(1, 1, title='Velocity')
+    ply.rectangle([0, -max_speed], [Tv, max_speed], color='k', alpha=0.1, fill=True)
+    ply.subplot(1, 2, title='Acceleration')
+    ply.rectangle([0, -max_accel], [Ta, max_accel], color='k', alpha=0.1, fill=True)
+
+
+    ply.subplot(2, 1, title='Trajectory 2d')
+    ply.stroke(trajectories, 'k')
+    ply.axis_equal(True)
+
+    ply.subplot(2, 2, title='Trajectory 3d')
+    box = geom.bounding_box(trajectories)
+
+    for X in trajectories:
+        X = np.array(X)
+        vals = (X[:,2])/(box[1][2] - box[0][2])
+        ply.stroke3d(X, color=[ply.cmap(z, 'magma') if z >=0 else ply.cmap(-z, 'viridis') for z in vals])
+    ply.show(backend)
