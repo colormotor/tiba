@@ -172,6 +172,124 @@ class DynamicalSystem:
 def num_samples(subd, m):
     return (m-1)*subd+1
 
+def solve_lqt_iterative(sys, reference, d, r=None):
+    ''' Performs iterative discrete LQR with a finite horizon
+        Input:
+            A: system dynamics matrix (continuous, 1d version)
+            B: system control matrix (continuous, 1d version)
+            dt: time step
+            r: coefficent for control cost 
+            x0_: initial state of the system (full or position only)
+            MuQ: block matrix of Mu's for each time step
+            Q: block diagonal matrix with precision matrices for each time step
+            discretzation_method: defaults to Zero Order Hold ('zoh'),
+            full_output: if True optional output parameters will be returned
+        based on:
+        @article{Calinon16JIST,
+          author="Calinon, S.",
+          title="A Tutorial on Task-Parameterized Movement Learning and Retrieval",
+          journal="Intelligent Service Robotics",
+              publisher="Springer Berlin Heidelberg",
+              doi="10.1007/s11370-015-0187-9",
+              year="2016",
+              volume="9",
+              number="1",
+              pages="1--29"
+        }
+    '''
+    def mul(*args):
+        ''' TODO remove Multiply an array of matrices'''
+        X = args
+        if len(X)==1:
+            X = X[0]
+
+        x = X[0];
+        for y in X[1:]:
+            x = np.dot(x,y)
+        return x
+
+    scale = 1.0
+    k = sys.order    
+    dim = sys.dim
+    dt = sys.dt
+    
+    cDim = dim*k # dimension of the full state
+    
+    MuQ, Q, K = reference
+    n = MuQ.shape[1] #// cDim
+    #dt = 1./(n-1)
+    
+    if r is None:
+        r = SHM_r(d, k, sys.segment_duration)
+    
+    A, B = sys.discretize()
+
+    # In this case we keep the column layout
+    Xi_hat = MuQ 
+    print(Xi_hat.shape, Q.shape, A.shape, n)
+    # Sensor matrix (assuming only position is observed) 
+    # Actually unused here and directly setting unobserved Q entries to 0 weight
+    C = np.kron(np.hstack([np.ones((1,1)), np.zeros((1, k-1))]),
+              np.eye(dim))
+    # Control cost matrix
+    R = np.eye(dim) * r
+
+    P = np.zeros((cDim, cDim, n))
+    i = n-1
+    P[ :, :, -1] = Q[i*cDim:, i*cDim:]
+    
+    d = np.zeros((cDim, n))
+    # Riccati recursion
+    for i in range(n-2, 0, -1):
+        # Not so fun to write this with NumPy
+        Qi = Q[i*cDim:(i+1)*cDim, i*cDim:(i+1)*cDim]
+
+        P[:,:,i] = Qi - mul( A.T, 
+                        mul( P[:,:,i+1], B, inv( mul( B.T, P[:,:,i+1], B ) + R), B.T, P[:,:,i+1] ) - P[:,:,i+1], A)
+
+        d[:,i] = ( mul( A.T - mul( A.T, P[:,:,i+1], B, inv(R + mul( B.T, P[:,:,i+1], B ) ), B.T ), 
+                    mul( P[:,:,i+1], mul( A, Xi_hat[:, i] ) - Xi_hat[:, i+1] ) + d[:,i+1]) )
+
+    x0 = Xi_hat[:,0].reshape(-1,1) 
+    Y = np.zeros((cDim, n))
+    x = x0[:,0]
+    U = np.zeros((dim, n))
+
+    for i in range(n):
+        Y[:,i] = x
+        p = P[:, :, i]
+        mu = Xi_hat[:, i]
+        
+        G = mul(np.linalg.pinv( mul(B.T, p, B) + R ), B.T )
+        
+        # feedback gain
+        K = mul( G, p, A )
+        # Feedforward term
+        M = mul( -G, mul(p, mul(A, mu) - mu) + d[:,i] )
+        # Control command (highest order derivative of system)
+        u = mul( K, mu - x ) + M
+        # New state
+        x = mul(A, x) + mul(B, u)
+        U[:,i] = u
+
+    res = {}
+    res['sys'] = sys
+    res['uSigma'] = []
+    res['xSigma'] = []
+    res['Rq'] = None
+    res['u'] = U
+    res['x'] = Y
+    res['x0'] = x0
+    res['opt_x0'] = False
+    return res
+
+
+    if full_output:
+        return Y[0:dim, :]/scale, U
+    else:
+        return Y[0:dim, :]/scale
+
+
 def solve_lqt(sys, references, d, opt_x0=False, r=None):
     '''
     Batch solution to LQT problem
@@ -714,7 +832,7 @@ def stepwise(m, n):
     I = np.linspace(0, float(m)-0.1, n).astype(int)
     return I, T
 
-def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, stop_movement=True, alpha=0., psg=None, clamp=False, diag=0.):
+def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, iterative=False, stop_movement=True, alpha=0., psg=None, clamp=False, diag=0.):
     if type(Sigma)==list:
         Sigma = np.dstack(Sigma)
     
@@ -723,8 +841,15 @@ def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, stop_mo
         Sigma = np.dstack([Sigma, Sigma[:,:,:1]])
         stop_movement = False
     elif clamp:
-        P = np.hstack([P[:,:1], P, P[:,-1:]])
-        Sigma = np.dstack([Sigma[:,:,:1], Sigma, Sigma[:,:,-1:]])
+        if clamp == 1:
+            P = np.hstack([P[:,:1], P, P[:,-1:]])
+            Sigma = np.dstack([Sigma[:,:,:1], Sigma, Sigma[:,:,-1:]])
+        elif clamp == 2:
+            P = np.hstack([P[:,:1], P])
+            Sigma = np.dstack([Sigma[:,:,:1], Sigma])
+        elif clamp == 3:
+            P = np.hstack([P, P[:,-1:]])
+            Sigma = np.dstack([Sigma, Sigma[:,:,-1:]])
         #stop_movement = False
         
     pdim = P.shape[0]
@@ -763,6 +888,9 @@ def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, stop_mo
         MuQ[t] = Mu[:,i]
         Q[t] = Lambda[i]
 
+    if iterative:
+        return np.array(MuQ).T, block_diag(*Q), [] #np.array(Q)
+    
     MuQ = np.hstack(MuQ).reshape(-1,1)
     Q = block_diag(*Q)
     
@@ -899,3 +1027,11 @@ def semitied_lqt(P, **kwargs):
     else:
         x = res['x']
     return x
+
+
+def num_bezier(n_ctrl, degree=3):
+    if type(n_ctrl) == np.ndarray:
+        n_ctrl = len(n_ctrl)
+    return int((n_ctrl - 1) / degree)
+
+

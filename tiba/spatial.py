@@ -64,7 +64,6 @@ class Index(object):
     def insert(self, point):
         x, y = point[:2]
         i, j = self.normalize(x, y)
-        print('insert point', i, j)
         self.bins[(i, j)].append(point)
         self.size += 1
 
@@ -77,14 +76,12 @@ class Index(object):
     def nearest(self, point):
         x, y = point[:2]
         i, j = self.normalize(x, y)
-        print('nearest point', i, j)
         points = []
         r = 0
         while not points:
             points.extend(self.ring(i, j, r))
             r += 1
         points.extend(self.ring(i, j, r))
-        print('Ring size', len(points))
         return min(points,
             key=lambda p: (hypot(x - p[0], y - p[1]), p[1], p[0]))
 
@@ -104,6 +101,9 @@ class Index(object):
         return result
 
 def sort_paths(paths, reversable=True, join_thresh=0):
+    if len(paths) < 2:
+        return paths
+
     paths = [[tuple(p) for p in P] for P in paths]
     first = paths[0]
     paths.pop(0)

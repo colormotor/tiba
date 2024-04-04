@@ -168,6 +168,7 @@ class iLQRPlannerVelocity:
 
             cb = PythonCallbackMessage()
 
+            print("PLanning")
             try:
                 Q_batch, _, dQ_batch, _, _, _ = planner.solve(
                     u0.reshape((-1, nb_control_vars)),

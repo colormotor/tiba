@@ -20,6 +20,7 @@ import numpy as np
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 import matplotlib.pyplot as plt
+import pdb
 
 from .config import cfg
 from . import trajectory_utils as tu
@@ -92,6 +93,7 @@ class DrawingPad:
         size = geom.rect_size(self.box)
         scaled_box[0] += self.pos_offset*size
         scaled_box[1] = scaled_box[0] + self.scale*size
+
         self.scaled_box = scaled_box
 
 
@@ -125,9 +127,9 @@ class DrawingPad:
             return trajectories[0]
         return trajectories
 
-    def fit_to_box(self, S, padding=0, penup_mm=50.0):
+    def fit_to_box(self, S, padding=0, penup_mm=50.0, get_mat=False):
         ''' Fits an input 2d trajectory to the given 2d box'''
-        res = fit_to_box_and_augment(S, self.scaled_box, padding, penup_mm=penup_mm)
+        res = fit_to_box_and_augment(S, self.scaled_box, padding, penup_mm=penup_mm, get_mat=get_mat)
         return res
 
     def fit_to_frame(self, S, clamp_z=False):
@@ -203,17 +205,25 @@ def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
     v3d.polyline(P)
 
 
-def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, penup_mm=0.0):
+def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, penup_mm=0.0, get_mat=False):
     compound = True
     if not geom.is_compound(S):
         S = [S]
+
     S = [np.array(P) for P in S]
+    mat = np.eye(3)
+
+    # Bit messy here
     if flip_y:
-        S = [P*[1,-1] for P in S]
+        mat = mat @ geom.scaling_2d([1, -1])
+        #S = [P*[1,-1] for P in S]
     if flip_x:
-        S = [P*[-1,1] for P in S]
-    S = geom.affine_transform(geom.rot_2d(geom.radians(-90)), S)
-    mat = geom.rect_in_rect_transform(geom.bounding_box(S, input_padding), box)
+        mat = mat @ geom.scaling_2d([-1, 1])
+        #S = [P*[-1,1] for P in S]
+    mat = geom.rot_2d(geom.radians(-90)) @ mat
+
+    #S = geom.affine_transform(geom.rot_2d(geom.radians(-90)), S)
+    mat = mat @ geom.rect_in_rect_transform(geom.bounding_box(S, input_padding), box)
     S = geom.affine_transform(mat, S)
 
     if penup_mm > 0.0:
@@ -223,9 +233,14 @@ def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, 
                         P,
                         P[-1] + up*(penup_mm/1000)]) for P in S]
 
+
     if not compound:
-        return S[0]
-    return S
+        res = S[0]
+    else:
+        res = S
+    if get_mat:
+        return res, mat
+    return res
 
 def fit_to_frame(P, frame, offset=0):
     ''' Fit a polyline to a box projected to XY plane defined by a given frame'''

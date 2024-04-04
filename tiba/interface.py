@@ -74,7 +74,7 @@ class FrankaButton:
         return res
 
 class MotionEditor:
-    def __init__(self, path='motions_desk.json', positions_path='key_positions.json'):
+    def __init__(self, path='../settings/motions_desk.json', positions_path='../settings/key_positions.json'):
         try:
             self.motions = utils.load_json(path)
         except:
@@ -371,10 +371,10 @@ class Motion:
         self.is_drawing = is_drawing
 
 class TibaInterface:
-    def __init__(self, panda, gripper,
-                 motion_path='motions_desk.json',
-                 pad_path='drawing_pad.json',
-                 scripts_file='./motions/motions.yaml',
+    def __init__(self, panda=None, gripper=None,
+                 motion_path='../settings/motions_desk.json',
+                 pad_path='../settings/drawing_pad.json',
+                 scripts_file='../settings/motions/motions.yaml',
                  plot_path='trajectory.png'):
 
         self.editor = MotionEditor(motion_path)
@@ -384,6 +384,8 @@ class TibaInterface:
 
         self.robot = robot.TibaRobot()
         self.collision_robot = robot.TibaRobot()
+        self.robot.q = self.robot.home
+
         self.grasped = False
 
         self.plot_path = plot_path

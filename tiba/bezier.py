@@ -289,3 +289,13 @@ def split_chain(chain, angle_tol=10):
             chunks[-1].append(bez)
         prev = bez[-1] - bez[-2]
     return [beziers_to_chain(chunk) for chunk in chunks]
+
+def thick_bezier_curve(P, widths, subd=30, degree=3, smooth_k=0):
+    from . import clipper
+    widths = widths * np.ones(len(P))
+    Pw = np.hstack([P, widths[:,None]])
+    X = bezier_piecewise(Pw, subd, degree)
+    Ol = geom.curved_offset(X[:,:2], X[:,2], smooth_k)[::-1]
+    Or = geom.curved_offset(X[:,:2], -X[:,2], smooth_k)
+    stroke = np.vstack([Ol, Or])
+    return clipper.union(stroke, stroke)

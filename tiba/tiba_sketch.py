@@ -106,7 +106,7 @@ def plan_trapezoidal(samples,
     paths, velocities_, accelerations_ = tu.plan_polylines_time_optimal(samples,
                                                                   max_speed=max_speed,
                                                                   accel_time=accel_time,
-                                                                  tol=0.1)
+                                                                        tol=params.config.topp_tol/1000)
     return paths, samples
 
 def ema(data, alpha):
@@ -278,8 +278,13 @@ def plan_polylines(planning_callback,
         ply.axis_equal(True)
 
         ply.subplot(2, 2, title='Trajectory 3d')
+
+        box = geom.bounding_box(trajectories)
+
         for X in trajectories:
-            ply.stroke3d(X)
+            X = np.array(X)
+            vals = (X[:,2])/(box[1][2] - box[0][2])
+            ply.stroke3d(X, color=[ply.cmap(z, 'magma') if z >=0 else ply.cmap(-z, 'viridis') for z in vals])
         ply.show()
     return trajectories
 
@@ -347,7 +352,6 @@ class TibaSketch:
 
         # self.robot.q = self.robot.qr
         # self.robot.q = np.array([-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134])
-        self.robot.q = self.robot.home
 
         self.draft = []
         self.clear()
@@ -396,6 +400,7 @@ class TibaSketch:
                 'Cart planner': (0, {'selection':planner_names}),
                 'DCE thresh' : (250, {'min':0.0, 'max':500, 'hide':True}),
                 'Max iterations' : (450, {'min':50, 'max':1000, 'hide':True}),
+                'Topp tol': (100.0, {'min':0.0, 'max':100.0, 'hide':True}),
                 'Isotropy': (1.0, {'min':0.0, 'max':1.0, 'hide':True}),
                 'Angle': (50.0, {'min':-90.0, 'max':90.0, 'hide':True}),
                 'Smoothing': (0.0, {'min':0.01, 'max':15.0, 'hide':True}),
@@ -793,7 +798,7 @@ class TibaSketch:
         if 'config.cart_planner' in self.sketch.gui.changed:
             self.clear()
         if planner_names[self.params.config.cart_planner] == 'Trapezoidal':
-            self.hide_config_except()
+            self.hide_config_except('Topp tol')
         elif planner_names[self.params.config.cart_planner] == 'Minimum Jerk':
             self.hide_config_except('DCE thresh', 'Max iterations')
         elif planner_names[self.params.config.cart_planner] == 'Calligraphic':
@@ -809,7 +814,7 @@ class TibaSketch:
         # Udate drawing pad data
         if 'drawing' in self.flags:
             self.pad.offset = params.drawing.plane_offset / 1000
-            self.pad.pos_offset = [params.drawing.pos_offset_y, params.drawing.pos_offset_x]
+            self.pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
             self.pad.update()
 
             if self.dirty or self.params_changed(*self.params_to_check):

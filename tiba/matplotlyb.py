@@ -38,6 +38,8 @@ def plotly_color(clr):
         return None
     if type(clr) == str:
         clr = mcolors.to_rgb(clr)
+    elif not is_number(clr[0]):
+        return [plotly_color(c) for c in clr]
     return 'rgb(%.3f, %.3f, %.3f)'%(clr[0]*255, clr[1]*255, clr[2]*255)
 
 class Axes:
@@ -56,7 +58,7 @@ class Axes3d(Axes):
 
 
 class Figure:
-    def __init__(self, figsize=(10, 10), title=''):
+    def __init__(self, figsize=(5, 5), title=''):
         self.figsize = figsize
         self.plots = defaultdict(dict)
         self.cur_ax = None
@@ -129,14 +131,14 @@ class Plot2d(Plot):
             if type(args[1]) == str:
                 self.y = args[0]
                 self.x = np.linspace(0, len(self.y)-1, len(self.y))
-                self.clr = mcolors.to_rgb(args[1])
+                self.clr = args[1] # mcolors.to_rgb(args[1])
             else:
                 self.x = args[0]
                 self.y = args[1]
         elif len(args) == 3: # x, y, and color values
             self.x = args[0]
             self.y = args[1]
-            self.clr = mcolors.to_rgb(args[2])
+            self.clr = args[2] # mcolors.to_rgb(args[2])
 
 
 class Plot3d(Plot):
@@ -148,12 +150,12 @@ class Plot3d(Plot):
             self.X = X
         elif len(args) == 2: # x and y values or y and color values
             self.X = np.array(args[0])
-            self.clr = mcolors.to_rgb(args[1])
+            self.clr = args[1] #plotly_color(args[1])
         elif len(args) == 3: # x, y, z values
             self.X = np.vstack(args).T
         elif len(args) == 4:
             self.X = np.vstack(args[:3]).T
-            self.clr = mcolors.to_rgb(args[3])
+            self.clr = args[3] # plotly_color(args[3]) #mcolors.to_rgb(args[3])
 
 
 class Bar(Plot):
@@ -169,7 +171,7 @@ class Bar(Plot):
 
 ## Immediate mode
 
-def figure(figsize=(10, 10), title=''):
+def figure(figsize=(5, 5), title=''):
     glob.fig = Figure(figsize=figsize, title=title)
     return glob.fig
 
@@ -201,7 +203,6 @@ def pose(pose, size=0.1, colors=['r', 'g', 'b'], **kwargs):
     stroke3d([p, p + z*size], colors[2], **kwargs)
 
 def stroke(X, color=None, **kwargs):
-    print(type(X))
     if type(X) == list and X and not is_number(X[0]):
         for Xi in X:
             stroke(Xi, color, **kwargs)
@@ -209,8 +210,8 @@ def stroke(X, color=None, **kwargs):
     if not len(X):
         return
     X = np.array(X)
-    if color is not None:
-        color = mcolors.to_rgb(color)
+    #if color is not None:
+    #    color = mcolors.to_rgb(color)
     glob.fig.add_plot(Plot2d(X[:,0], X[:,1], color=color, **kwargs))
 
 def axis_3d(A, size, **kwargs):
@@ -220,15 +221,14 @@ def axis_3d(A, size, **kwargs):
 
 def stroke3d(X, color=None, **kwargs):
     if type(X) == list and X and not is_number(X[0][0]):
-        print('complex')
         for Xi in X:
             stroke3d(Xi, color, **kwargs)
         return
     if not len(X):
         return
     X = np.array(X)
-    if color is not None:
-        color = mcolors.to_rgb(color)
+    #if color is not None:
+    #    color = mcolors.to_rgb(color)
     glob.fig.add_plot(Plot3d(X, color=color, **kwargs))
 
 def rectangle(*args, color=None, fill=False, **kwargs):
@@ -266,6 +266,7 @@ def show_plt(fig):
     Matplotlib implementation for figure and plots
     '''
     from matplotlib.gridspec import GridSpec
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
     mode_map = {':': 'lines', '.':'markers', '-': 'lines', '--': 'lines', 'o.': 'lines+markers', 'o-': 'lines+markers'}
     mode_map_dash = {':': 'dot', '.': 'dot', '-': 'solid', '--': 'dash', 'o.': 'dot', 'o-': 'solid'}
@@ -288,6 +289,7 @@ def show_plt(fig):
                 colspan = ax.colspan
                 is_3d = np.any([type(plot) == Plot3d for plot in ax.plots])
                 if is_3d:
+                    print("3d axis")
                     axp = pfig.add_subplot(gs[i:i+rowspan, j:j+colspan], projection='3d')
                 else:
                     axp = pfig.add_subplot(gs[i:i+rowspan, j:j+colspan])
@@ -355,9 +357,15 @@ def show_plt(fig):
                         x=plot.X[:,0]
                         y=plot.X[:,1]
                         z=plot.X[:,2]
-                        plt.plot(x, y, z, color=clr, lw=plot.lw,
-                                ls=plot.ls, alpha=plot.alpha,
-                                label=plot.label)
+
+                        if type(clr) != str and not is_number(clr[0]):
+                            plt.scatter(x, y, z, c=clr,
+                                    alpha=plot.alpha,
+                                    label=plot.label)
+                        else:
+                            plt.plot(x, y, z, color=clr, lw=plot.lw,
+                                    ls=plot.ls, alpha=plot.alpha,
+                                    label=plot.label)
                 if ax.equal:
                     plt.axis('equal')
     plt.show()
@@ -395,7 +403,6 @@ def show_plotly(fig):
             else:
                 row.append(None)
         specs.append(row)
-    print('titles', titles)
     pfig = make_subplots(rows=num_rows, cols=num_cols,
                          specs=specs,
                          subplot_titles=titles,
@@ -672,3 +679,5 @@ default_color = categorical_color
 def cmap(v, colormap='turbo'): #turbo'): #'PuRd'):
     c = matplotlib.cm.get_cmap(colormap)
     return c(v)
+
+
