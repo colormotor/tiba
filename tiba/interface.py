@@ -371,7 +371,7 @@ class Motion:
         self.is_drawing = is_drawing
 
 class TibaInterface:
-    def __init__(self, panda=None, gripper=None,
+    def __init__(self, panda=None, gripper=None, init_node='',
                  motion_path='../settings/motions_desk.json',
                  pad_path='../settings/drawing_pad.json',
                  scripts_file='../settings/motions/motions.yaml',
@@ -411,6 +411,9 @@ class TibaInterface:
         print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
         if state.has_ros:
             try:
+                if init_node:
+                    rospy.init_node(init_node, anonymous=True)
+
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
                 # rospy.Subscriber('/tiba/response', String, self.response_callback)
@@ -675,6 +678,13 @@ class TibaInterface:
         self.play_motion(motion, delay)
 
     def goto_joint_position(self, q):
+        if type(q) == str:
+            name = q
+            q = self.editor.get_position(name)
+            if q is None:
+                print('Invalid position name:', name)
+                print(self.editor.positions)
+                return
         print('goto ', q)
         if self.panda is not None:
             print("Actually moving the robot")
