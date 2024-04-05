@@ -197,7 +197,7 @@ class TibaInterface:
         self.robot = robot.TibaRobot()
         self.collision_robot = robot.TibaRobot()
         self.robot.q = self.robot.home
-
+        self.debug_q = None
         self.grasped = False
 
         self.plot_path = plot_path
@@ -274,6 +274,7 @@ class TibaInterface:
 
     def state_callback(self, data):
         self.robot.q = np.array(data.position)
+        self.debug_q = np.array(data.position)
 
     def launch_simulator(self):
         env = swift.Swift()
