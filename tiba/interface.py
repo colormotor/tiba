@@ -183,6 +183,7 @@ class Motion:
         self.grasp = grasp
         self.is_drawing = is_drawing
 
+
 class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
                  pad_path='../settings/drawing_pad.json',
@@ -197,7 +198,7 @@ class TibaInterface:
         self.robot = robot.TibaRobot()
         self.collision_robot = robot.TibaRobot()
         self.robot.q = self.robot.home
-
+        self.debug_q = None
         self.grasped = False
 
         self.plot_path = plot_path
@@ -225,6 +226,7 @@ class TibaInterface:
             try:
                 if init_node:
                     rospy.init_node(init_node, anonymous=True)
+                    rospy.Subscriber('/tiba/q', JointState, self.state_callback)
 
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
@@ -236,6 +238,30 @@ class TibaInterface:
             except rospy.exceptions.ROSException as e:
                 print("Ros issue")
                 state.has_ros = False
+        #self.ros_thread_running = False
+        #self.ros_thread = None
+
+    def __del__(self):
+        pass
+        # if self.ros_thread is not None:
+        #     self.ros_thread_running = False
+        #     self.ros_thread.join()
+
+    # def _ros_thread(self):
+    #     #rospy.spin()
+    #     while not rospy.core.is_shutdown() and self.ros_thread_running:
+    #         rospy.rostime.wallsleep(0.1)
+
+    # def subscribe_to_state(self):
+    #     rospy.Subscriber('/tiba/q', JointState, self.state_callback)
+
+    #     # from threading import Thread
+    #     # if not self.has_ros():
+    #     #     return
+    #     # print("Starting ros thread")
+    #     # self.ros_thread = Thread(target=self._ros_thread)
+    #     # self.ros_thread_running = True
+    #     # self.ros_thread.start()
 
     def has_ros(self):
         return state.has_ros
@@ -274,6 +300,7 @@ class TibaInterface:
 
     def state_callback(self, data):
         self.robot.q = np.array(data.position)
+        self.debug_q = np.array(data.position)
 
     def launch_simulator(self):
         env = swift.Swift()
