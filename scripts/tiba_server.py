@@ -114,6 +114,12 @@ def jtraj_callback(data):
 
     send_joint_state()
 
+def jpos_callback(data):
+    q = data.positions
+    print("Received jpos", q)
+    #itiba.goto_joint_position(q)
+    send_joint_state()
+
 def send_joint_state(verbose=False):
     itiba.read_states()
     p = JointState()
@@ -159,6 +165,7 @@ def main():
     rospy.init_node('tiba_server', anonymous=True)
     rospy.Subscriber("/tiba/msg", String, msg_callback)
     rospy.Subscriber("/tiba/jtraj", JointTrajectory, jtraj_callback)
+    rospy.Subscriber("/tiba/jpos", JointTrajectoryPoint, jpos_callback)
     #qpub = rospy.Publisher("/tiba/q", JointTrajectoryPoint, queue_size=10) #, queue_size=1)
     qpub = rospy.Publisher("/tiba/q", JointState, queue_size=10) #, queue_size=1)
     respub = rospy.Publisher("/tiba/response", String, queue_size=10)

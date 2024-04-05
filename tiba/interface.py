@@ -73,22 +73,13 @@ class FrankaButton:
         self.state = event[self.button]
         return res
 
-class MotionEditor:
-    def __init__(self, path='../settings/motions_desk.json', positions_path='../settings/key_positions.json'):
-        try:
-            self.motions = utils.load_json(path)
-        except:
-            self.motions = {}
-
+class PositionEditor:
+    def __init__(self, positions_path='../settings/key_positions.json'):
         try:
             self.positions = utils.load_json(positions_path)
         except Exception as e:
             print(e)
             self.positions = {}
-
-        self.path = path
-        self.cur_motion = -1
-        self.cur_step = -1
 
         self.positions_path = positions_path
         self.new_motion_name = 'Insert name'
@@ -107,75 +98,12 @@ class MotionEditor:
             return None
         return self.positions[name]
 
-    def get_cur_motion(self):
-        names = list(self.motions.keys())
-        if self.cur_motion < 0 or self.cur_motion >= len(names):
-            return {}
-        return self.motions[names[self.cur_motion]]
-
     def save_positions(self):
         if not self.positions:
             return
         print(self.positions)
         utils.save_json(self.positions, self.positions_path)
 
-    def save_motions(self):
-        if not self.motions:
-            return
-        print(self.motions)
-        utils.save_json(self.motions, self.path)
-
-    def add_joint_step(self, q):
-        motion = self.get_cur_motion()
-        if not motion:
-            print('No motion selected')
-            return
-        motion['steps'].append({'kind':'q', 'q':list(q)})
-        self.save_motions()
-
-    def add_grip_step(self, mm):
-        motion = self.get_cur_motion()
-        if not motion:
-            print('No motion selected')
-            return
-        motion['steps'].append({'kind':'grip', 'mm':mm})
-        self.save_motions()
-
-    def add_ungrip_step(self):
-        motion = self.get_cur_motion()
-        if not motion:
-            print('No motion selected')
-            return
-        motion['steps'].append({'kind':'ungrip'})
-        self.save_motions()
-
-    def add_motion(self, name):
-        if not name:
-            print("No name")
-            return
-
-        if name not in self.motions:
-            self.motions[name] = {'steps':[]}
-            self.save_motions()
-        else:
-            print("Motion already exists")
-
-    def delete_motion(self, name):
-        if name in self.motions:
-            self.motions.pop(name)
-            self.cur_motion = -1
-            self.save_motions()
-        else:
-            print("Motion does not exist")
-
-    def set_cur_motion(self, name):
-        if name not in self.motions.keys():
-            print("Motion %s does not exist"%name)
-            self.cur_motion = -1
-            return False
-        self.cur_motion = list(self.motions.keys()).index(name)
-        print('Cur motion set to %s'%list(self.motions.keys())[self.cur_motion])
-        return True
 
     def add_position(self, name, q):
         if not name:
@@ -206,39 +134,6 @@ class MotionEditor:
         return True
 
     def gui(self, imgui, itiba, show_motions=False):
-        names = list(self.motions.keys())
-        if self.cur_motion >= len(names):
-            self.cur_motion = -1
-
-        if show_motions:
-            ui.imgui_text_separator("Recorded Motions")
-            clicked, self.cur_motion = imgui.listbox("Motion Label", self.cur_motion, names)
-            if clicked:
-                print(self.cur_motion)
-
-            if imgui.button("Add Motion"):
-                imgui.open_popup('Add motion')
-
-            imgui.set_next_window_size(300, 200)
-            if imgui.begin_popup_modal('Add motion').opened:
-                imgui.text("Select name")
-                changed, self.new_motion_name = imgui.input_text('', self.new_motion_name, 512)
-
-                if imgui.button('OK'):
-                    self.add_motion(self.new_motion_name)
-                    imgui.close_current_popup()
-                imgui.same_line()
-                if imgui.button('Cancel'):
-                    imgui.close_current_popup()
-                imgui.end_popup()
-
-            if self.get_cur_motion():
-                imgui.same_line()
-                if imgui.button("Delete"):
-                    self.delete_motion(names[self.cur_motion])
-                if self.get_cur_motion():
-                    imgui.text(names[self.cur_motion])
-                    self.motion_gui(imgui, itiba, names[self.cur_motion])
 
         names = list(self.positions.keys())
         if self.cur_position >= len(names):
@@ -269,10 +164,10 @@ class MotionEditor:
         imgui.set_next_window_size(300, 200)
         if imgui.begin_popup_modal('Add position').opened:
             imgui.text("Select name")
-            changed, self.new_motion_name = imgui.input_text('', self.new_motion_name, 512)
+            changed, self.new_posistion_name = imgui.input_text('', self.new_posistion_name, 512)
 
             if imgui.button('OK'):
-                self.add_position(self.new_motion_name, itiba.robot.q)
+                self.add_position(self.new_posistion_name, itiba.robot.q)
                 imgui.close_current_popup()
             imgui.same_line()
             if imgui.button('Cancel'):
@@ -280,88 +175,6 @@ class MotionEditor:
             imgui.end_popup()
 
         return res #
-
-    def motion_gui(self, imgui, itiba, key):
-        motion = self.motions[key]
-        names = []
-        for i, step in enumerate(motion['steps']):
-            names.append('%d: %s'%(i+1, step['kind']))
-        clicked, self.cur_step = imgui.listbox("Steps", self.cur_step, names)
-        if clicked:
-            print(self.cur_motion)
-        if -1 < self.cur_motion < len(names):
-            if imgui.button("Delete"):
-                motion['steps'].pop(self.cur_step)
-                self.save_motions()
-        if imgui.button('Play'):
-            imgui.open_popup('Play motion')
-        if imgui.begin_popup_modal('Play motion').opened:
-            imgui.text('Are you sure?')
-            if imgui.button('OK'):
-                itiba.play_cur_motion()
-                imgui.close_current_popup()
-            imgui.same_line()
-            if imgui.button('Cancel'):
-                imgui.close_current_popup()
-            imgui.end_popup()
-
-    def get_cur_motion_trajectory(self, q0):
-        motion = self.get_cur_motion()
-        if not motion:
-            print('No motion')
-        Qs = []
-        dQs = []
-
-        for step in motion['steps']:
-            if step['kind'] == 'q':
-                Qs_batch, dQs_batch = tu.joint_approach(q0, step['q'])
-                q0 = step['q']
-                Qs.append(Qs_batch)
-                dQs.append(dQs_batch)
-
-        return list(np.vstack(Qs)), list(np.vstack(dQs))
-
-    def draw_steps(self, v3d, robot, pos, size, width):
-        v3d = v3d.sketch_view
-
-        motion = self.get_cur_motion()
-        if not motion:
-            return
-        x, y = pos
-        c = v3d.canvas()
-        v3d.save_viewport()
-
-        for i, step in enumerate(motion['steps']):
-            if x + size > width:
-                x = pos[0]
-                y += size
-
-            rect = geom.make_rect(x, y, size, size)
-            rect = geom.scale_rect(rect, 0.95)
-            if i == self.cur_step:
-                c.stroke(0, 0.5, 1.0)
-            else:
-                c.stroke(0.5)
-            c.fill(0.2, 0.5)
-            c.rectangle(rect)
-            v3d.set_viewport(rect)
-            if step['kind'] == 'q':
-                q = step['q']
-                P, penP = robot.robot_polylines(q)
-                v3d.color(0, 0.5, 1.0)
-                v3d.line_width(3)
-                v3d.polyline(P)
-                v3d.polyline(penP)
-            elif step['kind'] == 'grip':
-                c.fill(1, 0, 0)
-                c.circle(x + size/2, y+size/2, size/4)
-            else:
-                c.no_fill()
-                c.stroke(1, 0, 0)
-                c.circle(x + size/2, y+size/2, size/4)
-
-            x += size
-        v3d.restore_viewport()
 
 class Motion:
     def __init__(self, Qs, dQs, grasp=None, is_drawing=False):
@@ -372,12 +185,11 @@ class Motion:
 
 class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
-                 motion_path='../settings/motions_desk.json',
                  pad_path='../settings/drawing_pad.json',
                  scripts_file='../settings/motions/motions.yaml',
                  plot_path='trajectory.png'):
 
-        self.editor = MotionEditor(motion_path)
+        self.editor = PositionEditor()
         self.pad = drawing_pad.DrawingPad(pad_path)
         self.pad.load()
         self.pad.update()
@@ -416,6 +228,7 @@ class TibaInterface:
 
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
+                self.jpos_pub = rospy.Publisher('/tiba/jpos', JointTrajectoryPoint, queue_size=10)
                 # rospy.Subscriber('/tiba/response', String, self.response_callback)
                 # rospy.Subscriber('/tiba/q', JointState, self.state_callback)
                 # rospyrospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
@@ -450,12 +263,17 @@ class TibaInterface:
         self.jtraj_pub.publish(jtraj)
         rospy.loginfo("Sent joint trajectory")
 
+    def send_joint_pos(self, q):
+        p = JointTrajectoryPoint()
+        p.positions = q
+        self.jpos_pub.publish(p)
+        rospy.loginfo("Sent joint position")
+
     def response_callback(self, data):
         print("Received response: ", data.data)
 
     def state_callback(self, data):
         self.robot.q = np.array(data.position)
-
 
     def launch_simulator(self):
         env = swift.Swift()
@@ -669,14 +487,6 @@ class TibaInterface:
             print('Finished motion')
         return np.array(self.panda.q)
 
-    def play_cur_motion(self, delay=2.0):
-        ''' Play the currently selected motion'''
-        motion = self.editor.get_cur_motion()
-        if not motion:
-            print('No motion')
-            return
-        self.play_motion(motion, delay)
-
     def goto_joint_position(self, q):
         if type(q) == str:
             name = q
@@ -691,44 +501,8 @@ class TibaInterface:
             self.panda.move_to_joint_position(np.array(q))
         else:
             self.robot.q = q
-
-    def play_motion(self, motion, delay=2.0):
-        ''' Play a pre-recorded motion'''
-        self.delay(delay)
-
-        print('Playing')
-
-        for step in motion['steps']:
-            if step['kind'] == 'q':
-                #Qs_batch, dQs_batch = tu.joint_approach(self.robot.q, step['q'])
-                #Qs_batch = [Qs_batch[0]]*10 + Qs_batch + [Qs_batch[-1]]*10
-                #dQs_batch = [dQs_batch[0]]*10 + dQs_batch + [dQs_batch[-1]]*10
-
-                # self.plan_joint_trajectory(Qs_batch, dQs_batch)
-                # self.robot.q = self.execute(0.0)
-                self.robot.q = step['q']
-                if self.panda is not None:
-                    self.panda.move_to_joint_position(np.array(step['q']))
-            elif step['kind'] == 'grip':
-                mm = step['mm']
-                if self.panda is not None:
-                    self.read_states()
-                    if not self.grasped: #not state.graspedt
-                        self.grasp(mm)
-                    #state.grasped = True
-
-            elif step['kind'] == 'ungrip':
-                if self.panda is not None:
-                    self.read_states()
-                    if self.grasped:
-                        self.ungrasp()
-                # if state.grasped:
-                #     gripper.stop()
-                #     gripper.move(100.0/1000, 0.2)
-                #     state.grasped = False
-
-        print('Ending')
-
+            if state.has_ros:
+                self.send_joint_pos(q)
 
     def grasp(self, mm=cfg.default_grasp_mm):
         ''' Grasp with a width specified in mm'''
