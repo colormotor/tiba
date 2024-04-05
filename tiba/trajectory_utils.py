@@ -883,7 +883,9 @@ def semitied_lqt(P, **kwargs):
                   opt_x0=False,
                   stop_movement=True,
                   periodic=False ,
+                  iterative=False,
                   subd=10,
+                  clamp=0,
                   dim=2,
                   variability=[],
                 )
@@ -900,12 +902,23 @@ def semitied_lqt(P, **kwargs):
     #     print(params['variability'])
     #     Sigma = [w*s for w, s in zip(params['variability'], Sigma)]
 
+    iterative = params['iterative']
+    if params['periodic']:
+        iterative = False
+
     Sigma = np.array(Sigma).T
     sys = lqt.DynamicalSystem(params['order'], params['subd'], segment_duration=params['segment_duration'], dim=params['dim'])
     ref = lqt.cartesian_reference(sys, P, Sigma,
                                     activation_sigma=params['activation_sigma'],
-                                    stop_movement=params['stop_movement'], periodic=params['periodic'])
-    res = lqt.solve_lqt(sys, ref, params['d'], opt_x0=params['opt_x0']) #, r=1e-43)
+                                    stop_movement=params['stop_movement'], periodic=params['periodic'],
+                                    iterative=iterative,
+                                    clamp=params['clamp'])
+    if iterative:
+        res = lqt.solve_lqt_iterative(sys, ref, params['d'])
+    else:
+        res = lqt.solve_lqt(sys, ref, params['d'])
+
+    # res = lqt.solve_lqt(sys, ref, params['d'], opt_x0=params['opt_x0']) #, r=1e-43)
     X = res['x'].T
     duration = (X.shape[0]-1)*sys.dt
     return X, duration
