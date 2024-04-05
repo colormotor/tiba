@@ -228,7 +228,7 @@ class TibaInterface:
 
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
-                self.jpos_pub = rospy.Publisher('/tiba/jpos', JointTrajectoryPoint, queue_size=10)
+                self.jpos_pub = rospy.Publisher('/tiba/jpos', JointState, queue_size=10)
                 # rospy.Subscriber('/tiba/response', String, self.response_callback)
                 # rospy.Subscriber('/tiba/q', JointState, self.state_callback)
                 # rospyrospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
@@ -264,8 +264,8 @@ class TibaInterface:
         rospy.loginfo("Sent joint trajectory")
 
     def send_joint_pos(self, q):
-        p = JointTrajectoryPoint()
-        p.positions = q
+        p = JointState()
+        p.position = q
         self.jpos_pub.publish(p)
         rospy.loginfo("Sent joint position")
 
