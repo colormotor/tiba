@@ -653,7 +653,7 @@ class TibaInterface:
                     self.grasp()
                 else:
                     self.grasp(motion.grasp)
-                time.sleep(1.0)
+                time.sleep(0.3) #1.0)
 
             #Q = self.Qs
             #dQ = self.dQs
@@ -908,7 +908,7 @@ class TibaInterface:
         def xy_circles(radius_mm, rep):
             p0 = state.pose.t
             pts = [p0]
-            n = max(5, int(4*np.pi*radius_mm)) # 0.5 mm steps
+            n = max(5, int(2*np.pi*radius_mm)) # 0.5 mm steps
             radius = radius_mm/1000
             for i in range(rep):
                 for a in np.linspace(0, 2*np.pi, n)[:-1]:
