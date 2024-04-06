@@ -67,14 +67,23 @@ def msg_callback(data):
     if 'exec:' in data.data:
         cmd = data.data.split(':')[1]
         print('Executing command: ', cmd)
-        if itiba.editor.set_cur_motion(cmd):
-            print('Reading states')
-            itiba.read_states()
-            print('Playing motion')
-            state.executing = True
-            itiba.play_cur_motion()
-            state.executing = False
+        if cmd == 'grasp':
+            itiba.grasp()
             send_joint_state()
+            respond_done()
+        elif cmd == 'ungrasp':
+            itiba.ungrasp()
+            send_joint_state()
+            respond_done()
+
+        # if itiba.editor.set_cur_motion(cmd):
+        #     print('Reading states')
+        #     itiba.read_states()
+        #     print('Playing motion')
+        #     state.executing = True
+        #     itiba.play_cur_motion()
+        #     state.executing = False
+        #     send_joint_state()
 
     if 'start:' in data.data:
         itiba.read_states()
@@ -113,12 +122,19 @@ def jtraj_callback(data):
         print('Simulation done')
 
     send_joint_state()
+    respond_done()
+
+def respond_done():
+    respub.publish("Done")
 
 def jpos_callback(data):
     q = data.position
     print("Received jpos", q)
-    #itiba.goto_joint_position(q)
+    state.executing = True
+    itiba.goto_joint_position(q)
+    state.executing = False
     send_joint_state()
+    respond_done()
 
 def send_joint_state(verbose=False):
     itiba.read_states()
