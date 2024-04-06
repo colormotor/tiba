@@ -184,6 +184,25 @@ class Motion:
         self.is_drawing = is_drawing
 
 
+class WaitForDone:
+    def __init__(self, itiba):
+        self.itiba = itiba
+
+    def __enter__(self):
+        self.itiba.server_busy = True
+
+    def __exit__(self, exception_type, exception_value, exception_traceback):
+        print('Waiting for response')
+        def print_same_line(s):
+            sys.stdout.write("\r" + str(s))
+        iter_chars = ['-','/','-','\\']
+        i = 0
+        while self.itiba.server_busy:
+            print_same_line(iter_chars[i%len(iter_chars)])
+            time.sleep(0.05)
+            i+=1
+        print('Done')
+
 class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
                  pad_path='../settings/drawing_pad.json',
@@ -220,6 +239,8 @@ class TibaInterface:
         self.scripts_file = scripts_file
         self.reload_scripts()
 
+        self.server_busy = False
+
         print("#################################################")
         print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
         if state.has_ros:
@@ -227,6 +248,7 @@ class TibaInterface:
                 if init_node:
                     rospy.init_node(init_node, anonymous=True)
                     rospy.Subscriber('/tiba/q', JointState, self.state_callback)
+                    rospy.Subscriber('/tiba/response', String, self.response_callback)
 
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
@@ -289,6 +311,19 @@ class TibaInterface:
         self.jtraj_pub.publish(jtraj)
         rospy.loginfo("Sent joint trajectory")
 
+    def wait(self):
+        return WaitForDone(self)
+
+        # def print_same_line(s):
+        #     sys.stdout.write("\r" + str(s))
+        # iter_chars = ['-','/','-','\\']
+        # i = 0
+        # print('Waiting')
+        # while self.server_busy:
+        #     print_same_line(iter_chars[i%len(iter_chars)])
+        #     time.sleep(0.1)
+        #     i+=1
+
     def send_joint_pos(self, q):
         p = JointState()
         p.position = q
@@ -297,6 +332,8 @@ class TibaInterface:
 
     def response_callback(self, data):
         print("Received response: ", data.data)
+        if data.data == 'Done':
+            self.server_busy = False
 
     def state_callback(self, data):
         self.robot.q = np.array(data.position)
@@ -487,32 +524,51 @@ class TibaInterface:
 
     def execute(self, delay=2.0, force_drawing=False):
         ''' Execute the current joint motion'''
-        if self.panda is None:
-            print("No panda, can't execute")
-            return
+        if self.panda is not None:
+            self.delay(delay)
 
-        self.delay(delay)
+            for motion in self.motions:
+                if motion.grasp is not None:
+                    if motion.grasp == False:
+                        self.ungrasp()
+                    elif type(motion.grasp) == bool:
+                        self.grasp()
+                    else:
+                        self.grasp(motion.grasp)
+                    time.sleep(0.3) #1.0)
 
-        for motion in self.motions:
-            if motion.grasp is not None:
-                if motion.grasp == False:
-                    self.ungrasp()
-                elif type(motion.grasp) == bool:
-                    self.grasp()
+                #Q = self.Qs
+                #dQ = self.dQs
+                if motion.is_drawing or force_drawing:
+                    self._exec_drawing_motion(motion)
                 else:
-                    self.grasp(motion.grasp)
-                time.sleep(0.3) #1.0)
+                    self._exec_joint_motion(motion)
+            return np.array(self.panda.q)
+        elif self.has_ros():
+            for motion in self.motions:
+                if motion.grasp is not None:
+                    if motion.grasp == False:
+                        with self.wait():
+                            self.send_msg('exec:ungrasp')
+                    elif type(motion.grasp) == bool:
+                        with self.wait():
+                            self.send_msg('exec:grasp')
+                        #self.grasp()
+                    else:
+                        print("Received grasping with parameters, not implemented yet")
+                        with self.wait():
+                            self.send_msg('exec:grasp')
+                        #self.grasp(motion.grasp)
+                    #time.sleep(0.3) #1.0)
 
-            #Q = self.Qs
-            #dQ = self.dQs
-            if motion.is_drawing or force_drawing:
-                self._exec_drawing_motion(motion)
-            else:
-                self._exec_joint_motion(motion)
+                if len(motion.Qs):
+                    with self.wait():
+                        self.send_joint_trajectory(motion.Qs, motion.dQs)
+        else:
+            print("No panda or ros, can't execute")
 
-            #time.sleep(0.5)
-            print('Finished motion')
-        return np.array(self.panda.q)
+        print('Finished motion')
+
 
     def goto_joint_position(self, q):
         if type(q) == str:
@@ -611,7 +667,19 @@ class TibaInterface:
         Qs, dQs = self.compute_task_trajectories(trajectories, rest, q, tip_frame)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
+    def plan_script_key_name(self, key):
+        if not key in self.scripts:
+            print("Script does not exist")
+            print(self.scripts.keys())
+            return
+        script = self.scripts[key]
+        args = script['args'] if 'args' in script else {}
+        self.plan_script(script['file'], **args)
+
     def plan_script(self, path, **kwargs):
+        if path in self.scripts:
+            return self.plan_script_key_name(path)
+
         # Local functions
         import numpy as np
 
@@ -718,15 +786,15 @@ class TibaInterface:
 
         def xy_circles(radius_mm, rep):
             p0 = state.pose.t
-            pts = [p0]
+            pts = []
             n = max(5, int(2*np.pi*radius_mm)) # 0.5 mm steps
             radius = radius_mm/1000
             for i in range(rep):
                 for a in np.linspace(0, 2*np.pi, n)[:-1]:
                     pts.append(p0 + np.array([np.cos(a), np.sin(a), 0])*radius)
             pts.append(p0)
-
-            paths, _, _ = tu.plan_polylines_time_optimal([np.array(pts)],
+            to_plan = [np.array([p0, pts[0]]), np.array(pts), np.array([pts[-1], p0])]
+            paths, _, _ = tu.plan_polylines_time_optimal( to_plan,
                                                                   max_speed=cfg.cartesian_speed,
                                                                   accel_time=cfg.acceleration_time,
                                                                   tol=0.01)
