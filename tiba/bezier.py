@@ -280,7 +280,8 @@ def split_chain(chain, angle_tol=10):
     prev = bez[-1] - bez[-2]
     for bez in beziers[1:]:
         next = bez[1] - bez[0]
-        theta = abs(geom.angle_between(prev, next))
+        theta = abs(geom.angle_between(prev[:2], next[:2]))
+        #print(geom.degrees(theta))
         #print(theta)
         if theta > tol:
             #if np.linalg.norm(bez[0] - bez[1]) < tol:

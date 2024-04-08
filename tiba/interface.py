@@ -786,7 +786,7 @@ class TibaInterface:
         def xy_circles(radius_mm, rep):
             p0 = state.pose.t
             pts = []
-            n = 400 # NB that for planar movements TOPP breaks
+            n = 800 # NB that for planar movements TOPP breaks
             radius = radius_mm/1000
             for i in range(rep):
                 for a in np.linspace(0, 2*np.pi, n)[:-1]:

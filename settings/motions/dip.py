@@ -28,5 +28,5 @@ goto_xyz(dip_pos + up*clean_offset)
 # # Cleaning circles
 # print("Rim circles")
 xy_circles(clean_radius_mm, 4)
-# goto_xyz(dip_pos + up*start_offset)
+goto_xyz(dip_pos + up*start_offset)
 joint_move('Home')
