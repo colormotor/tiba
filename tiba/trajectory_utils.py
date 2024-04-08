@@ -26,6 +26,8 @@ from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
 from collections import defaultdict
 from math import hypot
+import trajectory_smoothing
+reload(trajectory_smoothing)
 from . import trapezoidal, todorov, lqt
 reload(trapezoidal)
 reload(todorov)
@@ -287,12 +289,12 @@ def trapezoidal_approach(x0, x1,
     #print(pose0, pose1)
     approach = SE3_interp(pose0, pose1, ts)
     if len(approach):
-        print('approach', to_pose(approach[0]), 'to ', to_pose(approach[-1] ))
+        pass #print('approach', to_pose(approach[0]), 'to ', to_pose(approach[-1] ))
     else:
         print('empty approach')
     if approach:
         res = approach
-        print('diffs', to_pos_orn(x0) - res[0], to_pos_orn(x1) - res[-1])
+        #print('diffs', to_pos_orn(x0) - res[0], to_pos_orn(x1) - res[-1])
         #res = [np.array(keypoints[0])] + res + [np.array(keypoints[-1])]
     return approach
 
@@ -350,7 +352,8 @@ def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None
 
     #print('trap vel', result.velocity)
     if res:
-        print('diffs', keypoints[0] - res[0], keypoints[-1] - res[-1])
+        pass
+        #print('diffs', keypoints[0] - res[0], keypoints[-1] - res[-1])
         #res = [np.array(keypoints[0])] + res + [np.array(keypoints[-1])]
     return np.array(res)
 
@@ -381,6 +384,8 @@ def cleanup(traj, tol=0.01):
             res.append(b)
     return np.array(res)
 
+glob = lambda: None
+
 def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0):
     from trajectory_smoothing import TrajectorySmoother
     dof = len(polylines[0][0])
@@ -390,11 +395,9 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
     # Note that otherwise we would get higher max speed and acceleration maginitude
     max_velocity = geom.normalize(np.ones(dof, dtype=np.float32)) * max_speed
     max_acceleration = geom.normalize(np.ones(dof, dtype=np.float32)) * max_accel
+    #max_velocity = np.ones(dof, dtype=np.float32) * max_speed
+    #max_acceleration = np.ones(dof, dtype=np.float32) * max_accel
 
-    print("Smoother")
-    smoother = TrajectorySmoother(
-        dof, max_velocity, max_acceleration, tol
-    )
 
     config.state.progress_max = len(polylines)
     config.state.progress = 0
@@ -403,19 +406,28 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
     accelerations = []
     for idx, P in enumerate(polylines):
         # Traj dt used for computations
-        nattempt = 10
+        nattempt = 1
         print("Planning %d points"%len(P))
+        smoother = TrajectorySmoother(
+        dof, max_velocity, max_acceleration, tol
+        )
 
         for i in range(nattempt):
+            P = np.array(P)
             result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
             if not result.success:
                 print('Smoothing failed in trajectory smoothing, attempt %d of %d'%(i+1, nattempt))
-                A = geom.degrees(geom.turning_angles(Q))
-                L = geom.chord_lengths(Q)
-                print('Min angle:', np.min(A))
-                print('Max angle:', np.max(A))
-                print('Min length:', np.max(L))
-                print('Max length:', np.max(L))
+                print(max_speed, accel_time, tol)
+                Q = np.array(P) #[:,:2]
+                glob.Q = Q
+                glob.P = np.array(P)
+                # A = geom.degrees(geom.turning_angles(Q))
+                # L = geom.chord_lengths(Q)
+                # print('Length', len(Q))
+                # print('Min angle:', np.min(A))
+                # print('Max angle:', np.max(A))
+                # print('Min length:', np.max(L))
+                # print('Max length:', np.max(L))
                 # P = cleanup(P, tol)
                 #P = np.array([P[j] for j in range(0, len(P), 2)])
                 # smoother = TrajectorySmoother(
@@ -993,7 +1005,7 @@ def bspline2(n, pts, closed=False, alpha=1, degree=3, smooth_k=0, w=None, der=0,
 
     dim = pts.shape[1]
     u = np.linspace(0, duration, pts.shape[0])
-    print('dt_pre:', u[1] - u[0])
+    # print('dt_pre:', u[1] - u[0])
     degree = min(degree, pts.shape[0]-1)
     # if clamped:
     #     bc_type=([(1, np.zeros(dim))], [(1, np.zeros(dim))])

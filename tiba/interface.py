@@ -711,7 +711,7 @@ class TibaInterface:
             state.q = q
             state.pose = self.robot.pen_tcp_pose(state.q)
             state.hand_pose = self.robot.hand_tcp_pose(state.q)
-            print('Updated pose to', state.pose)
+            #print('Updated pose to', state.pose)
 
         def joint_move(q):
             if type(q) == str:
@@ -743,7 +743,6 @@ class TibaInterface:
             dest_pose = tu.align_pose_zy(dest_pose, [0, 0, -1], y)
             #dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
             trajectories = [tu.approach_sequence([state.hand_pose, dest_pose])]
-            print('Initial position', state.pose)
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp')
             self.motions[-1].Qs += list(Qs)
             self.motions[-1].dQs += list(dQs)
@@ -787,12 +786,12 @@ class TibaInterface:
         def xy_circles(radius_mm, rep):
             p0 = state.pose.t
             pts = []
-            n = max(5, int(2*np.pi*radius_mm)) # 0.5 mm steps
+            n = 400 # NB that for planar movements TOPP breaks
             radius = radius_mm/1000
             for i in range(rep):
                 for a in np.linspace(0, 2*np.pi, n)[:-1]:
                     pts.append(p0 + np.array([np.cos(a), np.sin(a), 0])*radius)
-            pts.append(p0)
+            #pts.append(p0)
             to_plan = [np.array([p0, pts[0]]), np.array(pts), np.array([pts[-1], p0])]
             paths, _, _ = tu.plan_polylines_time_optimal( to_plan,
                                                                   max_speed=cfg.cartesian_speed,

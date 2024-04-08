@@ -24,9 +24,9 @@ goto_xyz(dip_pos + up*dip_offset)
 xy_circles(dip_radius_mm, 4)
 # # Move to rim pos
 # print("Moving up")
-# goto_xyz(dip_pos + up*clean_offset)
+goto_xyz(dip_pos + up*clean_offset)
 # # Cleaning circles
 # print("Rim circles")
-# xy_circles(clean_radius_mm, 4)
+xy_circles(clean_radius_mm, 4)
 # goto_xyz(dip_pos + up*start_offset)
-# joint_move('Home')
+joint_move('Home')
