@@ -406,7 +406,7 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
     accelerations = []
     for idx, P in enumerate(polylines):
         # Traj dt used for computations
-        nattempt = 1
+        nattempt = 2
         print("Planning %d points"%len(P))
         smoother = TrajectorySmoother(
         dof, max_velocity, max_acceleration, tol
@@ -421,6 +421,8 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
                 Q = np.array(P) #[:,:2]
                 glob.Q = Q
                 glob.P = np.array(P)
+                P = geom.uniform_sample(P, 1.0/1000)
+
                 # A = geom.degrees(geom.turning_angles(Q))
                 # L = geom.chord_lengths(Q)
                 # print('Length', len(Q))
@@ -437,7 +439,6 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
             else:
                 print("Success %d"%(i+1))
                 print("%d points"%len(result.position))
-
                 trajectories.append(result.position)
                 velocities.append(result.velocity)
                 accelerations.append(result.acceleration)
