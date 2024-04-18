@@ -784,14 +784,16 @@ def curved_offset(spine, widths, n=0, degree=3, closed=False, smooth_k=0):
 
     return res
 
-def thick_curve(Xw, scalefn=lambda x: x, smooth_k=0):
+def thick_curve(Xw, scalefn=lambda x: x, smooth_k=0, union=True):
     from . import clipper
     Xw = np.array(Xw)
     Xw[:,2] = scalefn(Xw[:,2])
     Ol = curved_offset(Xw[:,:2], Xw[:,2], smooth_k)[::-1]
     Or = curved_offset(Xw[:,:2], -Xw[:,2], smooth_k)
     stroke = np.vstack([Ol, Or])
-    return clipper.union(stroke, stroke)
+    if union:
+        return clipper.union(stroke, stroke)
+    return stroke
 
 
 def cleanup_contour(X, eps=1e-10, closed=False, get_inds=False):

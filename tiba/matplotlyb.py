@@ -66,11 +66,22 @@ class Figure:
 
     @property
     def num_rows(self):
-        return len(self.plots)
+        maxr = 0
+        for k, row in self.plots.items():
+            rowspans = [0] + [ax.rowspan for ax in row.values()]
+            maxr = max(maxr, max(*rowspans) + k)
+        return maxr
+        #return max(int(k) for k in self.plots.keys())
+        #return len(self.plots)
 
     @property
     def num_cols(self):
-        return max(len(v) for v in self.plots.values())
+        maxc = 0
+        for _, row in self.plots.items():
+            maxc = max(maxc, max(k+ax.colspan for k, ax in row.items()))
+        return maxc
+
+        #return max(len(v) for v in self.plots.values())
 
     def subplot(self, row, col, rowspan=1, colspan=1, title=''):
         if (row-1) not in self.plots or (col-1) not in self.plots[row-1]:
@@ -428,7 +439,7 @@ def show_plotly(fig):
                                                             width=plot.lw,
                                                             dash=mode_map_dash[plot.ls]),
                                                     opacity=plot.alpha,
-                                                    fill=plot.fill,
+                                                    fill=plot.fill, #plotly_color(plot.fill),
                                                     showlegend=plot.label is not None,
                                                     name=plot.label if plot.label else None
                                                     ),
