@@ -2,6 +2,7 @@
 from importlib import reload
 
 import threading, pdb
+import os
 
 import numpy as np
 import importlib
@@ -83,10 +84,23 @@ def on_event(event):
         else:
             tsketch.editor.add_joint_step(robot.q)
     if check_button(event):
-        if itiba.grasped:
-            tsketch.editor.add_grip_step(params.gripper_mm)
-        else:
-            tsketch.editor.add_ungrip_step()
+        q = tsketch.robot.q
+        too_close = False
+        for pose in state.handeye_poses:
+            d = np.linalg.norm(np.array(q) - pose)
+            print('dist ', d)
+            if d < 1e-1:
+                print("Pose too close")
+                too_close = True
+                break
+        if not too_close:
+            print("Adding pose ", q)
+            state.handeye_poses.append(np.array(q))
+            utils.save_json({'poses': state.handeye_poses}, handeye_poses_path)
+        # if itiba.grasped:
+        #     tsketch.editor.add_grip_step(params.gripper_mm)
+        # else:
+        #     tsketch.editor.add_ungrip_step()
 
 if has_robot:
     hostname = '172.16.0.2'
@@ -108,11 +122,13 @@ else:
 #robot = TibaRobot(60, 0, 0) # Molotow
 # robot = TibaRobot(74, 0, 15) # Small brush
 
+handeye_poses_path = '../settings/handeye_poses.json'
 state = lambda: None
 state.plane_calibration = False
 state.programming = True # Assume robot starts in programming mode?
 state.dest_pose = None
 state.move_amount = np.zeros(3)
+state.handeye_poses = []
 
 circle_button = FrankaButton('circle')
 cross_button = FrankaButton('cross')
@@ -151,6 +167,11 @@ def setup():
     except Exception as e:
         print(e)
         assert(False)
+
+    if os.path.isfile(handeye_poses_path):
+        h = utils.load_json(handeye_poses_path)
+        state.handeye_poses = h['poses']
+
 
     # # Dip pos
     # tsketch.robot.q = [                   -1.2621834561240015,
