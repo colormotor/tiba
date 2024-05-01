@@ -15,7 +15,7 @@ Uses PandaPy (https://github.com/JeanElsner/panda-py) as a layer on top of libfr
 import importlib
 
 import numpy as np
-import os, sys, time
+import os, sys, time, copy
 import traceback
 import yaml
 import pdb
@@ -224,7 +224,7 @@ class TibaInterface:
         self.panda = panda
         self.gripper = gripper
         self.grasping_state = False
-
+        self.log = []
         self.motions = []
         #self.Qs = []
         #self.dQs = []
@@ -457,6 +457,7 @@ class TibaInterface:
         dq_thresh = 0.001
         dq0 = np.zeros(7)
 
+        self.panda.enable_logging(len(Q)+1000)
         panda.start_controller(ctrl)
         with panda.create_context(frequency=1000) as ctx:
             while ctx.ok():
@@ -471,6 +472,7 @@ class TibaInterface:
 
         print('Stopping controller')
         self.panda.stop_controller()
+        self.panda.disable_logging()
 
     def _exec_drawing_motion(self, motion):
         from panda_py import controllers
@@ -536,7 +538,7 @@ class TibaInterface:
                         self.grasp()
                     else:
                         self.grasp(motion.grasp)
-                    time.sleep(0.3) #1.0)
+                    time.sleep(0.1) #1.0)
 
                 #Q = self.Qs
                 #dQ = self.dQs
