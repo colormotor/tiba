@@ -319,7 +319,8 @@ class TibaSketch:
              callback=None,
              input_tools=None,
              panda=None,
-             gripper=None):
+             gripper=None,
+             init_node=''):
 
         # Actual interface to the robot. Here this is not used to control the robot directly
         # but to plan and execute trajectories
@@ -329,7 +330,7 @@ class TibaSketch:
             self.tools = input_tools
 
         # Actual interface to robot (computes IK, holds reference to robot model and drawing pad
-        self.itiba = TibaInterface(panda=panda, gripper=gripper)
+        self.itiba = TibaInterface(panda=panda, gripper=gripper, init_node=init_node)
         # 3d view for the robot
         self.v3d = GlView3d(sketch)
         # Reference to the drawing pad

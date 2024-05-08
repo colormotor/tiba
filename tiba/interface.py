@@ -203,6 +203,78 @@ class WaitForDone:
             i+=1
         print('Done')
 
+def ros_camera_info_to_cv(cam_info):
+    # Camera matrix (3x3)
+    camera_matrix = np.array(cam_info.K).reshape(3, 3)
+
+    # Distortion coefficients
+    distortion_coefficients = np.array(cam_info.D)
+
+    return camera_matrix, distortion_coefficients
+
+
+class TibaHandEye:
+    def __init__(self, ros_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml'):
+        with open(os.path.expanduser("~/.ros/easy_handeye/panda_eye_hand_calib_eye_on_hand.yaml"), 'r') as f:
+            self.config = yaml.load(f, Loader=yaml.FullLoader)
+            c = self.config['transformation']
+            posorn = np.array([c['x'], c['y'], c['z'], c['qw'], c['qx'], c['qy'], c['qz']])
+            self.hand_to_camera = tu.to_pose(posorn)
+
+        # Init ros subscribers
+        self.aruco_pos = None
+        self.cam_image = None
+        self.cam_info = None
+
+        if state.has_ros:
+            from geometry_msgs.msg import PoseStamped
+            from sensor_msgs.msg import Image as msg_Image
+            from visualization_msgs.msg import Marker
+            from sensor_msgs.msg import CameraInfo
+
+            def pose_callback(msg):
+                position = msg.pose.position
+                orientation = msg.pose.orientation
+                posorn = np.array([position.x, position.y, position.z,
+                                orientation.w, orientation.x, orientation.y, orientation.z])
+                self.aruco_pose = np.array(tu.to_pose(posorn))
+
+            rospy.Subscriber("/aruco_single/pose", PoseStamped, pose_callback)
+            print("Subscribed to aruco marker")
+
+            def got_image(data):
+                im = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width, -1)
+                self.cam_image = im
+            #print(data.shape)
+            rospy.Subscriber('/camera/color/image_raw', msg_Image, got_image)
+            print("Subscribed to realsense")
+
+
+            def camera_info_callback(msg):
+                self.cam_info = msg
+
+            rospy.Subscriber('/camera/color/camera_info', CameraInfo, camera_info_callback)
+            print("Subscribed to camera info")
+
+    def is_valid(self):
+        return self.cam_info is not None and state.cam_image is not None
+        
+    def update(self, interface):
+        if not self.is_valid():
+            return
+        q = interface.robot.q
+        hand_frame = np.array(interface.robot.fkine(q, start='tiba_link0', end='tiba_hand'))
+        self.cam_pose =  hand_frame @ np.array(self.hand_to_camera)
+        
+    def draw_gl(self, interface, v3d):
+        
+        v3d.frame(self.cam_pose, alpha=0.5, scale=0.1)
+
+        if state.aruco_pose is not None:
+            v3d.frame(self.cam_pose@self.aruco_pose, alpha=1, scale=0.1)
+
+    #def project_points(
+        
 class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
                  pad_path='../settings/drawing_pad.json',
@@ -246,6 +318,7 @@ class TibaInterface:
         if state.has_ros:
             try:
                 if init_node:
+                    print("Initializing node", init_node)
                     rospy.init_node(init_node, anonymous=True)
                     rospy.Subscriber('/tiba/q', JointState, self.state_callback)
                     rospy.Subscriber('/tiba/response', String, self.response_callback)
