@@ -277,7 +277,27 @@ class TibaHandeye:
         v3d.frame(self.cam_frame, alpha=0.5, scale=0.1)
 
         if self.aruco_frame is not None:
-            v3d.frame(self.aruco_frame, alpha=1, scale=0.1)
+            h = 50/1000
+            v3d.frame(self.aruco_frame, alpha=1, scale=h)
+            
+            ax = self.aruco_frame[:3,0]
+            ay = self.aruco_frame[:3,1]
+            p = self.aruco_frame[:3,3]
+            v3d.color(1,0,1)
+            pts = [p - ax*h - ay*h,
+                   p + ax*h - ay*h,
+                   p + ax*h + ay*h,
+                   p - ax*h + ay*h]
+            v3d.polyline(pts, closed=True)
+
+            vo = 105/1000
+            hw = 290/2000
+            ph = 410/1000
+            pts = [p - ay*vo - ax*hw,
+                   p - ay*vo + ax*hw,
+                   p - ay*vo + ax*hw - ay*ph,
+                   p - ay*vo - ax*hw - ay*ph]
+            v3d.polyline(pts, closed=True)
 
     def project_points(self, pts, space='world'):
         pts = np.array(pts)
@@ -359,7 +379,8 @@ class TibaInterface:
                 state.has_ros = False
                 
             self.handeye = TibaHandeye()
-            
+        else:
+            self.handeye = None
         #self.ros_thread_running = False
         #self.ros_thread = None
 
@@ -385,12 +406,25 @@ class TibaInterface:
     #     # self.ros_thread_running = True
     #     # self.ros_thread.start()
 
+    def shutdown(self):
+        pass
+        #if self.has_ros():
+        #    rospy.signal_shutdown('Closing Tiba interface')
+            
     def has_ros(self):
         return state.has_ros
 
     def send_msg(self, data):
         print("Sending msg", data)
         self.msg_pub.publish(data)
+
+    def clear_aruco(self):
+        if self.handeye is not None:
+            self.handeye.aruco_frame = None
+            
+    def update_handeye(self):
+        if self.handeye is not None:
+            self.handeye.update(self)
 
     def send_joint_trajectory(self, Qs=None, dQs=None):
         if Qs is None:
@@ -474,7 +508,10 @@ class TibaInterface:
         self.robot.q = self.robot.home
         self.collision_robot = robot.TibaRobot(**tool_dict)
         self.collision_robot.q = self.collision_robot.home
-
+        if 'pen_offset_base_mm' in tool_dict:
+            self.pen_offset_base_mm = tool_dict['pen_offset_base_mm']
+        else:
+            self.pen_offset_base_mm = 0.0
 
     def set_programming_mode(self, desk, flag):
         ''' Set the robot in programming mode

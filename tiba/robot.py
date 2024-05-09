@@ -67,7 +67,8 @@ tools = {
 
     'Calli-brush-01': {
         'tip_dist_mm': 72.0,
-        'tip_height_mm': 5.0
+        'tip_height_mm': 5.0,
+        'pen_offset_base_mm': 9.2
     },
 
     'Squeezer': {
@@ -102,7 +103,8 @@ class TibaRobot(Robot):
     def __init__(self, tip_dist_mm=52.0, tip_height_mm=12.5, angle=15.0,
                  pressure_range=0.0,
                  is_squeezer=False,
-                 limits=fr3_limits):
+                 limits=fr3_limits,
+                 **kwargs):
         path = os.path.join(os.path.dirname(__file__), '../urdf/franka_description/')
         if is_squeezer:
             self.xacro_file = os.path.join(path, 'tiba_squeeze.urdf.xacro')

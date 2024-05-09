@@ -1,7 +1,7 @@
 {
     "params": {
         "seed": 5,
-        "svg_path": "/Users/colormotor/develop/robotics/modules/tiba/scripts/heart.svg",
+        "svg_path": "/home/colormotor/develop/python/modules/tiba/scripts/ens.svg",
         "gui_hue": 0.5529999732971191,
         "bezier_split_angle": 54.974998474121094,
         "traj": {
@@ -10,29 +10,30 @@
             "angle": 0.0
         },
         "config": {
-            "tool": 2,
+            "tool": 5,
             "cart_planner": 1,
             "dce_thresh": 416,
             "max_iterations": 307,
+            "topp_tol": 100.0,
             "isotropy": 0.23600000143051147,
             "angle": 50.0989990234375,
             "smoothing": 1.656999945640564,
             "order": 3
         },
         "drawing": {
-            "plane_offset": -1.4780000448226929,
-            "padding": 821,
-            "penup_mm": 28,
-            "pos_offset_x": 0.11299999803304672,
-            "pos_offset_y": 0.23199999332427979
+            "plane_offset": 0.0,
+            "padding": 209,
+            "penup_mm": 50,
+            "pos_offset_x": 0.08399999886751175,
+            "pos_offset_y": -0.18199999630451202
         },
         "tsm": {
             "dist": 2.5499980449676514,
             "xoffset": -0.4779999852180481,
             "voffset": -0.36899998784065247,
-            "rotx": -163,
-            "roty": -86,
-            "rotz": -7
+            "rotx": -15,
+            "roty": 30,
+            "rotz": 158
         }
     },
     "presets": {},

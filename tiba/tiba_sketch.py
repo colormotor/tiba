@@ -35,6 +35,7 @@ from .config import cfg
 from . import trajectory_utils as tu
 from . import draw, geom, config, ui
 from .gfx import renderer
+from py5canvas import canvas
 
 reload(renderer)
 reload(tu)
@@ -355,6 +356,7 @@ class TibaSketch:
         # self.robot.q = np.array([-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134])
 
         self.draft = []
+        self.draft_fitted = []
         self.clear()
 
         # print("#################################################")
@@ -512,6 +514,8 @@ class TibaSketch:
         self.steps = []
         self.fk_points = []
         self.trajectories = []
+        self.trajectories_2d = []
+        self.draft_fitted = []
         self.dirty = True
         self.trajectories_computed = False
         self.itiba.clear()
@@ -659,7 +663,9 @@ class TibaSketch:
            hand = self.robot.get_pose(None, 'tiba_hand_tcp')
            print('Hand TCP pos', list(hand.t))
         button_color = [1.0, 0.5, 0.0, 1.0]
-
+        if imgui.button('Clear aruco'):
+            self.itiba.clear_aruco()
+            
         _, cfg.speed_factor = imgui.slider_float('Speed factor', cfg.speed_factor, 0.1, 1.0)
 
         if 'drawing' in self.flags:
@@ -710,7 +716,9 @@ class TibaSketch:
                 def compute_polygons_and_plot():
                     steps, fk_points = self.compute_steps(self.itiba.Qs)
                     self.steps, self.fk_points = steps, fk_points
-                    self.itiba.plot_trajectory_stats(self.task_trajectories_augmented)
+                    if self.itiba.Qs:
+                        self.itiba.plot_trajectory_stats()
+                    # self.itiba.plot_trajectory_stats(self.task_trajectories_augmented)
 
                     #self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
 
@@ -726,12 +734,13 @@ class TibaSketch:
             #     self.itiba.plan_task_trajectories(trajectories)
             #     self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
 
-            if self.itiba.motions: #Qs:
+            if self.itiba.Qs: #motions: #Qs:
                 imgui.separator()
                 if not self.itiba.has_ros:
                     if ui.imgui_color_button('Simulate trajectory'):
                         #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
                         self.itiba.simulate()
+                        self.robot.q = tsketch.itiba.Qs[-1]
                 else:
                     if imgui.button('Simulate trajectory'):
                         self.itiba.simulate()
@@ -814,7 +823,7 @@ class TibaSketch:
         params = self.params 
         # Udate drawing pad data
         if 'drawing' in self.flags:
-            self.pad.offset = params.drawing.plane_offset / 1000
+            self.pad.offset = params.drawing.plane_offset / 1000 + self.itiba.pen_offset_base_mm / 1000
             self.pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
             self.pad.update()
 
@@ -825,7 +834,10 @@ class TibaSketch:
                 self.dirty = False
 
 
-    def draw(self):
+        # Update handeye info
+        self.itiba.update_handeye()
+        
+    def draw(self, drawing_3d=[]):
         c = self.sketch.canvas
         c.text_size(20)
         c.fill(1)
@@ -834,6 +846,47 @@ class TibaSketch:
         c.text_size(12)
         c.fill(0.5)
         c.text([c.width-290, 20], 'Drag to rotate, Ctrl-drag to zoom, Shift-drag to zoom')
+
+        handeye = self.itiba.handeye
+        if handeye is not None and handeye.cam_image is not None:
+            cam_image = np.array(handeye.cam_image)
+            w = cam_image.shape[1]
+            h = cam_image.shape[0]
+            if handeye.is_valid():
+                size = 50/1000
+                points = [[0,0,0],
+                        [size,0,0],
+                        [0,size,0],
+                        [0,0,size]]
+                projected_points = handeye.project_points(points, 'aruco')
+                cc = canvas.Canvas(w, h)
+                cc.image(cam_image)
+                cc.no_fill()
+                cc.stroke_weight(10)
+                cc.stroke(255, 0, 0)
+                #c.circle(200, 200, 100)
+                cc.line(projected_points[0], projected_points[1])
+                cc.stroke(0, 255, 0)
+                cc.line(projected_points[0], projected_points[2])
+                cc.stroke(0, 0, 255)
+                cc.line(projected_points[0], projected_points[3])
+
+                if self.pad.is_valid():
+                    points = self.pad.get_box_points()
+                    projected_points = handeye.project_points(points, 'world')
+                    cc.polygon(projected_points)
+
+                    for i, trajectory in enumerate(self.trajectories):
+                        projected_points = handeye.project_points(trajectory, 'world')
+                        cc.stroke(0)
+                        cc.stroke_weight(3.0)
+                        cc.polyline(projected_points)
+                        
+                cam_image = cc.get_image()
+            else:
+                print("Invalid handeye")
+            ref_h = 180
+            c.image(cam_image, 0, c.height-ref_h, (w/h)*ref_h, ref_h)
 
     def begin_draw_gl(self):
         params = self.params
@@ -919,6 +972,9 @@ class TibaSketch:
                 if len(self.fk_points):
                     v3d.points(self.fk_points)
 
+        if self.itiba.handeye.is_valid():
+            self.itiba.handeye.draw_gl(self.itiba, v3d)
+    
 
     def mouse_pressed(self, button, modifiers):
         params = self.params

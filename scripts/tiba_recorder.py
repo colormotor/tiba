@@ -64,13 +64,6 @@ def random_q():
 
 tsketch = TibaSketch(flags=['no_server'])
 
-with open(os.path.expanduser("~/.ros/easy_handeye/panda_eye_hand_calib_eye_on_hand.yaml"), 'r') as f:
-    c = yaml.load(f, Loader=yaml.FullLoader)['transformation']
-    posorn = np.array([c['x'], c['y'], c['z'], c['qw'], c['qx'], c['qy'], c['qz']])
-    hand_to_camera = tu.to_pose(posorn)
-    print('posorn camera', posorn)
-
-
 def on_event(event):
     print(event)
     if tsketch.itiba is None:
@@ -274,13 +267,17 @@ def setup():
 
 
 def exit():
-    print("Exit")
+    print("Exit recorder")
+    tsketch.itiba.shutdown()
+    print("Release tiba sketch")
     tsketch.release()
+    print("Done release sketch")
     if has_robot:
         #desk.release_control()
         print("Stopping listen")
         if desk._listening:
             desk.stop_listen()
+    
     print("End exit")
 
 def gui():
@@ -296,7 +293,7 @@ def gui():
     else:
         if imgui.button('Clear points'):
             tsketch.itiba.pad.clear()
-
+    
     ui.imgui_text_separator("Robot")
     changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
     if changed:
@@ -458,9 +455,6 @@ def draw():
     if has_robot:
         tsketch.itiba.read_states()
 
-    # Update handeye info
-    tsketch.itiba.handeye.update(tsketch.itiba)
-
     #print(desk._token.id, desk._get_active_token()) #has_control())
     background(0)
     np.random.seed(params.seed)
@@ -482,37 +476,6 @@ def draw():
     for i in range(3):
         text([10, 60 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
 
-    handeye = tsketch.itiba.handeye
-    if handeye.cam_image is not None:
-        cam_image = np.array(handeye.cam_image)
-        w = cam_image.shape[1]
-        h = cam_image.shape[0]
-        if handeye.is_valid():
-            
-            size = 50/1000
-            points = [[0,0,0],
-                      [size,0,0],
-                      [0,size,0],
-                      [0,0,size]]
-            projected_points = handeye.project_points(points, 'aruco')
-            c = canvas.Canvas(w, h)
-            c.image(cam_image)
-            c.no_fill()
-            c.stroke_weight(15)
-            c.stroke(255, 0, 0)
-            #c.circle(200, 200, 100)
-            c.line(projected_points[0], projected_points[1])
-            c.stroke(0, 255, 0)
-            c.line(projected_points[0], projected_points[2])
-            c.stroke(0, 0, 255)
-            c.line(projected_points[0], projected_points[3])
-            cam_image = c.get_image()
-        else:
-            print("Invalid handeye")
-        ref_h = 180
-        
-        image(cam_image, 0, height-ref_h, (w/h)*ref_h, ref_h)
-
     # tsketch.itiba.editor.draw_steps(tsketch.v3d, tsketch.robot, [0, height-70], 70, width)
 
 
@@ -523,10 +486,7 @@ def draw_gl():
 
     if state.dest_pose is not None:
         v3d.frame(np.array(state.dest_pose), alpha=0.9, scale=0.1)
-
-    if tsketch.itiba.handeye.is_valid():
-        tsketch.itiba.handeye.draw_gl(tsketch.itiba, v3d)
-        
+    
     # q = tsketch.robot.q
     # hand_frame = np.array(tsketch.robot.fkine(q, start='tiba_link0', end='tiba_hand'))
     # cam_pose =  hand_frame @ np.array(hand_to_camera)
