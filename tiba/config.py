@@ -5,7 +5,7 @@ import yaml
 class Config:
     def __init__(self):
         self._default_angular_velocity = geom.radians(30) #(np.pi/5)
-        self._default_cartesian_speed = 250/1000.0  #(np.pi/5)
+        self._default_cartesian_speed = 300/1000.0  #(np.pi/5)
         self._default_joint_speed = geom.radians(20.0)
         self.speed_factor = 1.0
         self.acceleration_time = 0.4

@@ -46,6 +46,7 @@ class Axes:
     def __init__(self, colspan=1, rowspan=1, title=''):
         self.plots = []
         self.equal = False
+        self.flip_y = False
         self.box = None
         self.rowspan = rowspan
         self.colspan = colspan
@@ -97,6 +98,12 @@ class Figure:
     def axis_equal(self, flag=True):
         self.cur_ax.equal = flag
 
+    def flip_y(self, flag=True):
+        self.cur_ax.flip_y = flag
+
+    def setup_2d(self):
+        self.axis_equal()
+        self.flip_y()
 
     def title(self, title):
         self.cur_ax.title = title
@@ -263,6 +270,12 @@ def rectangle(*args, color=None, fill=False, **kwargs):
 def axis_equal(flag=True):
     glob.fig.axis_equal(flag)
 
+def flip_y(flag=True):
+    glob.fig.flip_y(flag)
+
+def setup_2d():
+    glob.fig.setup_2d()
+
 def title(title):
     glob.fig.title(title)
 
@@ -379,6 +392,8 @@ def show_plt(fig):
                                     label=plot.label)
                 if ax.equal:
                     plt.axis('equal')
+                if ax.flip_y:
+                    plt.gca().invert_yaxis()
     plt.show()
 
 
@@ -414,6 +429,7 @@ def show_plotly(fig):
             else:
                 row.append(None)
         specs.append(row)
+    print('Plot grid:', num_rows, num_cols)
     pfig = make_subplots(rows=num_rows, cols=num_cols,
                          specs=specs,
                          subplot_titles=titles,
@@ -509,9 +525,12 @@ def show_plotly(fig):
                 if ax.equal:
                     # Ugly hack to make axis for a given subplot equal with plotly
                     pfig.update_xaxes(row=i+1, col=j+1, scaleanchor="y%d"%ax_ind, scaleratio=1)
+                if ax.flip_y:
+                    pfig.update_yaxes(row=i+1, col=j+1, autorange='reversed')
                 ax_ind += 1
 
     pfig.update_layout(barmode='relative',
+                       uirevision=True,
                        title=dict(text=fig.figtitle),
                        #margin=dict(l=0, r=0, b=0, t=0), # Tight layout
                        scene = dict(

@@ -60,9 +60,14 @@ tools = {
         'tip_height_mm': 10.0
     },
 
+    'Molotow New': {
+        'tip_dist_mm': 50.0,
+        'tip_height_mm': 9.0
+    },
+
     'Edding': {
-        'tip_dist_mm': 51.0,
-        'tip_height_mm': 10.5
+        'tip_dist_mm': 50.0,
+        'tip_height_mm': 11.0
     },
 
     'Calli-brush-01': {

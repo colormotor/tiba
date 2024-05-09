@@ -207,7 +207,16 @@ class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
                  pad_path='../settings/drawing_pad.json',
                  scripts_file='../settings/motions/motions.yaml',
-                 plot_path='trajectory.png'):
+                 plot_path='trajectory.png',
+                 base_path=None,
+                 ):
+
+        if base_path is None:
+            print('base path', base_path)
+            base_path = os.path.dirname(os.path.abspath(__file__))
+
+        pad_path = os.path.join(base_path, pad_path)
+        scripts_file = os.path.join(base_path, scripts_file)
 
         self.editor = PositionEditor()
         self.pad = drawing_pad.DrawingPad(pad_path)
@@ -314,16 +323,6 @@ class TibaInterface:
     def wait(self):
         return WaitForDone(self)
 
-        # def print_same_line(s):
-        #     sys.stdout.write("\r" + str(s))
-        # iter_chars = ['-','/','-','\\']
-        # i = 0
-        # print('Waiting')
-        # while self.server_busy:
-        #     print_same_line(iter_chars[i%len(iter_chars)])
-        #     time.sleep(0.1)
-        #     i+=1
-
     def send_joint_pos(self, q):
         p = JointState()
         p.position = q
@@ -395,6 +394,7 @@ class TibaInterface:
                   headers={'X-Control-Token': desk._token.token})
 
     def simulate(self):
+        ''' Simulate current trajectories using Swift'''
         env = swift.Swift()
         env.launch(realtime=True)
         env.add(self.robot)

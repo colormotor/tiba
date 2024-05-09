@@ -35,21 +35,13 @@ from PIL import Image
 #+END_SRC
 
 #+RESULTS:
-#+begin_example
-/Users/colormotor/opt/miniconda3/envs/ros_env/lib/python3.9/site-packages/scipy/__init__.py:155: UserWarning: A NumPy version >=1.18.5 and <1.25.0 is required for this version of SciPy (detected version 1.26.0
-  warnings.warn(f"A NumPy version >={np_minversion} and <{np_maxversion}"
-Could not find drawSvg module
-Loading ros
-Loading ros
-Loading ros
-Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
-Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
-#################################################
-STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE
-Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
-Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
-Running in /Users/colormotor/develop/teaching/py5canvas/py5canvas
-#+end_example
+: Loading ros
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+: #################################################
+: STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
 
 ** Tests
 Retrieve joint configuration if we re connected to the server
@@ -483,7 +475,8 @@ def z_to_width(z):
 
 #widths = np.ones_like(widths)*0.001
 print([len(bezier.split_chain(chain)) for chain in chains])
-chains_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(chains, widths)]
+#chains_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(chains, widths)]
+chains_3d = [np.hstack([Cp, np.zeros((len(Cp), 1))]) for Cp, w in zip(chains, widths)]
 chains_3d = sum([bezier.split_chain(chain, 2) for chain in chains_3d], [])
 
 trajectories = [tu.plan_lqt_bezier(Cp, 4.5, cfg.cartesian_speed, cfg.acceleration_time, stop_movement=True, alpha=0.0, simga=10, order=3, iterative=True) for Cp in chains_3d]
@@ -534,9 +527,9 @@ ply.show('plt')
 : STOP MOVEMENT
 : (9, 2246) (20214, 20214) (9, 9) 2246
 : 448
-[[file:./.ob-jupyter/3b12bc75901c69bfd0e35614dbe23ee5ea15b220.png]]
+[[file:./.ob-jupyter/e957810df9b97f2eacabe517291474c4772d7dac.png]]
 : Invalid arguments 1 ([array([-0.10868005, -0.14263601]), array([0.1124231, 0.1479329])],)
-[[file:./.ob-jupyter/8dab077ba210ee1acc508d0055ffab2425da3fa0.png]]
+[[file:./.ob-jupyter/2da1db804cfc5937df153161e27709d6f4ba2deb.png]]
 :END:
 
 * Draw trjectory
@@ -586,46 +579,47 @@ Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/fr
 Post init
 Post init
 Post init
-Iteration 1, Cost: 0.458056, alpha= 1, time= 0.00491058
-Iteration 2, Cost: 0.00374797, alpha= 1, time= 0.00503517
-Iteration 3, Cost: 0.000421251, alpha= 1, time= 0.00497829
-Iteration 4, Cost: 0.000421089, alpha= 1, time= 0.00497508
-Iteration 5, Cost: 0.000421089, alpha= 1, time= 0.00497471
-Iteration 6, Cost: 0.000421089, alpha= 1, time= 0.004975
-Iteration 7, Cost: 0.000421089, alpha= 0.25, time= 0.008827
-Max accel local: 1.307752280345771
+Iteration 1, Cost: 0.458056, alpha= 1, time= 0.00511879
+Iteration 2, Cost: 0.00374797, alpha= 1, time= 0.00524571
+Iteration 3, Cost: 0.000421251, alpha= 1, time= 0.00546462
+Iteration 4, Cost: 0.000421089, alpha= 1, time= 0.00520696
+Iteration 5, Cost: 0.000421089, alpha= 1, time= 0.00509813
+Iteration 6, Cost: 0.000421089, alpha= 1, time= 0.00508708
+Iteration 7, Cost: 0.000421089, alpha= 1, time= 0.00510258
+Iteration 8, Cost: 0.000421089, alpha= 0.5, time= 0.00699112
+Max accel local: 1.3077522950355247
 dt_pre: 0.01
-Iteration 1, Cost: 0.870854, alpha= 1, time= 0.15692
-Iteration 2, Cost: 0.129781, alpha= 1, time= 0.153953
-Iteration 3, Cost: 0.00567838, alpha= 1, time= 0.16354
-Iteration 4, Cost: 0.00541671, alpha= 1, time= 0.153519
-Iteration 5, Cost: 0.00540325, alpha= 1, time= 0.154278
-Iteration 6, Cost: 0.00540204, alpha= 1, time= 0.161444
-Iteration 7, Cost: 0.00540194, alpha= 1, time= 0.160776
-Iteration 8, Cost: 0.00540193, alpha= 1, time= 0.158469
-Iteration 9, Cost: 0.00540193, alpha= 1, time= 0.155414
-Iteration 10, Cost: 0.00540193, alpha= 1, time= 0.16224
-Iteration 11, Cost: 0.00540193, alpha= 1, time= 0.161945
-Iteration 12, Cost: 0.00540193, alpha= 1, time= 0.159596
-Iteration 13, Cost: 0.00540193, alpha= 1, time= 0.162991
-Iteration 14, Cost: 0.00540193, alpha= 1, time= 0.159298
-Iteration 15, Cost: 0.00540193, alpha= 0.5, time= 0.216111
-Iteration 16, Cost: 0.00540193, alpha= 1, time= 0.154488
-Iteration 17, Cost: 0.00540193, alpha= 0.25, time= 0.270863
-Iteration 18, Cost: 0.00540193, alpha= 0.000976562, time= 0.770109
-Iteration 19, Cost: 0.00540193, alpha= 1, time= 0.15563
-Iteration 20, Cost: 0.00540193, alpha= 1, time= 0.164379
-Max accel local: 2.2880226832845287
+Iteration 1, Cost: 0.874643, alpha= 1, time= 0.153281
+Iteration 2, Cost: 0.138439, alpha= 1, time= 0.158746
+Iteration 3, Cost: 0.0057191, alpha= 1, time= 0.159291
+Iteration 4, Cost: 0.00541776, alpha= 1, time= 0.163464
+Iteration 5, Cost: 0.00540324, alpha= 1, time= 0.159644
+Iteration 6, Cost: 0.005402, alpha= 1, time= 0.161984
+Iteration 7, Cost: 0.0054019, alpha= 1, time= 0.162225
+Iteration 8, Cost: 0.00540189, alpha= 1, time= 0.164332
+Iteration 9, Cost: 0.00540189, alpha= 1, time= 0.164858
+Iteration 10, Cost: 0.00540189, alpha= 1, time= 0.159739
+Iteration 11, Cost: 0.00540189, alpha= 1, time= 0.160308
+Iteration 12, Cost: 0.00540189, alpha= 1, time= 0.162455
+Iteration 13, Cost: 0.00540189, alpha= 1, time= 0.160014
+Iteration 14, Cost: 0.00540189, alpha= 1, time= 0.159587
+Iteration 15, Cost: 0.00540189, alpha= 1, time= 0.159644
+Iteration 16, Cost: 0.00540189, alpha= 1, time= 0.162942
+Iteration 17, Cost: 0.00540189, alpha= 1, time= 0.159417
+Iteration 18, Cost: 0.00540189, alpha= 1, time= 0.15998
+Iteration 19, Cost: 0.00540189, alpha= 0.0625, time= 0.406483
+Iteration 20, Cost: 0.00540189, alpha= 0.015625, time= 0.528272
+Max accel local: 2.297417164234525
 dt_pre: 0.01
-Iteration 1, Cost: 1.1832, alpha= 1, time= 0.00497546
-Iteration 2, Cost: 0.141346, alpha= 1, time= 0.00509442
-Iteration 3, Cost: 0.000522066, alpha= 1, time= 0.0051285
-Iteration 4, Cost: 0.000473829, alpha= 1, time= 0.00504558
-Iteration 5, Cost: 0.000473829, alpha= 1, time= 0.00506642
-Iteration 6, Cost: 0.000473829, alpha= 1, time= 0.00506292
-Iteration 7, Cost: 0.000473829, alpha= 1, time= 0.00506954
-Iteration 8, Cost: 0.000473829, alpha= 0.5, time= 0.00696829
-Max accel local: 1.3260994441887997
+Iteration 1, Cost: 1.1877, alpha= 1, time= 0.005155
+Iteration 2, Cost: 0.146915, alpha= 1, time= 0.00517908
+Iteration 3, Cost: 0.000525337, alpha= 1, time= 0.00517333
+Iteration 4, Cost: 0.000474589, alpha= 1, time= 0.00517004
+Iteration 5, Cost: 0.000474589, alpha= 1, time= 0.00515708
+Iteration 6, Cost: 0.000474589, alpha= 1, time= 0.00515662
+Iteration 7, Cost: 0.000474589, alpha= 1, time= 0.00516496
+Iteration 8, Cost: 0.000474589, alpha= 0.03125, time= 0.0147468
+Max accel local: 1.3260603409094698
 dt_pre: 0.01
 No panda, can't read states
 Finished planning task trajectories
