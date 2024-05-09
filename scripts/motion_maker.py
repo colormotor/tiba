@@ -27,6 +27,14 @@ reload(spatial)
 
 np.set_printoptions(suppress=True)
 
+panda_loader = importlib.find_loader('panda_py')
+if panda_loader is not None:
+    import panda_py
+    from panda_py import libfranka
+    from panda_py import controllers
+    has_robot = True
+else:
+    has_robot = False
 
 params = {'Seed': (5, {'min': 0, 'max': 100}),
           'svg_path': ('abr.svg', {'hide': True}),
@@ -45,8 +53,6 @@ def random_q():
 #robot = TibaRobot(45, 11.5, 15) # Molotow
 #robot = TibaRobot(60, 0, 0) # Molotow
 # robot = TibaRobot(74, 0, 15) # Small brush
-tsketch = TibaSketch()
-threads = []
 
 def response_callback(self, data):
     print('Received response:', data.data)
@@ -62,6 +68,33 @@ if rosloader is not None:
     from sensor_msgs.msg import JointState
     from std_msgs.msg import String
 
+
+if has_robot:
+    hostname = '172.16.0.2'
+    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    print("Created desk")
+    if not desk.has_control():
+        print("Forcing control")
+        desk.take_control(True)
+        desk.activate_fci()
+    panda = panda_py.Panda(hostname)
+    gripper = libfranka.Gripper(hostname)
+
+else:
+    gripper = None
+    desk = None
+    panda = None
+
+flags = ['drawing']
+if has_robot:
+    flags.append('no_server')
+tsketch = TibaSketch(flags=flags)
+threads = []
+
+state = lambda: None
+
+state.programming = True # Assume robot starts in programming mode?
+
 def setup():
     # Load parameters here for standalone
     global params
@@ -73,14 +106,15 @@ def setup():
     set_color_scale(1.0)
 
     try:
+        
         tsketch.init(sketch)
-
+        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_motion_maker')
+        
         if rosloader is not None:
             print("Initializing ROS")
             try:
                 rospy.Subscriber('/tiba/response', String, response_callback)
                 rospy.Subscriber('/tiba/q', JointState, state_callback)
-                rospy.init_node('motion_generator', log_level=rospy.ERROR) #
                 tsketch.itiba.send_msg('start: Tiba sketch connecting')
             except Exception as e:
                 print(e)
@@ -98,7 +132,8 @@ def setup():
 #     draft = draft_in
 #     tsketch.set_draft(draft)
 
-
+#def load_thick_paths(path):
+    
 def load_svg(path):
     print('Loading SVG:', path)
     try:
@@ -156,6 +191,13 @@ def exit():
 
 
 def gui():
+    if has_robot:
+        changed, state.programming = imgui.checkbox("Programming mode", state.programming)
+        if changed:
+            tsketch.itiba.set_programming_mode(desk, state.programming)
+
+    tsketch.itiba.motion_gui(imgui)
+    
     if imgui.button('Test threads'):
         def thread_func1():
             print('Thread 1 started')
@@ -201,6 +243,9 @@ def gui_window():
     pass
 
 def draw():
+    if has_robot:
+        tsketch.itiba.read_states()
+
     if len(threads):
         if threads[0].ident is None:
             imgui.open_popup("Progress")

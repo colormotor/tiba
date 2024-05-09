@@ -151,6 +151,9 @@ class DrawingPad:
         return self.fit_to_frame(P)
         #return fit_to_frame_box(P, self.box, self.frame, padding, offset=self.offset)
 
+    def get_box_points(self):
+        return get_frame_aligned_xy_box_points(self.box, self.frame, self.offset)
+    
     def draw(self, v3d):
         ''' Draw the drawing pad using a View3d or GlView3d object'''
         v3d.frame(self.frame, 0.5)
@@ -197,11 +200,15 @@ def get_offset_frame(frame, offset):
     oframe[:3, 3] = frame[:3, 3] + z*offset
     return oframe
 
-def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
+def get_frame_aligned_xy_box_points(box, frame, offset=0):
     P = geom.close(np.array(geom.rect_corners(box)))
     P = np.hstack([P, np.zeros([P.shape[0], 1])])
     frame = get_offset_frame(frame, offset)
     P = geom.affine_transform(frame, P)
+    return P
+
+def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
+    P = get_frame_aligned_xy_box_points(box, frame, offset)
     v3d.polyline(P)
 
 

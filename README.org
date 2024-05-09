@@ -44,7 +44,7 @@ mamba install conda-forge::roboticstoolbox-python
 
 Installl other deps:
 #+begin_example
-mamba install plotly, networkx, tqdm
+mamba install plotly networkx tqdm svgpathtools
 #+end_example
 
 *** Install path planning utilities

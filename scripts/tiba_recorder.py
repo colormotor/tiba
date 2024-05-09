@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from importlib import reload
-
+from py5canvas import canvas
 import threading, pdb
 import os
 
@@ -13,6 +13,8 @@ import roboticstoolbox as rtb
 import tiba
 import pdb
 import time
+import yaml
+import cv2
 
 reload(tiba)
 reload(tiba.draw)
@@ -129,10 +131,59 @@ state.programming = True # Assume robot starts in programming mode?
 state.dest_pose = None
 state.move_amount = np.zeros(3)
 state.handeye_poses = []
+state.aruco_pose = None
+state.cam_image = None
+state.cam_info = None
+state.marker = None
 
 circle_button = FrankaButton('circle')
 cross_button = FrankaButton('cross')
 check_button = FrankaButton('check')
+
+def ros_subscribe():
+    import rospy
+    from geometry_msgs.msg import PoseStamped
+    from sensor_msgs.msg import Image as msg_Image
+    from visualization_msgs.msg import Marker
+    from sensor_msgs.msg import CameraInfo
+
+    def pose_callback(msg):
+        position = msg.pose.position
+        orientation = msg.pose.orientation
+        posorn = np.array([position.x, position.y, position.z,
+                           orientation.w, orientation.x, orientation.y, orientation.z])
+        state.aruco_pose = np.array(tu.to_pose(posorn))
+        
+    rospy.Subscriber("/aruco_single/pose", PoseStamped, pose_callback)
+    print("Subscribed to aruco marker")
+
+    def got_image(data):
+        im = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width, -1)
+        state.cam_image = im
+    #print(data.shape)
+    rospy.Subscriber('/camera/color/image_raw', msg_Image, got_image)
+    print("Subscribed to realsense")
+
+    
+    def camera_info_callback(msg):
+        state.cam_info = msg
+        
+    rospy.Subscriber('/camera/color/camera_info', CameraInfo, camera_info_callback)
+    print("Subscribed to camera info")
+
+    def marker_callback(msg):
+        state.marker = msg
+    rospy.Subscriber('/aruco_single/marker', Marker, marker_callback)
+    print("Subscribed to marker")
+
+def ros_camera_info_to_cv(cam_info):
+    # Camera matrix (3x3)
+    camera_matrix = np.array(cam_info.K).reshape(3, 3)
+
+    # Distortion coefficients
+    distortion_coefficients = np.array(cam_info.D)
+
+    return camera_matrix, distortion_coefficients
 
 def check_collision(q, itiba):
     r = itiba.collision_robot
@@ -163,7 +214,7 @@ def setup():
     set_color_scale(1.0)
 
     try:
-        tsketch.init(sketch, panda=panda, gripper=gripper)
+        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_recorder')
     except Exception as e:
         print(e)
         assert(False)
@@ -173,6 +224,7 @@ def setup():
         state.handeye_poses = h['poses']
 
 
+    #ros_subscribe()
     # # Dip pos
     # tsketch.robot.q = [                   -1.2621834561240015,
     #                 -0.5742350572707479,
@@ -215,13 +267,17 @@ def setup():
 
 
 def exit():
-    print("Exit")
+    print("Exit recorder")
+    tsketch.itiba.shutdown()
+    print("Release tiba sketch")
     tsketch.release()
+    print("Done release sketch")
     if has_robot:
         #desk.release_control()
         print("Stopping listen")
         if desk._listening:
             desk.stop_listen()
+    
     print("End exit")
 
 def gui():
@@ -237,7 +293,7 @@ def gui():
     else:
         if imgui.button('Clear points'):
             tsketch.itiba.pad.clear()
-
+    
     ui.imgui_text_separator("Robot")
     changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
     if changed:
@@ -399,8 +455,6 @@ def draw():
     if has_robot:
         tsketch.itiba.read_states()
 
-
-
     #print(desk._token.id, desk._get_active_token()) #has_control())
     background(0)
     np.random.seed(params.seed)
@@ -422,7 +476,6 @@ def draw():
     for i in range(3):
         text([10, 60 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
 
-
     # tsketch.itiba.editor.draw_steps(tsketch.v3d, tsketch.robot, [0, height-70], 70, width)
 
 
@@ -433,8 +486,16 @@ def draw_gl():
 
     if state.dest_pose is not None:
         v3d.frame(np.array(state.dest_pose), alpha=0.9, scale=0.1)
+    
+    # q = tsketch.robot.q
+    # hand_frame = np.array(tsketch.robot.fkine(q, start='tiba_link0', end='tiba_hand'))
+    # cam_pose =  hand_frame @ np.array(hand_to_camera)
+    # v3d.frame(cam_pose, alpha=0.5, scale=0.1)
 
+    # if state.aruco_pose is not None:
+    #     v3d.frame(cam_pose@state.aruco_pose, alpha=1, scale=0.1)        
     tsketch.end_draw_gl()
+    
 def mouse_pressed(button, modifiers):
     tsketch.mouse_pressed(button, modifiers)
 

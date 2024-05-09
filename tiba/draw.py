@@ -279,8 +279,10 @@ class GlView3d:
 
     def release(self):
         print("Releasing GlView3d")
-        del self.rend
-
+        if self.rend is not None:
+            del self.rend
+        self.rend = None
+        
     def set_view(self, viewport, trans, rot, fov=None):
         self.viewport = [np.array(viewport[0]),
                          np.array(viewport[1])]

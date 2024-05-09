@@ -15,14 +15,14 @@ Uses PandaPy (https://github.com/JeanElsner/panda-py) as a layer on top of libfr
 import importlib
 
 import numpy as np
-import os, sys, time
+import os, sys, time, copy
 import traceback
 import yaml
 import pdb
 import roboticstoolbox as rtb
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
-
+import cv2
 from collections import namedtuple
 import swift
 
@@ -82,11 +82,10 @@ class PositionEditor:
             self.positions = {}
 
         self.positions_path = positions_path
-        self.new_motion_name = 'Insert name'
+        self.new_position_name = 'Insert name'
         self.cur_position = -1
 
-        self.new_motion_name = 'Insert name'
-
+        
     def get_cur_position(self):
         names = list(self.positions.keys())
         if self.cur_position < 0 or self.cur_position >= len(names):
@@ -164,10 +163,10 @@ class PositionEditor:
         imgui.set_next_window_size(300, 200)
         if imgui.begin_popup_modal('Add position').opened:
             imgui.text("Select name")
-            changed, self.new_posistion_name = imgui.input_text('', self.new_posistion_name, 512)
+            changed, self.new_position_name = imgui.input_text('', self.new_position_name, 512)
 
             if imgui.button('OK'):
-                self.add_position(self.new_posistion_name, itiba.robot.q)
+                self.add_position(self.new_position_name, itiba.robot.q)
                 imgui.close_current_popup()
             imgui.same_line()
             if imgui.button('Cancel'):
@@ -203,6 +202,123 @@ class WaitForDone:
             i+=1
         print('Done')
 
+def ros_camera_info_to_cv(cam_info):
+    # Camera matrix (3x3)
+    camera_matrix = np.array(cam_info.K).reshape(3, 3)
+
+    # Distortion coefficients
+    distortion_coefficients = np.array(cam_info.D)
+
+    return camera_matrix, distortion_coefficients
+
+
+class TibaHandeye:
+    def __init__(self, ros_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml'):
+        with open(os.path.expanduser("~/.ros/easy_handeye/panda_eye_hand_calib_eye_on_hand.yaml"), 'r') as f:
+            self.config = yaml.load(f, Loader=yaml.FullLoader)
+            c = self.config['transformation']
+            posorn = np.array([c['x'], c['y'], c['z'], c['qw'], c['qx'], c['qy'], c['qz']])
+            self.hand_to_camera = tu.to_pose(posorn)
+
+        # Init ros subscribers
+        self.aruco_frame = None
+        self.cam_image = None
+        self.cam_info = None
+        self.cam_frame = None
+        
+        if state.has_ros:
+            from geometry_msgs.msg import PoseStamped
+            from sensor_msgs.msg import Image as msg_Image
+            from visualization_msgs.msg import Marker
+            from sensor_msgs.msg import CameraInfo
+
+            def aruco_pose_callback(msg):
+                if self.cam_frame is None:
+                    return
+                
+                position = msg.pose.position
+                orientation = msg.pose.orientation
+                posorn = np.array([position.x, position.y, position.z,
+                                orientation.w, orientation.x, orientation.y, orientation.z])
+                if self.aruco_frame is None:
+                    self.aruco_frame = self.cam_frame @ np.array(tu.to_pose(posorn))
+
+            rospy.Subscriber("/aruco_single/pose", PoseStamped, aruco_pose_callback)
+            print("Subscribed to aruco marker")
+
+            def got_image(data):
+                im = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width, -1)
+                self.cam_image = im
+            #print(data.shape)
+            rospy.Subscriber('/camera/color/image_raw', msg_Image, got_image)
+            print("Subscribed to realsense")
+
+
+            def camera_info_callback(msg):
+                self.cam_info = msg
+
+            rospy.Subscriber('/camera/color/camera_info', CameraInfo, camera_info_callback)
+            print("Subscribed to camera info")
+
+    def is_valid(self):
+        return (self.cam_info is not None and
+                self.cam_image is not None  and
+                self.aruco_frame is not None)
+        
+    def update(self, interface):
+        q = interface.robot.q
+        hand_frame = np.array(interface.robot.fkine(q, start='tiba_link0', end='tiba_hand'))
+        self.cam_frame =  hand_frame @ np.array(self.hand_to_camera)
+        
+    def draw_gl(self, interface, v3d):
+        if not self.is_valid():
+            return
+        
+        v3d.frame(self.cam_frame, alpha=0.5, scale=0.1)
+
+        if self.aruco_frame is not None:
+            h = 50/1000
+            v3d.frame(self.aruco_frame, alpha=1, scale=h)
+            
+            ax = self.aruco_frame[:3,0]
+            ay = self.aruco_frame[:3,1]
+            p = self.aruco_frame[:3,3]
+            v3d.color(1,0,1)
+            pts = [p - ax*h - ay*h,
+                   p + ax*h - ay*h,
+                   p + ax*h + ay*h,
+                   p - ax*h + ay*h]
+            v3d.polyline(pts, closed=True)
+
+            vo = 105/1000
+            hw = 290/2000
+            ph = 410/1000
+            pts = [p - ay*vo - ax*hw,
+                   p - ay*vo + ax*hw,
+                   p - ay*vo + ax*hw - ay*ph,
+                   p - ay*vo - ax*hw - ay*ph]
+            v3d.polyline(pts, closed=True)
+
+    def project_points(self, pts, space='world'):
+        pts = np.array(pts)
+        inv_cam = np.linalg.inv(self.cam_frame)
+        aruco_frame_eye = inv_cam @ self.aruco_frame
+        aruco_frame_eye_inv = np.linalg.inv(aruco_frame_eye)
+        rot = aruco_frame_eye[:3,:3]
+        pos = aruco_frame_eye[:3,3]
+        cam_matrix, distortion = ros_camera_info_to_cv(self.cam_info)
+        if space=='eye':
+            points_eye = np.array(pts)
+        elif space=='aruco':
+            #print(pts)
+            points_eye = np.array([geom.tsm(aruco_frame_eye, p) for p in pts])
+        else: # world
+            points_eye = np.array([geom.tsm(inv_cam, p) for p in pts])
+        points_aruco = geom.tsm(aruco_frame_eye_inv, points_eye)
+        projected_points, _ = cv2.projectPoints(points_aruco, rot, pos, cam_matrix, distortion)
+        projected_points = [p[0] for p in projected_points]
+        return projected_points
+    
 class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
                  pad_path='../settings/drawing_pad.json',
@@ -233,7 +349,7 @@ class TibaInterface:
         self.panda = panda
         self.gripper = gripper
         self.grasping_state = False
-
+        self.log = []
         self.motions = []
         #self.Qs = []
         #self.dQs = []
@@ -255,6 +371,7 @@ class TibaInterface:
         if state.has_ros:
             try:
                 if init_node:
+                    print("Initializing node", init_node)
                     rospy.init_node(init_node, anonymous=True)
                     rospy.Subscriber('/tiba/q', JointState, self.state_callback)
                     rospy.Subscriber('/tiba/response', String, self.response_callback)
@@ -269,6 +386,10 @@ class TibaInterface:
             except rospy.exceptions.ROSException as e:
                 print("Ros issue")
                 state.has_ros = False
+                
+            self.handeye = TibaHandeye()
+        else:
+            self.handeye = None
         #self.ros_thread_running = False
         #self.ros_thread = None
 
@@ -294,12 +415,25 @@ class TibaInterface:
     #     # self.ros_thread_running = True
     #     # self.ros_thread.start()
 
+    def shutdown(self):
+        pass
+        #if self.has_ros():
+        #    rospy.signal_shutdown('Closing Tiba interface')
+            
     def has_ros(self):
         return state.has_ros
 
     def send_msg(self, data):
         print("Sending msg", data)
         self.msg_pub.publish(data)
+
+    def clear_aruco(self):
+        if self.handeye is not None:
+            self.handeye.aruco_frame = None
+            
+    def update_handeye(self):
+        if self.handeye is not None:
+            self.handeye.update(self)
 
     def send_joint_trajectory(self, Qs=None, dQs=None):
         if Qs is None:
@@ -373,7 +507,10 @@ class TibaInterface:
         self.robot.q = self.robot.home
         self.collision_robot = robot.TibaRobot(**tool_dict)
         self.collision_robot.q = self.collision_robot.home
-
+        if 'pen_offset_base_mm' in tool_dict:
+            self.pen_offset_base_mm = tool_dict['pen_offset_base_mm']
+        else:
+            self.pen_offset_base_mm = 0.0
 
     def set_programming_mode(self, desk, flag):
         ''' Set the robot in programming mode
@@ -457,6 +594,7 @@ class TibaInterface:
         dq_thresh = 0.001
         dq0 = np.zeros(7)
 
+        self.panda.enable_logging(len(Q)+1000)
         panda.start_controller(ctrl)
         with panda.create_context(frequency=1000) as ctx:
             while ctx.ok():
@@ -471,6 +609,7 @@ class TibaInterface:
 
         print('Stopping controller')
         self.panda.stop_controller()
+        self.panda.disable_logging()
 
     def _exec_drawing_motion(self, motion):
         from panda_py import controllers
@@ -536,7 +675,7 @@ class TibaInterface:
                         self.grasp()
                     else:
                         self.grasp(motion.grasp)
-                    time.sleep(0.3) #1.0)
+                    time.sleep(0.1) #1.0)
 
                 #Q = self.Qs
                 #dQ = self.dQs
