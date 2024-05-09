@@ -191,6 +191,33 @@ def plan_simplify_test(samples,
     simplified = [tu.simplify.dce(P, params.config.dce_thresh/1000) for P in samples]
     return samples, simplified
 
+
+def plan_thick_resample(samples,
+                        max_speed,
+                        accel_time,
+                        penup_distance,
+                        params):
+    chains = [np.array(chain[:,:2]) for chain in samples]
+    widths = [np.array(chain[:,2]) for chain in samples]
+    width_range_mm = [np.min(np.concatenate(widths))*1000, np.max(np.concatenate(widths))*1000]
+
+    def map(x, input_range, output_range):
+        return (output_range[0] + ((x - input_range[0])/(input_range[1] - input_range[0]))
+                                    * (output_range[1] - output_range[0]))
+
+    wrange = np.array(width_range_mm)/1000.0
+    zrange = np.array([0.0, -params.config.max_depth])/1000.0
+
+    def width_to_z(w):
+        return map(w, wrange, zrange)
+
+    def z_to_width(z):
+        return map(z, zrange, wrange)
+
+    chains_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(chains, widths)]
+    trajectories = [tu.resample_bezier(chain, max_speed, accel_time) for chain in chains_3d]
+    return trajectories, [P[:,:2] for P in samples]
+    
 def plan_polylines(planning_callback,
                    samples,
                    max_speed,
@@ -207,11 +234,12 @@ def plan_polylines(planning_callback,
     config.progress_max = len(samples)
     if not trajectory_includes_penups:
         # Plan each trajectory in 2d and then concatenate lifting motions
-        samples = [np.hstack([P, np.zeros((len(P), 1))]) for P in samples]
-        up = np.array([0, 0, penup_distance])
-        samples = ([np.array([samples[0][0]+up, samples[0][0]])]
-                            + samples
-                            + [np.array([samples[-1][-1], samples[-1][-1]+up])])
+        if samples[0].shape[1] < 3:
+            samples = [np.hstack([P, np.zeros((len(P), 1))]) for P in samples]
+        # up = np.array([0, 0, penup_distance])
+        # samples = ([np.array([samples[0][0]+up, samples[0][0]])]
+        #                     + samples
+        #                     + [np.array([samples[-1][-1], samples[-1][-1]+up])])
         paths, simplified = planning_callback(samples,
                                               penup_distance=penup_distance,
                                               max_speed=max_speed,
@@ -289,14 +317,13 @@ def plan_polylines(planning_callback,
         ply.show()
     return trajectories
 
-
 dip_pos = np.array([0.11812825731443674, -0.407704314564537, 0.10439764358100054,
                     -0.008107937414934388, 0.8524478856525898, -0.5214394134973193, -0.036983802520516196])
 
 #  [-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134]
 #
 
-planner_names = ['Trapezoidal', 'Minimum Jerk', 'Calligraphic', 'Test simplify']
+planner_names = ['Trapezoidal', 'Minimum Jerk', 'Calligraphic', 'Test simplify', 'Thick resample']
 
 class TibaSketch:
     def __init__(self, flags=['drawing']):
@@ -408,6 +435,7 @@ class TibaSketch:
                 'Angle': (50.0, {'min':-90.0, 'max':90.0, 'hide':True}),
                 'Smoothing': (0.0, {'min':0.01, 'max':15.0, 'hide':True}),
                 'Order': (3, {'min':2, 'max':5, 'hide':True}),
+                'Max depth': (4.0, {'min':0.0, 'max':7.0, 'hide':True}),
             }
         })
 
@@ -602,13 +630,16 @@ class TibaSketch:
                 max_speed *= 2
             elif planner_names[params.config.cart_planner] == 'Test simplify':
                 traj_callback = plan_simplify_test
+            elif planner_names[params.config.cart_planner] == 'Thick resample':
+                traj_callback = plan_thick_resample
+                
         if traj_callback is None:
             raise ValueError('No trajectory callback')
 
         time.sleep(0.01)
         draft = self.pad.fit_to_box(self.draft, padding=params.drawing.padding, penup_mm=0.0)
 
-
+        #pdb.set_trace()
         trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                       params.drawing.penup_mm/1000,
                                       trajectory_includes_penup,
@@ -813,6 +844,8 @@ class TibaSketch:
             self.hide_config_except('DCE thresh', 'Max iterations')
         elif planner_names[self.params.config.cart_planner] == 'Calligraphic':
             self.hide_config_except('DCE thresh', 'Isotropy', 'Angle', 'Smoothing', 'Order')
+        elif planner_names[self.params.config.cart_planner] == 'Thick resample':
+            self.hide_config_except('Max depth')
         else:
             self.hide_config_except()
 

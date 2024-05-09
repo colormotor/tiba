@@ -211,12 +211,17 @@ def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
     P = get_frame_aligned_xy_box_points(box, frame, offset)
     v3d.polyline(P)
 
+def det22(mat):
+    return mat[0,0] * mat[1,1] - mat[0,1]*mat[1,0]
 
 def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, penup_mm=0.0, get_mat=False):
     compound = True
     if not geom.is_compound(S):
         S = [S]
 
+    if not S:
+        return S
+    
     S = [np.array(P) for P in S]
     mat = np.eye(3)
 
@@ -230,10 +235,21 @@ def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, 
     mat = geom.rot_2d(geom.radians(-90)) @ mat
 
     #S = geom.affine_transform(geom.rot_2d(geom.radians(-90)), S)
-    mat = mat @ geom.rect_in_rect_transform(geom.bounding_box(S, input_padding), box)
-    S = geom.affine_transform(mat, S)
+    mat = mat @ geom.rect_in_rect_transform(geom.bounding_box([P[:,:2] for P in S], input_padding), box)
+    scale = np.sqrt(abs(det22(mat)))
 
-    if penup_mm > 0.0:
+    # If we have thickness profile, scale it to fit the drawing
+    if S[0].shape[1] > 2:
+        Sw = []
+        for P in S:
+            Q = geom.affine_transform(mat, P[:,:2])
+            w = P[:,2]*scale
+            Sw.append(np.hstack([Q, w.reshape(-1,1)]))
+        S = Sw
+    else:
+        S = geom.affine_transform(mat, S)
+
+    if penup_mm > 0.0 and S[0].shape[1] < 3:
         S = [np.hstack([P, np.zeros([P.shape[0], 1])]) for P in S]
         up = np.array([0, 0, 1])
         S = [np.vstack([P[0] + up*(penup_mm/1000),

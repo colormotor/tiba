@@ -463,7 +463,7 @@ print('wrange mm', width_range_mm)
 
 def map(x, input_range, output_range):
     return (output_range[0] + ((x - input_range[0])/(input_range[1] - input_range[0]))
-                                ,* (output_range[1] - output_range[0]))
+                                * (output_range[1] - output_range[0]))
 
 wrange = np.array(width_range_mm)/1000.0
 zrange = np.array([0.0, -4.0])/1000.0

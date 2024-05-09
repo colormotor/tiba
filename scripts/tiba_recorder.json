@@ -4,14 +4,14 @@
         "gui_hue": 0.20200000703334808,
         "gripper_mm": 16.631000518798828,
         "guiding": {
-            "x": true,
-            "y": true,
-            "z": true,
+            "x": false,
+            "y": false,
+            "z": false,
             "rot": true,
             "elbow": true
         },
         "config": {
-            "tool": 5,
+            "tool": 1,
             "cart_planner": 0,
             "dce_thresh": 250,
             "max_iterations": 450,
@@ -19,15 +19,16 @@
             "isotropy": 1.0,
             "angle": 50.0,
             "smoothing": 0.0,
-            "order": 3
+            "order": 3,
+            "max_depth": 4.0
         },
         "tsm": {
-            "dist": 2.4499995708465576,
-            "xoffset": -0.1300000101327896,
-            "voffset": -0.23000000417232513,
-            "rotx": -19,
-            "roty": -6,
-            "rotz": 176
+            "dist": 2.050001621246338,
+            "xoffset": -0.12000005692243576,
+            "voffset": -0.5299999117851257,
+            "rotx": -3,
+            "roty": 60,
+            "rotz": -176
         }
     },
     "presets": {},

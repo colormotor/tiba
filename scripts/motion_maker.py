@@ -37,7 +37,7 @@ else:
     has_robot = False
 
 params = {'Seed': (5, {'min': 0, 'max': 100}),
-          'svg_path': ('abr.svg', {'hide': True}),
+          'path': ('abr.svg', {'hide': True}),
           'GUI hue': (0.12, {'min':0, 'max': 1.0}),
           'Bezier split angle': (46.0, {'hide': True}),
           'Traj': {
@@ -123,7 +123,7 @@ def setup():
     except Exception as e:
         print(e)
         # assert(False)
-    load_svg(params.svg_path)
+    load(params.path) #params.svg_path)
 
 # def load_svg():
 #     draft = svg.load_svg_polylines('Untitled.svg') #bezier_chains('Untitled.svg')
@@ -132,8 +132,18 @@ def setup():
 #     draft = draft_in
 #     tsketch.set_draft(draft)
 
-#def load_thick_paths(path):
-    
+def load(path):
+    if '.svg' in path:
+        load_svg(path)
+    else:
+        load_thick_paths(path)
+        
+def load_thick_paths(path):
+    strokes = utils.load_json(path)
+    chains = [np.array(P) for P in strokes['points']]
+    widths = [np.array(w) for w in strokes['stroke_widths']]
+    tsketch.set_draft([np.hstack([P, w.reshape(-1,1)]) for P, w in zip(chains, widths)])
+
 def load_svg(path):
     print('Loading SVG:', path)
     try:
@@ -227,11 +237,16 @@ def gui():
         path = sketch.open_file_dialog('svg', title='Open SVG file...')
         if path:
             load_svg(path)
-            params.svg_path = path
+            params.path = path
+    if imgui.button('Load thick...'):
+        path = sketch.open_file_dialog('json', title='Open thick path file...')
+        if path:
+            load(path)
+            params.path = path
     #imgui.same_line()
     changed, params.bezier_split_angle = imgui.slider_float("Angle split", params.bezier_split_angle, 0, 180)
     if changed:
-        load_svg(params.svg_path)
+        load(params.path)
     changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
     if changed:
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
@@ -285,14 +300,17 @@ def draw():
 
     draft, trajectories = tsketch.get_fitted_draft_and_trajectories()
 
-    mat = geom.rect_in_rect_transform(geom.bounding_box(draft), draft_box, 10)
-    S = geom.affine_transform(mat, draft)
+    draft_2d = [P[:,:2] for P in draft]
+    mat = geom.rect_in_rect_transform(geom.bounding_box(draft_2d), draft_box, 10)
+    S = geom.affine_transform(mat, draft_2d)
     for i, P in enumerate(S):
         stroke(0, 0.5)
         polyline(P)
 
+    
     if trajectories is not None:
-        S = geom.affine_transform(mat, trajectories)
+        trajectories_2d = [P[:,:2] for P in trajectories]
+        S = geom.affine_transform(mat, trajectories_2d)
         for i, P in enumerate(S):
             stroke(0) #*plut.default_color(i), 0.5)
             polyline(P)
