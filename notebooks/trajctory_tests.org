@@ -36,12 +36,14 @@ from PIL import Image
 
 #+RESULTS:
 : Loading ros
+: base path None
 : Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
 : Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
 : #################################################
 : STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE
 : Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
 : Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+: Running in /Users/colormotor/develop/teaching/py5canvas/py5canvas
 
 ** Tests
 Retrieve joint configuration if we re connected to the server
@@ -475,11 +477,13 @@ def z_to_width(z):
 
 #widths = np.ones_like(widths)*0.001
 print([len(bezier.split_chain(chain)) for chain in chains])
-#chains_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(chains, widths)]
-chains_3d = [np.hstack([Cp, np.zeros((len(Cp), 1))]) for Cp, w in zip(chains, widths)]
-chains_3d = sum([bezier.split_chain(chain, 2) for chain in chains_3d], [])
+chains_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(chains, widths)]
+#chains_3d = [np.hstack([Cp, np.zeros((len(Cp), 1))]) for Cp, w in zip(chains, widths)]
 
-trajectories = [tu.plan_lqt_bezier(Cp, 4.5, cfg.cartesian_speed, cfg.acceleration_time, stop_movement=True, alpha=0.0, simga=10, order=3, iterative=True) for Cp in chains_3d]
+trajectories = [tu.resample_bezier(chain, cfg.cartesian_speed, cfg.acceleration_time) for chain in chains_3d]
+
+#chains_3d = sum([bezier.split_chain(chain, 2) for chain in chains_3d], [])
+#trajectories = [tu.plan_lqt_bezier(Cp, 4.5, cfg.cartesian_speed, cfg.acceleration_time, stop_movement=True, alpha=0.0, simga=10, order=3, iterative=True) for Cp in chains_3d]
 #trajectories = tu.plan_polylines_time_optimal(trajectories, cfg.cartesian_speed, cfg.acceleration_time)
 c = canvas.Canvas(512, 512)
 c.set_color_scale(1.0)
@@ -491,28 +495,30 @@ for Cp, w in zip(chains, widths):
     c.fill(1,0,0,0.9)
     c.no_stroke()
     c.shape(S)
-    c.stroke(0,1,1)
-    c.stroke_weight(0.001)
-    c.no_fill()
-    c.polyline(Cp)
+    #c.stroke(0,1,1)
+    #c.stroke_weight(0.001)
+    #c.no_fill()
+    #c.polyline(Cp)
 
 for Xw in trajectories:
+    #print(Xw.shape)
     S = geom.thick_curve(Xw, z_to_width)
     c.fill(0)
     c.no_stroke()
     c.shape(S)
-c.circle(Xw[0][:2], 0.001)
-c.fill(1,0,0)
-c.circle(Cp[-1][:2], 0.001)
-c.no_fill()
-c.stroke(1,0,0)
-c.rectangle(itiba.pad.box)
+
+# c.circle(Xw[0][:2], 0.001)
+# c.fill(1,0,0)
+# c.circle(Cp[-1][:2], 0.001)
+# c.no_fill()
+# c.stroke(1,0,0)
+# #c.rectangle(itiba.pad.box)
 display(Image.fromarray(c.get_image()))
 
 ply.figure()
 for X in trajectories:
     ply.stroke(X[:,:2], 'k')
-ply.rectangle(itiba.pad.box, color='r')
+ply.rectangle(itiba.pad.box, color='b')
 ply.axis_equal()
 ply.show('plt')
 #c.show()
@@ -523,13 +529,10 @@ ply.show('plt')
 : Loading ros
 : wrange mm [0.049136095444878215, 1.7969771881056062]
 : [1]
-: Stop? True
-: STOP MOVEMENT
-: (9, 2246) (20214, 20214) (9, 9) 2246
 : 448
-[[file:./.ob-jupyter/e957810df9b97f2eacabe517291474c4772d7dac.png]]
+[[file:./.ob-jupyter/32527ca3eae3ce9f0879147c75c0dbfda34556a0.png]]
 : Invalid arguments 1 ([array([-0.10868005, -0.14263601]), array([0.1124231, 0.1479329])],)
-[[file:./.ob-jupyter/2da1db804cfc5937df153161e27709d6f4ba2deb.png]]
+[[file:./.ob-jupyter/3bf1d0000bb143fcc83e3a581c6fbf50ae2cae1d.png]]
 :END:
 
 * Draw trjectory
@@ -579,50 +582,49 @@ Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/fr
 Post init
 Post init
 Post init
-Iteration 1, Cost: 0.458056, alpha= 1, time= 0.00511879
-Iteration 2, Cost: 0.00374797, alpha= 1, time= 0.00524571
-Iteration 3, Cost: 0.000421251, alpha= 1, time= 0.00546462
-Iteration 4, Cost: 0.000421089, alpha= 1, time= 0.00520696
-Iteration 5, Cost: 0.000421089, alpha= 1, time= 0.00509813
-Iteration 6, Cost: 0.000421089, alpha= 1, time= 0.00508708
-Iteration 7, Cost: 0.000421089, alpha= 1, time= 0.00510258
-Iteration 8, Cost: 0.000421089, alpha= 0.5, time= 0.00699112
-Max accel local: 1.3077522950355247
+Iteration 1, Cost: 0.406272, alpha= 1, time= 0.00440188
+Iteration 2, Cost: 0.00349269, alpha= 1, time= 0.00444438
+Iteration 3, Cost: 0.00049645, alpha= 1, time= 0.00443408
+Iteration 4, Cost: 0.000496299, alpha= 1, time= 0.00445154
+Iteration 5, Cost: 0.000496299, alpha= 1, time= 0.00442971
+Iteration 6, Cost: 0.000496299, alpha= 0.125, time= 0.00953858
+Max accel local: 1.567392586603128
 dt_pre: 0.01
-Iteration 1, Cost: 0.874643, alpha= 1, time= 0.153281
-Iteration 2, Cost: 0.138439, alpha= 1, time= 0.158746
-Iteration 3, Cost: 0.0057191, alpha= 1, time= 0.159291
-Iteration 4, Cost: 0.00541776, alpha= 1, time= 0.163464
-Iteration 5, Cost: 0.00540324, alpha= 1, time= 0.159644
-Iteration 6, Cost: 0.005402, alpha= 1, time= 0.161984
-Iteration 7, Cost: 0.0054019, alpha= 1, time= 0.162225
-Iteration 8, Cost: 0.00540189, alpha= 1, time= 0.164332
-Iteration 9, Cost: 0.00540189, alpha= 1, time= 0.164858
-Iteration 10, Cost: 0.00540189, alpha= 1, time= 0.159739
-Iteration 11, Cost: 0.00540189, alpha= 1, time= 0.160308
-Iteration 12, Cost: 0.00540189, alpha= 1, time= 0.162455
-Iteration 13, Cost: 0.00540189, alpha= 1, time= 0.160014
-Iteration 14, Cost: 0.00540189, alpha= 1, time= 0.159587
-Iteration 15, Cost: 0.00540189, alpha= 1, time= 0.159644
-Iteration 16, Cost: 0.00540189, alpha= 1, time= 0.162942
-Iteration 17, Cost: 0.00540189, alpha= 1, time= 0.159417
-Iteration 18, Cost: 0.00540189, alpha= 1, time= 0.15998
-Iteration 19, Cost: 0.00540189, alpha= 0.0625, time= 0.406483
-Iteration 20, Cost: 0.00540189, alpha= 0.015625, time= 0.528272
-Max accel local: 2.297417164234525
+Iteration 1, Cost: 0.855137, alpha= 1, time= 0.157153
+Iteration 2, Cost: 0.128924, alpha= 1, time= 0.160023
+Iteration 3, Cost: 0.00571402, alpha= 1, time= 0.161542
+Iteration 4, Cost: 0.0054444, alpha= 1, time= 0.160774
+Iteration 5, Cost: 0.00543063, alpha= 1, time= 0.160521
+Iteration 6, Cost: 0.0054294, alpha= 1, time= 0.163106
+Iteration 7, Cost: 0.00542929, alpha= 1, time= 0.163483
+Iteration 8, Cost: 0.00542928, alpha= 1, time= 0.161364
+Iteration 9, Cost: 0.00542928, alpha= 1, time= 0.159966
+Iteration 10, Cost: 0.00542928, alpha= 1, time= 0.158229
+Iteration 11, Cost: 0.00542928, alpha= 1, time= 0.162271
+Iteration 12, Cost: 0.00542928, alpha= 1, time= 0.156258
+Iteration 13, Cost: 0.00542928, alpha= 1, time= 0.165418
+Iteration 14, Cost: 0.00542928, alpha= 1, time= 0.15976
+Iteration 15, Cost: 0.00542928, alpha= 1, time= 0.163624
+Iteration 16, Cost: 0.00542928, alpha= 1, time= 0.156748
+Iteration 17, Cost: 0.00542928, alpha= 0.25, time= 0.278461
+Iteration 18, Cost: 0.00542928, alpha= 0.000976562, time= 0.750639
+Iteration 19, Cost: 0.00542928, alpha= 1, time= 0.164171
+Iteration 20, Cost: 0.00542928, alpha= 1, time= 0.158129
+Max accel local: 2.6846460729896275
 dt_pre: 0.01
-Iteration 1, Cost: 1.1877, alpha= 1, time= 0.005155
-Iteration 2, Cost: 0.146915, alpha= 1, time= 0.00517908
-Iteration 3, Cost: 0.000525337, alpha= 1, time= 0.00517333
-Iteration 4, Cost: 0.000474589, alpha= 1, time= 0.00517004
-Iteration 5, Cost: 0.000474589, alpha= 1, time= 0.00515708
-Iteration 6, Cost: 0.000474589, alpha= 1, time= 0.00515662
-Iteration 7, Cost: 0.000474589, alpha= 1, time= 0.00516496
-Iteration 8, Cost: 0.000474589, alpha= 0.03125, time= 0.0147468
-Max accel local: 1.3260603409094698
+Iteration 1, Cost: 1.05751, alpha= 1, time= 0.00433867
+Iteration 2, Cost: 0.132911, alpha= 1, time= 0.00447904
+Iteration 3, Cost: 0.000605163, alpha= 1, time= 0.00446962
+Iteration 4, Cost: 0.000558788, alpha= 1, time= 0.00448471
+Iteration 5, Cost: 0.000558788, alpha= 1, time= 0.004469
+Iteration 6, Cost: 0.000558788, alpha= 1, time= 0.00446517
+Iteration 7, Cost: 0.000558788, alpha= 1, time= 0.004467
+Iteration 8, Cost: 0.000558788, alpha= 0.25, time= 0.0077565
+Max accel local: 1.5867776128058453
 dt_pre: 0.01
 No panda, can't read states
 Finished planning task trajectories
+Plot grid: 2 3
 #+end_example
 
 
@@ -729,7 +731,13 @@ ply.show('plt')
 :END:
 * Resample Cubic spline
 #+BEGIN_SRC jupyter-python :session py
-reload(lqt)
+from importlib import reload
+from tiba import svg, geom, bezier, spatial, interface, config, utils
+import tiba.matplotlyb as ply
+import tiba.trajectory_utils as tu
+import numpy as np
+import matplotlib.pyplot as plt
+import os
 reload(geom)
 reload(interface)
 reload(bezier)
@@ -792,8 +800,8 @@ def clamp_bezier(chain):
     b0[1] = b0[1]
 #o . . o .. o #
 
-strokes = utils.load_json(os.path.expanduser('~/Dropbox/develop_box/py5sketches/tiba_tests/outputs/angry_spock_01.json')) #teststrokes3.json'))
-chains = [np.array(P) for P in strokes['points']]
+#strokes = utils.load_json(os.path.expanduser('~/Dropbox/develop_box/py5sketches/tiba_tests/outputs/angry_spock_01.json')) #teststrokes3.json'))
+#chains = [np.array(P) for P in strokes['points']]
 
 def bezier_to_bpolys(chain):
     X = []
@@ -894,7 +902,7 @@ ply.plot(Tdd, ddX[:,0])
 ply.plot(Tdd, ddX[:,1])
 ply.subplot(1,3, rowspan=2)
 ply.stroke(Px[:,:2], 'r')
-ply.stroke(X[:,:2], 'k', fill='r')
+ply.stroke(X[:,:2], 'k') #, fill='r')
 #ply.stroke(P[:,:2], 'c')
 ply.axis_equal()
 print(fig.num_cols, fig.num_rows)
@@ -902,13 +910,12 @@ ply.show() #'plt')
 #+END_SRC
 
 #+RESULTS:
-:RESULTS:
-# [goto error]
-:   Cell In[198], line 114
-:     ply.stroke(Px[:,:2], 'r')np.linspace(T[0], T[-1], len(dX))
-:                              ^
-: SyntaxError: invalid syntax
-:END:
+: (150, 3)
+: (150, 3)
+: max speed 0.3
+: max accel 0.7499999999999999
+: 3 2
+: Plot grid: 2 3
 
 
 #+BEGIN_SRC jupyter-python :session py

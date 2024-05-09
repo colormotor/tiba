@@ -589,6 +589,82 @@ def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300
         P = bezier.bezier_piecewise(chain, subd=subd)
     return plan_jerk(P, 0.0, max_speed, max_accel_time, subd, maxiter)
 
+def bezier_to_bpolys(chain):
+    X = []
+    dX = []
+    chain = np.array(chain)
+    dim = len(chain[0])
+    n = len(chain)
+    #chain = list(chain)
+    #chain[1] = chain[0]
+    #chain[-2] = chain[-1]
+    #chain = [chain[0]]*3 + chain + [chain[-1]*3]
+    beziers = bezier.chain_to_beziers(chain) #[:5]
+    beziers[0][1] = np.array(beziers[0][0])
+    beziers[-1][-2] = np.array(beziers[-1][-1])
+
+    #b0 = [np.array(beziers[0][0])]*4
+    #b1 = [np.array(beziers[-1][-1])]*4
+    #beziers = [b0] + beziers + [b1]
+    #print(beziers[:3])
+    amt = 3
+    for bez in beziers:
+        X.append(bez[0])
+        dX.append((bez[1] - bez[0])*amt)
+    X.append(bez[-1])
+    dX.append((bez[-1] - bez[-2])*amt)
+
+    # for i in range(0, n, 3):
+    #     X.append(chain[i])
+    #     if i < n-1:
+    #         dX.append((chain[i+1] - chain[i])*3)
+    #     else:
+    #         dX.append((chain[i] - chain[i-1])*3)
+    X = np.array(X)
+    dX = np.array(dX)
+    #print(dX.shape)
+    T = np.linspace(0, len(X)-1, len(X))
+    bps = []
+    for i in range(dim):
+        bps.append(BPoly.from_derivatives(T, np.vstack([X[:,i], dX[:, i]]).T))
+
+    bps2 = []
+
+    for i in range(dim):
+        bps2.append(BPoly.from_derivatives(T, np.vstack([bps[i](T)] + [bps[i].derivative(k+1)(T) for k in range(1)]).T))
+
+    return T[0], T[-1], bps
+
+def resample_bezier(Cp, max_speed, accel_time, get_t=False):
+    dt = cfg.dt
+    t0, t1, bps = bezier_to_bpolys(Cp)
+
+    dbps = [bp.derivative() for bp in bps]
+    ddbps = [dbp.derivative() for dbp in dbps]
+
+    # Estimate maximum speed and acceleration
+    x_test = np.linspace(t0, t1, len(Cp)*10) #0, T[-1], n)
+    Y = np.vstack([bp(x_test) for bp in bps]).T
+    dY = np.vstack([bp(x_test) for bp in dbps]).T
+    ddY = np.vstack([bp(x_test) for bp in ddbps]).T
+
+    smax = np.max(rownorm(dY))
+    amax = np.max(rownorm(ddY))
+
+    # Compute time step that satisfies max speed and acceleration bounds
+    max_accel = max_speed/accel_time
+    #print('max speed', max_speed)
+    #print('max accel', max_accel)
+    div_s = max_speed/smax
+    div_a = np.sqrt(max_accel/amax)
+    div = min(div_s, div_a)
+
+    x = np.arange(t0, t1, dt*div)
+    # Compute trajectory
+    Y = np.vstack([bp(x) for bp in bps]).T
+    if get_t:
+        return x, Y
+    return Y
 
 def rownorm(dP):
     return np.sqrt(np.sum(dP**2, axis=1)) 
