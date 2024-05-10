@@ -62,6 +62,7 @@ state.executing = False
 
 qpub = None
 respub = None
+qdonepub = None
 
 def msg_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Msg: %s", data.data)
@@ -127,7 +128,14 @@ def jtraj_callback(data):
     respond_done()
 
 def respond_done():
-    respub.publish("Done")
+    print("Respondig done")
+    itiba.read_states()
+    p = JointState()
+    p.name = 'Done'
+    p.position = itiba.robot.q
+    qdonepub.publish(p)
+    
+    #respub.publish("Done")
 
 def jpos_callback(data):
     q = data.position
@@ -138,9 +146,10 @@ def jpos_callback(data):
     send_joint_state()
     respond_done()
 
-def send_joint_state(verbose=False):
+def send_joint_state(verbose=False, name='q'):
     itiba.read_states()
     p = JointState()
+    p.name = name
     p.position = itiba.robot.q
     #p.name = "Tiba joint state"
     #p = JointTrajectoryPoint()
@@ -178,7 +187,7 @@ def main():
     print('Waiting for data...')
     print('__________________________________________')
 
-    global qpub, respub
+    global qpub, respub, qdonepub
 
     rospy.init_node('tiba_server', anonymous=True)
     rospy.Subscriber("/tiba/msg", String, msg_callback)
@@ -186,6 +195,7 @@ def main():
     rospy.Subscriber("/tiba/jpos", JointState, jpos_callback)
     #qpub = rospy.Publisher("/tiba/q", JointTrajectoryPoint, queue_size=10) #, queue_size=1)
     qpub = rospy.Publisher("/tiba/q", JointState, queue_size=10) #, queue_size=1)
+    qdonepub = rospy.Publisher("/tiba/qdone", JointState, queue_size=10) #, queue_size=1)
     respub = rospy.Publisher("/tiba/response", String, queue_size=10)
 
     print("Publishing")
