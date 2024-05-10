@@ -215,7 +215,7 @@ def ros_camera_info_to_cv(cam_info):
 class TibaHandeye:
     def __init__(self, ros_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml'):
         try:
-            with open(os.path.expanduser("~/.ros/easy_handeye/panda_eye_hand_calib_eye_on_hand.yaml"), 'r') as f:
+            with open(os.path.expanduser(ros_config_path), 'r') as f:
                 self.config = yaml.load(f, Loader=yaml.FullLoader)
                 c = self.config['transformation']
                 posorn = np.array([c['x'], c['y'], c['z'], c['qw'], c['qx'], c['qy'], c['qz']])
@@ -430,6 +430,18 @@ class TibaInterface:
     #     # self.ros_thread = Thread(target=self._ros_thread)
     #     # self.ros_thread_running = True
     #     # self.ros_thread.start()
+
+    def print_available_tools(self):
+        print("Available tools:")
+        print(robot.tools.keys())
+
+    def print_available_positions(self):
+        print("Available key positions:")
+        print(self.editor.positions.keys())
+
+    def print_available_scripts(self):
+        print("Available scripts:")
+        print(self.scripts.keys())
 
     def handeye_valid(self):
         return self.handeye is not None and self.handeye.is_valid()
@@ -770,6 +782,14 @@ class TibaInterface:
         self.gripper.stop()
         self.gripper.move(100.0/1000, 0.2)
 
+    def go_aruco(self):
+        if self.panda is None and state.has_ros:
+            with self.wait(): 
+                self.goto_joint_position('Aruco')
+        else:
+            self.goto_joint_position('Aruco')
+        self.clear_aruco()
+
     def plot_trajectory_stats(self, task_trajectories=[]):
         Qs = []
         dQs = []
@@ -855,6 +875,11 @@ class TibaInterface:
     def plan_task_trajectories(self, trajectories, rest=0.0, q=None, tip_frame='tiba_pen_tcp'):
         Qs, dQs = self.compute_task_trajectories(trajectories, rest, q, tip_frame)
         self.plan_joint_trajectory(Qs, dQs, trajectories)
+
+    def plan_and_execute_script(self, path, **kwargs):
+        self.plan_script(path, **kwargs)
+        if self.trajectory_status:
+            self.execute()
 
     def plan_script_key_name(self, key):
         if not key in self.scripts:
@@ -1053,3 +1078,4 @@ def plot_cartesian_trajectories(trajectories):
     for X in trajectories:
         ply.stroke3d(X)
     ply.show()
+

@@ -52,20 +52,20 @@ tools = {
         'angle': 0.0
     },
 
-    'Molotow': {
-        'tip_dist_mm': 44.0,
-        'tip_height_mm': 11.0
-    },
+    # 'Molotow': {
+    #     'tip_dist_mm': 44.0,
+    #     'tip_height_mm': 11.0
+    # },
 
-    'Molotow Thin': {
-        'tip_dist_mm': 51.0,
-        'tip_height_mm': 10.0
-    },
+    # 'Molotow Thin': {
+    #     'tip_dist_mm': 51.0,
+    #     'tip_height_mm': 10.0
+    # },
 
-    'Molotow New': {
-        'tip_dist_mm': 50.0,
-        'tip_height_mm': 9.0
-    },
+    # 'Molotow New': {
+    #     'tip_dist_mm': 50.0,
+    #     'tip_height_mm': 9.0
+    # },
 
     'Edding': {
         'tip_dist_mm': 50.0,
