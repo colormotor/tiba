@@ -9,6 +9,8 @@ from roboticstoolbox.robot.Robot import Robot
 from spatialmath import SE3
 from roboticstoolbox.tools import xacro
 from spatialmath import SE3, SO3, UnitQuaternion
+from . import config
+cfg = config.cfg
 
 import os
 
@@ -137,8 +139,8 @@ class TibaRobot(Robot):
         )
 
 
-        self.q_min = limits[0]
-        self.q_max = limits[1]
+        self.q_min = np.array(limits[0])
+        self.q_max = np.array(limits[1])
         self.qd_lim = np.array(
             [2.62, 2.62, 2.62, 2.62, 5.26, 4.18, 5.26]
         )
@@ -167,6 +169,51 @@ class TibaRobot(Robot):
         self.addconfiguration("qz", self.qz)
 
         self.pressure_range = pressure_range
+
+    def check_joint_trajectory(self, Qs, dQs):
+        qmin = np.min(Qs, axis=0)
+        qmax = np.max(Qs, axis=0)
+        if np.any(qmin < self.q_min) or np.any(qmax > self.q_max):
+            print("Joint limits exceeded")
+            return False
+        dqmax = np.max(np.abs(dQs), axis=0)
+        if np.any(dqmax > self.qd_lim):
+            print("Joint velocity limits exceeded")
+            return False
+        ddQ = np.diff(dQs, axis=0)/cfg.robot_dt
+        ddqmax = np.max(np.abs(ddQ), axis=0)
+        if np.any(ddqmax > self.qdd_lim):
+            print("Joint acceleration limits exceeded")
+            return False
+        return True
+
+    def check_cartesian_trajectories(self, trajectories):
+        from . import trajectory_utils as tu
+        if not trajectories:
+            return
+        trajectories = [np.array(P) for P in trajectories]
+        xyz_velocities = np.vstack([np.diff(P[:,:3], axis=0) / cfg.dt for P in trajectories])
+        xyz_accelerations = np.vstack([np.diff(P[:,:3], n=2, axis=0) / (cfg.dt**2) for P in trajectories])
+
+        max_accel = cfg.cartesian_speed / cfg.acceleration_time
+        vmax = np.max(np.abs(xyz_velocities), axis=0)
+        amax = np.max(np.abs(xyz_accelerations), axis=0)
+        if np.any(vmax > cfg.cartesian_speed):
+            print("Cartesian velocity limits exceeded")
+            return False
+        if np.any(amax > max_accel):
+            print("Cartesian acceleration limits exceeded")
+            return False
+
+        if len(trajectories[0][0]) > 3:
+            # Check angular velocities
+            poses = [[tu.to_pose(x) for x in P] for P in trajectories if len(P) > 1]
+            ang_velocities = sum([[tu.angdistance(a,b)/cfg.dt for a, b in zip(P, P[1:])] for P in poses], [])
+            vmax = np.max(np.abs(ang_velocities))
+            if vmax > cfg.angular_velocity:
+                print("Angular velocity limits exceeded")
+                return False
+        return True
 
     def jacobian(self, q, name):
         if q is None:

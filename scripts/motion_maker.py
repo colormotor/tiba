@@ -54,13 +54,13 @@ def random_q():
 #robot = TibaRobot(60, 0, 0) # Molotow
 # robot = TibaRobot(74, 0, 15) # Small brush
 
-def response_callback(self, data):
-    print('Received response:', data.data)
+# def response_callback(self, data):
+#     print('Received response:', data.data)
 
-def state_callback(data):
-    #print('Received q:', data.position)
-    if tsketch.itiba is not None:
-        tsketch.itiba.state_callback(data)
+# def state_callback(data):
+#     #print('Received q:', data.position)
+#     if tsketch.itiba is not None:
+#         tsketch.itiba.state_callback(data)
 
 rosloader = importlib.find_loader('rospy')
 if rosloader is not None:
@@ -106,23 +106,23 @@ def setup():
     set_color_scale(1.0)
 
     try:
-        
-        tsketch.init(sketch)
+        #tsketch.init(sketch)
         tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_motion_maker')
         
-        if rosloader is not None:
-            print("Initializing ROS")
-            try:
-                rospy.Subscriber('/tiba/response', String, response_callback)
-                rospy.Subscriber('/tiba/q', JointState, state_callback)
-                tsketch.itiba.send_msg('start: Tiba sketch connecting')
-            except Exception as e:
-                print(e)
-                tsketch.itiba.has_ros = False
-
+        # if rosloader is not None:
+        #     print("Initializing ROS")
+        #     try:
+        #         rospy.Subscriber('/tiba/response', String, response_callback)
+        #         rospy.Subscriber('/tiba/q', JointState, state_callback)
+        #         tsketch.itiba.send_msg('start: Tiba sketch connecting')
+        #     except Exception as e:
+        #         print('Ros init failed, disabling')
+        #         print(e)
+        #         tsketch.itiba.has_ros = False
     except Exception as e:
         print(e)
-        # assert(False)
+        raise(e)
+        assert(False)
     load(params.path) #params.svg_path)
 
 # def load_svg():
@@ -140,6 +140,8 @@ def load(path):
         
 def load_thick_paths(path):
     strokes = utils.load_json(path)
+    if not strokes:
+        return
     chains = [np.array(P) for P in strokes['points']]
     widths = [np.array(w) for w in strokes['stroke_widths']]
     tsketch.set_draft([np.hstack([P, w.reshape(-1,1)]) for P, w in zip(chains, widths)])
@@ -233,13 +235,8 @@ def gui():
         t2 = threading.Thread(target=thread_func2, name="Thread 2")
         threads.append(t1)
         threads.append(t2)
-    if imgui.button('Load SVG...'):
-        path = sketch.open_file_dialog('svg', title='Open SVG file...')
-        if path:
-            load_svg(path)
-            params.path = path
-    if imgui.button('Load thick...'):
-        path = sketch.open_file_dialog('json', title='Open thick path file...')
+    if imgui.button('Load Paths...'):
+        path = sketch.open_file_dialog(['svg', 'json'], title='Open SVG or Json (thick) file...')
         if path:
             load(path)
             params.path = path
@@ -336,7 +333,7 @@ def draw():
     text_size(15)
     fill(1)
     for i in range(3):
-        text([10, 60 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
+        text([10, 70 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
 
 
 def draw_gl():

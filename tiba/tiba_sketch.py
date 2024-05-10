@@ -215,7 +215,11 @@ def plan_thick_resample(samples,
         return map(z, zrange, wrange)
 
     chains_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(chains, widths)]
-    trajectories = [tu.resample_bezier(chain, max_speed, accel_time) for chain in chains_3d]
+
+    if params.config.resample_topp:
+        trajectories,_,_ = tu.plan_bezier_chains_time_optimal(chains_3d, cfg.cartesian_speed, cfg.acceleration_time)
+    else:
+        trajectories = [tu.resample_bezier(chain, max_speed, accel_time) for chain in chains_3d]
     return trajectories, [P[:,:2] for P in samples]
     
 def plan_polylines(planning_callback,
@@ -350,6 +354,10 @@ class TibaSketch:
              gripper=None,
              init_node=''):
 
+        # The py5canvas "sketch" that will be used to run this
+        self.sketch = sketch
+        self.trajectory_callback = callback
+
         # Actual interface to the robot. Here this is not used to control the robot directly
         # but to plan and execute trajectories
         if input_tools is None:
@@ -358,6 +366,8 @@ class TibaSketch:
             self.tools = input_tools
 
         # Actual interface to robot (computes IK, holds reference to robot model and drawing pad
+        print("Init interface")
+
         self.itiba = TibaInterface(panda=panda, gripper=gripper, init_node=init_node)
         # 3d view for the robot
         self.v3d = GlView3d(sketch)
@@ -367,10 +377,6 @@ class TibaSketch:
         # Visualization limits, trajectories will be quantized to fit these numbers
         self.max_steps = 500
         self.max_trajectory_points = 200
-
-        # The py5canvas "sketch" that will be used to run this
-        self.sketch = sketch
-        self.trajectory_callback = callback
 
         # Setup robot
         tool_data = self.get_tool_by_index(self.params.config.tool)
@@ -436,6 +442,7 @@ class TibaSketch:
                 'Smoothing': (0.0, {'min':0.01, 'max':15.0, 'hide':True}),
                 'Order': (3, {'min':2, 'max':5, 'hide':True}),
                 'Max depth': (4.0, {'min':0.0, 'max':7.0, 'hide':True}),
+                'Resample TOPP': False,
             }
         })
 
@@ -646,8 +653,13 @@ class TibaSketch:
                                       params,
                                       debug=debug)
 
-        self.trajectories_2d = [np.array(P)[:,:2] for P in trajectories]
-        self.draft_fitted = [np.array(P)[:,:2] for P in draft]
+        def adapt_xy(P):
+            if type(P)==list:
+                return [adapt_xy(Q) for Q in P]
+            return np.vstack([-P[:,1], -P[:,0]]).T
+
+        self.trajectories_2d = adapt_xy([np.array(P)[:,:2] for P in trajectories])
+        self.draft_fitted = adapt_xy([np.array(P)[:,:2] for P in draft])
 
         self.trajectories = self.pad.fit_to_frame(trajectories)
         self.trajectories_computed = True
@@ -705,8 +717,8 @@ class TibaSketch:
             if script:
                 args = script['args'] if 'args' in script else {}
                 self.plan_script(script['file'], **args)
-                if self.itiba.Qs:
-                    self.itiba.plot_trajectory_stats()
+                #if self.itiba.Qs:
+                #    self.itiba.plot_trajectory_stats()
 
             ui.imgui_text_separator('Robot Actions')
             if imgui.button('Home'):
@@ -722,6 +734,10 @@ class TibaSketch:
             #     self.dip_trajectory()
 
             ui.imgui_text_separator('Trajectory')
+            changed, self.itiba.safe_mode = ui.imgui_color_checkbox("Safe mode", self.itiba.safe_mode)
+
+            if imgui.button('Clear plans'):
+                self.clear()
 
             if imgui.button('Compute trajectories only'):
                 # self.threads.append(threading.Thread(target=lambda: self.compute_trajectories(debug=True),
@@ -747,8 +763,8 @@ class TibaSketch:
                 def compute_polygons_and_plot():
                     steps, fk_points = self.compute_steps(self.itiba.Qs)
                     self.steps, self.fk_points = steps, fk_points
-                    if self.itiba.Qs:
-                        self.itiba.plot_trajectory_stats()
+                    #if self.itiba.Qs:
+                    #    self.itiba.plot_trajectory_stats()
                     # self.itiba.plot_trajectory_stats(self.task_trajectories_augmented)
 
                     #self.steps, self.fk_points = self.compute_steps(self.itiba.Qs)
@@ -775,16 +791,25 @@ class TibaSketch:
                 else:
                     if imgui.button('Simulate trajectory'):
                         self.itiba.simulate()
-                    if ui.imgui_color_button("Execute trajectory"):
-                        imgui.open_popup('Execute')
 
+                    if ui.imgui_color_button("Execute trajectory"):
+                        # If safe mode is active or we detected a problem ask twice
+                        if self.itiba.safe_mode or not self.itiba.trajectory_status:
+                            imgui.open_popup('Execute')
+                        else:
+                        # Othwerwise just send it
+                            if 'no_server' in self.flags:
+                                self.itiba.execute()
+                            else:
+                                self.itiba.send_joint_trajectory()
+                                #
                     if imgui.begin_popup_modal('Execute').opened:
                         imgui.text('Are you sure?')
                         if imgui.button('OK'):
                             if 'no_server' in self.flags:
                                 self.itiba.execute()
                             else:
-                                self.itiba.send_joint_trajectory() #self.itiba.Qs, self.itiba.dQs)
+                                self.itiba.send_joint_trajectory()
                             imgui.close_current_popup()
                         imgui.same_line()
                         if imgui.button('Cancel'):
@@ -845,7 +870,7 @@ class TibaSketch:
         elif planner_names[self.params.config.cart_planner] == 'Calligraphic':
             self.hide_config_except('DCE thresh', 'Isotropy', 'Angle', 'Smoothing', 'Order')
         elif planner_names[self.params.config.cart_planner] == 'Thick resample':
-            self.hide_config_except('Max depth')
+            self.hide_config_except('Max depth', 'Resample TOPP')
         else:
             self.hide_config_except()
 
@@ -875,6 +900,13 @@ class TibaSketch:
         c.text_size(20)
         c.fill(1)
         c.text([10, 30], 'Current tool: ' + self.get_tool_name(self.params.config.tool))
+        c.text_size(12)
+        if self.itiba.trajectory_status:
+            c.fill(0,1,0)
+            c.text([10, 45], 'Trajectory status: OK')
+        else:
+            c.fill(1,0,0)
+            c.text([10, 45], 'Trajectory status: Error')
 
         c.text_size(12)
         c.fill(0.5)
@@ -885,7 +917,7 @@ class TibaSketch:
             cam_image = np.array(handeye.cam_image)
             w = cam_image.shape[1]
             h = cam_image.shape[0]
-            if handeye.is_valid():
+            if self.itiba.handeye_valid():
                 size = 50/1000
                 points = [[0,0,0],
                         [size,0,0],
@@ -1005,7 +1037,7 @@ class TibaSketch:
                 if len(self.fk_points):
                     v3d.points(self.fk_points)
 
-        if self.itiba.handeye.is_valid():
+        if self.itiba.handeye_valid():
             self.itiba.handeye.draw_gl(self.itiba, v3d)
     
 

@@ -214,19 +214,25 @@ def ros_camera_info_to_cv(cam_info):
 
 class TibaHandeye:
     def __init__(self, ros_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml'):
-        with open(os.path.expanduser("~/.ros/easy_handeye/panda_eye_hand_calib_eye_on_hand.yaml"), 'r') as f:
-            self.config = yaml.load(f, Loader=yaml.FullLoader)
-            c = self.config['transformation']
-            posorn = np.array([c['x'], c['y'], c['z'], c['qw'], c['qx'], c['qy'], c['qz']])
-            self.hand_to_camera = tu.to_pose(posorn)
+        try:
+            with open(os.path.expanduser("~/.ros/easy_handeye/panda_eye_hand_calib_eye_on_hand.yaml"), 'r') as f:
+                self.config = yaml.load(f, Loader=yaml.FullLoader)
+                c = self.config['transformation']
+                posorn = np.array([c['x'], c['y'], c['z'], c['qw'], c['qx'], c['qy'], c['qz']])
+                self.hand_to_camera = tu.to_pose(posorn)
+            loaded_config = True
+        except FileNotFoundError as e:
+            loaded_config = False
+            print(e)
 
         # Init ros subscribers
         self.aruco_frame = None
         self.cam_image = None
         self.cam_info = None
         self.cam_frame = None
+        self.hand_to_camera = None
         
-        if state.has_ros:
+        if state.has_ros and loaded_config:
             from geometry_msgs.msg import PoseStamped
             from sensor_msgs.msg import Image as msg_Image
             from visualization_msgs.msg import Marker
@@ -262,10 +268,13 @@ class TibaHandeye:
 
     def is_valid(self):
         return (self.cam_info is not None and
+                self.hand_to_camera is not None and
                 self.cam_image is not None  and
                 self.aruco_frame is not None)
         
     def update(self, interface):
+        if self.hand_to_camera is None:
+            return
         q = interface.robot.q
         hand_frame = np.array(interface.robot.fkine(q, start='tiba_link0', end='tiba_hand'))
         self.cam_frame =  hand_frame @ np.array(self.hand_to_camera)
@@ -339,6 +348,9 @@ class TibaInterface:
         self.pad.load()
         self.pad.update()
 
+        self.safe_mode = True
+        self.trajectory_status = True
+
         self.robot = robot.TibaRobot()
         self.collision_robot = robot.TibaRobot()
         self.robot.q = self.robot.home
@@ -366,30 +378,34 @@ class TibaInterface:
 
         self.server_busy = False
 
+        self.pen_offset_base_mm = 0.0
+
         print("#################################################")
         print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
         if state.has_ros:
             try:
                 if init_node:
                     print("Initializing node", init_node)
-                    rospy.init_node(init_node, anonymous=True)
+                    rospy.init_node(init_node, anonymous=True, log_level=rospy.ERROR)
                     rospy.Subscriber('/tiba/q', JointState, self.state_callback)
                     rospy.Subscriber('/tiba/response', String, self.response_callback)
 
                 self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
                 self.jpos_pub = rospy.Publisher('/tiba/jpos', JointState, queue_size=10)
+                self.send_msg('start: Tiba sketch connecting')
                 # rospy.Subscriber('/tiba/response', String, self.response_callback)
                 # rospy.Subscriber('/tiba/q', JointState, self.state_callback)
                 # rospyrospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
                 # self.send_msg('start: Tiba sketch connecting')
+                self.handeye = TibaHandeye()
             except rospy.exceptions.ROSException as e:
-                print("Ros issue")
+                print("Ros issue, disabling")
                 state.has_ros = False
-                
-            self.handeye = TibaHandeye()
+                self.handeye = None
         else:
             self.handeye = None
+        print('end interface init')
         #self.ros_thread_running = False
         #self.ros_thread = None
 
@@ -414,6 +430,9 @@ class TibaInterface:
     #     # self.ros_thread = Thread(target=self._ros_thread)
     #     # self.ros_thread_running = True
     #     # self.ros_thread.start()
+
+    def handeye_valid(self):
+        return self.handeye is not None and self.handeye.is_valid()
 
     def shutdown(self):
         pass
@@ -440,6 +459,17 @@ class TibaInterface:
             Qs = self.Qs
         if dQs is None:
             dQs = self.dQs
+
+        self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
+        if not self.trajectory_status:
+            print("Joint trajectory exceeds safety limits, plotting")
+            ilqr.plot_trajectory_stats(self.robot,
+                                            Qs,
+                                            dQs
+                                            )
+
+            return
+
         jtraj = JointTrajectory()
         jtraj.header = Header()
         jtraj.header.stamp = rospy.Time.now()
@@ -758,11 +788,24 @@ class TibaInterface:
         ''' Plan a joint approach to a target position'''
         Qs, dQs = tu.joint_approach(self.robot.q, q)
         self.motions = [Motion(Qs, dQs)]
+        self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
+        if not self.trajectory_status or self.safe_mode:
+            self.plot_trajectory_stats()
 
-        
+
     def plan_joint_trajectory(self, Qs, dQs, plot=False, task_trajectories=[]):
         self.read_states()
+        # PLOT the trajctory if
+        self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
+        print('Trajectory status', self.trajectory_status)
+        print('Safe mode', self.safe_mode)
+
         self.motions = [Motion(Qs, dQs)]
+
+        if not self.trajectory_status or self.safe_mode:
+            print('Plotting')
+            self.plot_trajectory_stats(task_trajectories)
+
         #utils.save_pkl([self.Qs, self.dQs], 'trajectory.pkl')
         # if plot:
             # self.plot_trajectory_stats(task_trajectories)
@@ -782,8 +825,10 @@ class TibaInterface:
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
         The result is a joint trajectory sampled at (1.0 / cfg.robot_dt) Hz
         '''
+
         if q is None:
             q = self.robot.q
+
         planner = ilqr.iLQRPlannerVelocity(self.robot.urdf_file,
                                            q,
                                            subsample=int(cfg.dt/cfg.robot_dt),
@@ -793,6 +838,10 @@ class TibaInterface:
         Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, get_trajectories=True)
 
 
+        if not self.robot.check_cartesian_trajectories(linked_trajectories):
+            print("Warning in computed cartesian trajectories")
+            plot_cartesian_trajectories(linked_trajectories)
+            return
         # planner = ilqr.iLQRPlannerAcceleration(self.robot.urdf_file,
         #                                        q,
         #                                        subsample=int(cfg.dt/cfg.robot_dt),
@@ -965,6 +1014,9 @@ class TibaInterface:
             print(e)
             traceback.print_exc()
 
+        self.trajectory_status = self.robot.check_joint_trajectory(self.Qs, self.dQs)
+        if not self.trajectory_status or self.safe_mode:
+            self.plot_trajectory_stats()
 
 def plot_cartesian_trajectories(trajectories):
     return

@@ -17,6 +17,7 @@ class Config:
 
     @property
     def cartesian_speed(self):
+        assert(self.speed_factor < 1.5)
         return self._default_cartesian_speed*self.speed_factor
 
     @property

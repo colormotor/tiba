@@ -30,3 +30,11 @@ def imgui_color_button(text, color=defaults.highlight):
     res = imgui.button(text)
     imgui.pop_style_color()
     return res
+
+def imgui_color_checkbox(text, value, color=defaults.highlight):
+    if len(color) == 3:
+        color = np.concatenate([color, [1.0]])
+    imgui.push_style_color(imgui.COLOR_BUTTON, *color)
+    changed, value = imgui.checkbox(text, value)
+    imgui.pop_style_color()
+    return changed, value
