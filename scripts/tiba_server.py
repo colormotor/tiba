@@ -53,6 +53,7 @@ else:
     panda = None
 
 itiba = TibaInterface(panda, gripper)
+itiba.safe_mode = False
 #robot.q = robot.qr
 
 state = lambda: None
@@ -64,6 +65,7 @@ respub = None
 
 def msg_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Msg: %s", data.data)
+    # GOTO joint position is handled explicitly with a joint position (jpos_callback)
     if 'exec:' in data.data:
         cmd = data.data.split(':')[1]
         print('Executing command: ', cmd)

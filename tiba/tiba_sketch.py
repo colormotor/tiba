@@ -706,8 +706,8 @@ class TibaSketch:
            hand = self.robot.get_pose(None, 'tiba_hand_tcp')
            print('Hand TCP pos', list(hand.t))
         button_color = [1.0, 0.5, 0.0, 1.0]
-        if imgui.button('Clear aruco'):
-            self.itiba.clear_aruco()
+        if imgui.button('Update aruco'):
+            self.itiba.go_aruco()
             
         _, cfg.speed_factor = imgui.slider_float('Speed factor', cfg.speed_factor, 0.1, 1.0)
 
