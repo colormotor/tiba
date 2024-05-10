@@ -913,6 +913,7 @@ class TibaSketch:
         c.text([c.width-290, 20], 'Drag to rotate, Ctrl-drag to zoom, Shift-drag to zoom')
 
         handeye = self.itiba.handeye
+        print(handeye)
         if handeye is not None and handeye.cam_image is not None:
             cam_image = np.array(handeye.cam_image)
             w = cam_image.shape[1]
@@ -949,7 +950,7 @@ class TibaSketch:
                         
                 cam_image = cc.get_image()
             else:
-                print("Invalid handeye")
+                pass #print("Invalid handeye")
             ref_h = 180
             c.image(cam_image, 0, c.height-ref_h, (w/h)*ref_h, ref_h)
 

@@ -223,14 +223,15 @@ class TibaHandeye:
             loaded_config = True
         except FileNotFoundError as e:
             loaded_config = False
+            self.hand_to_camera = None
             print(e)
+            print('Could not load hand to camera')
 
         # Init ros subscribers
         self.aruco_frame = None
         self.cam_image = None
         self.cam_info = None
         self.cam_frame = None
-        self.hand_to_camera = None
         
         if state.has_ros and loaded_config:
             from geometry_msgs.msg import PoseStamped
@@ -274,6 +275,7 @@ class TibaHandeye:
         
     def update(self, interface):
         if self.hand_to_camera is None:
+            print('No hand to camera')
             return
         q = interface.robot.q
         hand_frame = np.array(interface.robot.fkine(q, start='tiba_link0', end='tiba_hand'))
