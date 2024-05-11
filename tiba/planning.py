@@ -1,10 +1,11 @@
+from importlib import reload
 from . import config, geom, utils, bezier, svg, spatial
 from . import trajectory_utils as tu
 from . import matplotlyb as ply
 from easydict import EasyDict as edict
 from PIL import Image
 import numpy as np
-
+reload(tu)
 cfg = config.cfg
 
 class TrajectoryPlanner:
@@ -80,7 +81,7 @@ class TrajectoryPlanner:
         print("Planning draft with %d paths", len(self.draft))
         draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
         print("Resulting fitted draft", len(draft))
-        trajectories, distances = plan_polylines(traj_callback, draft, max_speed, accel_time,
+        trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                         self.penup_mm/1000,
                                         trajectory_includes_penup,
                                         params,
@@ -91,7 +92,6 @@ class TrajectoryPlanner:
                 return [adapt_xy(Q) for Q in P]
             return np.vstack([-P[:,1], -P[:,0]]).T
 
-        self.distances = distances
         self.trajectories_2d = adapt_xy([np.array(P)[:,:2] for P in trajectories])
         self.draft_fitted = adapt_xy([np.array(P)[:,:2] for P in draft])
 
@@ -107,6 +107,9 @@ class TrajectoryPlanner:
         self.itiba.plan_task_trajectories(trajectories)
         self.task_trajectories_augmented = trajectories
  
+    def compute_and_pan_with_dips(self, distance=1000.0):
+        self.compute_trajectories(debug)
+
 
     def get_plan_image(self):
         from py5canvas import canvas
@@ -126,7 +129,7 @@ class TrajectoryPlanner:
                 cc = canvas.Canvas(w, h)
                 cc.image(cam_image)
                 cc.no_fill()
-                cc.stroke_weight(10)
+                cc.stroke_weight(1)
                 cc.stroke(255, 0, 0)
                 #c.circle(200, 200, 100)
                 cc.line(projected_points[0], projected_points[1])
@@ -143,7 +146,7 @@ class TrajectoryPlanner:
 
                     for i, trajectory in enumerate(self.trajectories):
                         projected_points = handeye.project_points(trajectory, 'world')
-                        cc.stroke(0)
+                        cc.stroke(255, 0, 0, 128)
                         cc.stroke_weight(3.0)
                         cc.polyline(projected_points)
                         
@@ -342,16 +345,15 @@ def plan_polylines(planning_callback,
         if not paths:
             return []
         trajectories = [paths[0]]
-        distances_downs = [geom.chord_length(paths[0])]
         if len(paths) > 1:
             for i in range(len(paths)-1):
                 P1 = paths[i]
                 P2 = paths[i+1]
                 if geom.distance(P1[-1], P2[0]) > 2e-3:
                     trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=accel_time))
-                    distances_down.append(0.0)
+                    #distances_down.append(0.0)
                 trajectories.append(P2)
-                distances_down.append(geom.chord_length(P2))
+                #distances_down.append(geom.chord_length(P2))
 
     else:
         # Create one motor plan with pen-ups and plan single trajectory
@@ -360,7 +362,7 @@ def plan_polylines(planning_callback,
                                                      max_speed=max_speed,
                                                      accel_time=accel_time,
                                                      params=params)
-        distances_down = [geom.chord_length(traj) for traj in trajectories]
+        #distances_down = [geom.chord_length(traj) for traj in trajectories]
 
     velocities = [np.diff(P, axis=0) / cfg.dt for P in trajectories]
     accelerations = [np.diff(P, n=2, axis=0) / (cfg.dt**2) for P in trajectories]
@@ -409,7 +411,7 @@ def plan_polylines(planning_callback,
             vals = (X[:,2])/(box[1][2] - box[0][2])
             ply.stroke3d(X, color=[ply.cmap(z, 'magma') if z >=0 else ply.cmap(-z, 'viridis') for z in vals])
         ply.show()
-    return trajectories, distances_down
+    return trajectories
 
 def load(path, params):
     if '.svg' in path:

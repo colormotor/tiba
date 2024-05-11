@@ -917,8 +917,8 @@ class TibaInterface:
         #
         Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, get_trajectories=True)
 
-
-        if not self.robot.check_cartesian_trajectories(linked_trajectories):
+        self.trajectory_status = self.robot.check_cartesian_trajectories(linked_trajectories)
+        if not self.trajectory_status:
             print("Warning in computed cartesian trajectories")
             plot_cartesian_trajectories(linked_trajectories)
             return Qs, dQs

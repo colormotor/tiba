@@ -418,22 +418,25 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
     accelerations = []
     for idx, P in enumerate(polylines):
         # Traj dt used for computations
-        nattempt = 2
+        nattempt = 5
         print("%d of %d: Planning %d points"%(idx+1, len(polylines), len(P)))
         smoother = TrajectorySmoother(
         dof, max_velocity, max_acceleration, tol
         )
 
+        POrig = np.array(P)
+        ds = 1.0 / 2000
         for i in range(nattempt):
             P = np.array(P)
             result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
             if not result.success:
                 print('Smoothing failed in trajectory smoothing, attempt %d of %d'%(i+1, nattempt))
                 print(max_speed, accel_time, tol)
-                Q = np.array(P) #[:,:2]
+                Q = np.array(POrig) #[:,:2]
                 glob.Q = Q
                 glob.P = np.array(P)
-                P = geom.uniform_sample(P, 1.0/1000)
+                P = geom.uniform_sample(Q, ds)
+                ds = ds*2
 
                 # A = geom.degrees(geom.turning_angles(Q))
                 # L = geom.chord_lengths(Q)
@@ -697,6 +700,10 @@ def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
                                               max_speed=max_speed,
                                               accel_time=max_accel_time,
                                               tol=0.3)
+    if not len(paths):
+        print(P)
+        print("Failed planning lifting motion")
+        raise ValueError
     return paths[0]
 
     #u = geom.cum_chord_lengths(P)
