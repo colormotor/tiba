@@ -12,6 +12,7 @@ start_offset = 70/1000
 dip_offset = -35/1000
 clean_offset = -12/1000
 
+joint_move('Home')
 joint_move('Dip')
 tool_align_dip()
 

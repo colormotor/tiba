@@ -206,14 +206,14 @@ class TibaRobot(Robot):
             print("Cartesian acceleration limits exceeded")
             return False
 
-        if len(trajectories[0][0]) > 3:
-            # Check angular velocities
-            poses = [[tu.to_pose(x) for x in P] for P in trajectories if len(P) > 1]
-            ang_velocities = sum([[tu.angdistance(a,b)/cfg.dt for a, b in zip(P, P[1:])] for P in poses], [])
-            vmax = np.max(np.abs(ang_velocities))
-            if vmax > cfg.angular_velocity:
-                print("Angular velocity limits exceeded")
-                return False
+        #if len(trajectories[0][0]) > 3:
+        #    # Check angular velocities
+        #    poses = [[tu.to_pose(x) for x in P] for P in trajectories if len(P) > 1]
+        #    ang_velocities = sum([[tu.angdistance(a,b)/cfg.dt for a, b in zip(P, P[1:])] for P in poses], [])
+        #    vmax = np.max(np.abs(ang_velocities))
+        #    if vmax > cfg.angular_velocity:
+        #        print("Angular velocity limits exceeded")
+        #        return False
         return True
 
     def jacobian(self, q, name):

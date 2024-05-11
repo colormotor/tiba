@@ -61,9 +61,26 @@ else:
     desk = None
     panda = None
 
+
+
+circle_button = FrankaButton('circle')
+
 itiba = TibaInterface(panda, gripper)
 itiba.safe_mode = False
 #robot.q = robot.qr
+
+def on_event(event):
+    print(event)
+    print('Grasped: ', itiba.grasped)
+    if circle_button(event):
+        if not itiba.grasped:
+            print('Grasp')
+            itiba.grasp()
+        else:
+            print('Ungrasp')
+            itiba.ungrasp()
+
+desk.listen(on_event)
 
 state = lambda: None
 state.running = True
@@ -223,6 +240,8 @@ def main():
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
     state.running = False
-
+    if desk._listening:
+        desk.stop_listen()
+    
 if __name__ == '__main__':
     main()
