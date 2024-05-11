@@ -556,8 +556,15 @@ class TibaInterface:
         else:
             self.pen_offset_base_mm = 0.0
 
+
+    def programming_mode(self, flag=True):
+        if flag:
+            self.send_msg('exec:programming')
+        else:
+            self.send_msg('exec:execution')
+            
     def set_programming_mode(self, desk, flag):
-        ''' Set the robot in programming mode
+        ''' Set the robot in programming mode (internal)
         Urls adapted from https://github.com/TimSchneider42/franky/blob/321a6b3c5cc8fc49b1e4fae9dde0cf130bb03657/franky/robot_web_session.py
         local Desk must have control with:
         desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')

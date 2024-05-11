@@ -44,7 +44,16 @@ def get_ip():
 os.environ['ROS_IP'] = get_ip()
 
 if has_robot:
+    # hostname = '172.16.0.2'
+    # panda = panda_py.Panda(hostname)
+    # gripper = libfranka.Gripper(hostname)
     hostname = '172.16.0.2'
+    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    print("Created desk")
+    if not desk.has_control():
+        print("Forcing control")
+        desk.take_control(True)
+        desk.activate_fci()
     panda = panda_py.Panda(hostname)
     gripper = libfranka.Gripper(hostname)
 else:
@@ -78,6 +87,12 @@ def msg_callback(data):
             itiba.ungrasp()
             send_joint_state()
             respond_done()
+        elif cmd == 'programming':
+            print('Setting programming mode')
+            itiba.set_programming_mode(desk, True)
+        elif cmd == 'execution':
+            print('Setting execution mode')
+            itiba.set_programming_mode(desk, False)
 
         # if itiba.editor.set_cur_motion(cmd):
         #     print('Reading states')
