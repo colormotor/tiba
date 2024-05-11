@@ -10,6 +10,7 @@ up = np.array([0, 0, 1])
 
 start_offset = 150/1000
 
+joint_move('Home')
 # Move to intitial config
 joint_move(start_q)
 

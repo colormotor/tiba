@@ -298,6 +298,7 @@ def gui():
     changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
     if changed:
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
+    changed, tsketch.itiba.safe_mode = ui.imgui_color_checkbox("Safe mode", tsketch.itiba.safe_mode)
 
     ui.imgui_text_separator("Scripts")
     script = tsketch.script_gui()
