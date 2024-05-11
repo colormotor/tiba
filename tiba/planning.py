@@ -1,5 +1,6 @@
-from . import config, geom, ply, utils, bezier
+from . import config, geom, utils, bezier, svg
 from . import trajectory_utils as tu
+from . import matplotlyb as ply
 from easydict import EasyDict as edict
 from PIL import Image
 import numpy as np
@@ -7,7 +8,7 @@ import numpy as np
 cfg = config.cfg
 
 class TrajectoryPlanner:
-    def __init__(self, itiba, planner, **kwargs):
+    def __init__(self, itiba, **kwargs):
         self.itiba = itiba
         self.params = dict(planner='Trapezoidal',
                            dce_thresh_mm=100,
@@ -18,7 +19,9 @@ class TrajectoryPlanner:
                             order=3,
                             smoothing=0.2,
                             max_depth=4.0,
-                            resample_topp=False)
+                            resample_topp=False,
+                            bezier_split_angle=54)
+        self.params.update(kwargs)
         self.params = edict(self.params)
         self.padding_mm = 0.0
         self.penup_mm = 50.0
@@ -32,13 +35,15 @@ class TrajectoryPlanner:
         self.draft = []
         
     def load_paths(self, path):
-        self.draft = load(path)
+        self.draft = load(path, self.params)
+        if self.draft is None:
+            return
         pad = self.itiba.pad
         pad.offset = self.plane_offset_mm / 1000 + self.itiba.pen_offset_base_mm / 1000
-        pad.pos_offset = self.offset_mm 
+        pad.pos_offset = np.array(self.offset_mm)/1000
         pad.update()
 
-        paths = self.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=self.penup_mm)
+        paths = pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=self.penup_mm)
         self.trajectories = pad.fit_to_frame(paths)
         self.trajectories_computed = False
                 
@@ -89,7 +94,7 @@ class TrajectoryPlanner:
         self.compute_trajectories(debug)
 
         cur_pos = self.itiba.robot.pen_tcp_pos(self.itiba.robot.q)
-        trajectories = self.pad.augment_with_pen_orientation(self.trajectories, self.itiba.robot, self.itiba.robot.qr)
+        trajectories = self.itiba.pad.augment_with_pen_orientation(self.trajectories, self.itiba.robot, self.itiba.robot.qr)
         trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
         self.itiba.plan_task_trajectories(trajectories)
         self.task_trajectories_augmented = trajectories
@@ -135,11 +140,12 @@ class TrajectoryPlanner:
                         cc.polyline(projected_points)
                         
                 cam_image = cc.get_image()
+                return Image.fromarray(cam_image)
             else:
                 print("Invalid handeye")
             ref_h = 180
-            c.image(cam_image, 0, c.height-ref_h, (w/h)*ref_h, ref_h)
-            return Image.fromarray(c.get_image())
+            #c.image(cam_image, 0, c.height-ref_h, (w/h)*ref_h, ref_h)
+            
     
         print("Handeye not configured")
         return None
@@ -367,11 +373,11 @@ def plan_polylines(planning_callback,
         ply.show()
     return trajectories
 
-def load(path):
+def load(path, params):
     if '.svg' in path:
-        load_svg(path)
+        return load_svg(path, params)
     else:
-        load_thick_paths(path)
+        return load_thick_paths(path)
         
 def load_thick_paths(path):
     strokes = utils.load_json(path)
@@ -381,7 +387,7 @@ def load_thick_paths(path):
     widths = [np.array(w) for w in strokes['stroke_widths']]
     return [np.hstack([P, w.reshape(-1,1)]) for P, w in zip(chains, widths)]
 
-def load_svg(path):
+def load_svg(path, params):
     print('Loading SVG:', path)
     try:
         draft = svg.load_svg_bezier_chains(path)
@@ -390,7 +396,7 @@ def load_svg(path):
         return
     zz = svg.load_svg_polylines(path)
 
-    dest_rect = geom.make_rect(0, 0, width, height)
+    dest_rect = geom.make_rect(0, 0, 1024, 768) 
     draft_in = geom.transform_to_rect(draft, dest_rect)
     draft = []
     tol = 0.2

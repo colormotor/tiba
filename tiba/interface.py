@@ -56,7 +56,9 @@ if rosloader is not None:
     from std_msgs.msg import Duration
     state.has_ros = True
 
-
+# jrosloader = importlib.find_loader('jupyros')
+# if jrosloader is not None:
+#     import jupyros as jros
 
 class FrankaButton:
     ''' Keeps track of the state of a robot button, given its name'''
@@ -213,7 +215,7 @@ def ros_camera_info_to_cv(cam_info):
 
 
 class TibaHandeye:
-    def __init__(self, ros_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml'):
+    def __init__(self, jupyter=False, ros_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml'):
         try:
             with open(os.path.expanduser(ros_config_path), 'r') as f:
                 self.config = yaml.load(f, Loader=yaml.FullLoader)
@@ -232,39 +234,54 @@ class TibaHandeye:
         self.cam_image = None
         self.cam_info = None
         self.cam_frame = None
-        
+        self.aruco_debug = ""
+    
         if state.has_ros and loaded_config:
+            print("Loading handeye info")
             from geometry_msgs.msg import PoseStamped
             from sensor_msgs.msg import Image as msg_Image
             from visualization_msgs.msg import Marker
             from sensor_msgs.msg import CameraInfo
 
             def aruco_pose_callback(msg):
+                self.aruco_debug = "\nPose callback, no cam frame"
+
                 if self.cam_frame is None:
                     return
                 
+                self.aruco_debug = "\Pose callback, with cam frame"
+
                 position = msg.pose.position
                 orientation = msg.pose.orientation
                 posorn = np.array([position.x, position.y, position.z,
-                                orientation.w, orientation.x, orientation.y, orientation.z])
+                                   orientation.w, orientation.x, orientation.y, orientation.z])
                 if self.aruco_frame is None:
+                    self.aruco_debug = "\Pose callback, setting frame"
                     self.aruco_frame = self.cam_frame @ np.array(tu.to_pose(posorn))
 
-            rospy.Subscriber("/aruco_single/pose", PoseStamped, aruco_pose_callback)
+            if False: #jupyter:
+                if jrosloader is None:
+                    print("Could not load jupyter ros")
+                    rospy_cur = rospy
+                else:
+                    rospy_cur = jros
+            else:
+                rospy_cur = rospy
+
+            rospy_cur.Subscriber("/aruco_single/pose", PoseStamped, aruco_pose_callback)
             print("Subscribed to aruco marker")
 
             def got_image(data):
                 im = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width, -1)
                 self.cam_image = im
             #print(data.shape)
-            rospy.Subscriber('/camera/color/image_raw', msg_Image, got_image)
+            rospy_cur.Subscriber('/camera/color/image_raw', msg_Image, got_image)
             print("Subscribed to realsense")
-
 
             def camera_info_callback(msg):
                 self.cam_info = msg
 
-            rospy.Subscriber('/camera/color/camera_info', CameraInfo, camera_info_callback)
+            rospy_cur.Subscriber('/camera/color/camera_info', CameraInfo, camera_info_callback)
             print("Subscribed to camera info")
 
     def is_valid(self):
@@ -336,6 +353,7 @@ class TibaInterface:
                  scripts_file='../settings/motions/motions.yaml',
                  plot_path='trajectory.png',
                  base_path=None,
+                 jupyter=False
                  ):
 
         if base_path is None:
@@ -385,22 +403,34 @@ class TibaInterface:
         print("#################################################")
         print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
         if state.has_ros:
+            if False: #jupyter:
+                if jrosloader is None:
+                    print("Could not load jupyter ros")
+                    rospy_cur = rospy
+                else:
+                    rospy_cur = jros
+            else:
+                rospy_cur = rospy
+
             try:
                 if init_node:
                     print("Initializing node", init_node)
                     rospy.init_node(init_node, anonymous=True, log_level=rospy.ERROR)
-                    rospy.Subscriber('/tiba/q', JointState, self.state_callback)
-                    rospy.Subscriber('/tiba/response', String, self.response_callback)
+                    rospy_cur.Subscriber('/tiba/q', JointState, self.state_callback)
+                    rospy_cur.Subscriber('/tiba/qdone', JointState, self.qdone_callback)
+                    # Response from server. We use the joint state message to see if a motion is done,
+                    # (with name "Done") so we also update joint states with it.
+                    rospy_cur.Subscriber('/tiba/response', String, self.response_callback)
 
-                self.msg_pub = rospy.Publisher('/tiba/msg', String, queue_size=10)
-                self.jtraj_pub = rospy.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
-                self.jpos_pub = rospy.Publisher('/tiba/jpos', JointState, queue_size=10)
+                self.msg_pub = rospy_cur.Publisher('/tiba/msg', String, queue_size=10)
+                self.jtraj_pub = rospy_cur.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
+                self.jpos_pub = rospy_cur.Publisher('/tiba/jpos', JointState, queue_size=10)
                 self.send_msg('start: Tiba sketch connecting')
                 # rospy.Subscriber('/tiba/response', String, self.response_callback)
                 # rospy.Subscriber('/tiba/q', JointState, self.state_callback)
                 # rospyrospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
                 # self.send_msg('start: Tiba sketch connecting')
-                self.handeye = TibaHandeye()
+                self.handeye = TibaHandeye(jupyter=jupyter)
             except rospy.exceptions.ROSException as e:
                 print("Ros issue, disabling")
                 state.has_ros = False
@@ -461,6 +491,7 @@ class TibaInterface:
         self.msg_pub.publish(data)
 
     def clear_aruco(self):
+        self.update_handeye()
         if self.handeye is not None:
             self.handeye.aruco_frame = None
             
@@ -509,12 +540,21 @@ class TibaInterface:
 
     def response_callback(self, data):
         print("Received response: ", data.data)
-        if data.data == 'Done':
-            self.server_busy = False
+        # if data.data == 'Done':
+        #     self.server_busy = False
+
+    def qdone_callback(self, data):
+        self.robot.q = np.array(data.position)
+        self.debug_q = np.array(data.position)
+        self.server_busy = False
 
     def state_callback(self, data):
         self.robot.q = np.array(data.position)
         self.debug_q = np.array(data.position)
+        #self.debug_state = data.name
+        # if 'Done' in data.name:
+        #     #print("Received done joint state")
+        #     self.server_busy = False
 
     def launch_simulator(self):
         env = swift.Swift()
@@ -792,11 +832,16 @@ class TibaInterface:
         self.gripper.move(100.0/1000, 0.2)
 
     def go_aruco(self):
+        self.update_handeye()
         if self.panda is None and state.has_ros:
+            print("Waiting for movement")
             with self.wait(): 
                 self.goto_joint_position('Aruco')
         else:
             self.goto_joint_position('Aruco')
+        print("Updating handeye")
+        self.update_handeye()
+        print("Clearing aruco")
         self.clear_aruco()
 
     def plot_trajectory_stats(self, task_trajectories=[]):
@@ -886,6 +931,9 @@ class TibaInterface:
         self.plan_joint_trajectory(Qs, dQs, trajectories)
 
     def plan_and_execute_script(self, path, **kwargs):
+        if 'Pick' in path and self.grasped:
+            print("Cannot execute grip motion")
+            return
         self.plan_script(path, **kwargs)
         if self.trajectory_status:
             self.execute()

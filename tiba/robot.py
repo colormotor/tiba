@@ -69,7 +69,8 @@ tools = {
 
     'Edding': {
         'tip_dist_mm': 50.0,
-        'tip_height_mm': 11.0
+        'tip_height_mm': 11.0,
+        'pen_offset_base_mm': 5.5
     },
 
     'Calli-brush-01': {
