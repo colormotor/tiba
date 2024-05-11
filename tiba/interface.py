@@ -759,7 +759,7 @@ class TibaInterface:
         print('Stopping Cartesian impedance controller')
         self.panda.stop_controller()
 
-    def execute(self, delay=2.0, force_drawing=False):
+    def execute(self, delay=1.0, force_drawing=False):
         ''' Execute the current joint motion'''
         if self.panda is not None:
             self.delay(delay)
