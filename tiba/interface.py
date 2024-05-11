@@ -235,7 +235,8 @@ class TibaHandeye:
         self.cam_info = None
         self.cam_frame = None
         self.aruco_debug = ""
-    
+        # Hack for camera misalignment
+        self.fudge_offset = [9, 0]
         if state.has_ros and loaded_config:
             print("Loading handeye info")
             from geometry_msgs.msg import PoseStamped
@@ -345,6 +346,7 @@ class TibaHandeye:
         points_aruco = geom.tsm(aruco_frame_eye_inv, points_eye)
         projected_points, _ = cv2.projectPoints(points_aruco, rot, pos, cam_matrix, distortion)
         projected_points = [p[0] for p in projected_points]
+        projected_points = [P + self.fudge_offset for P in projected_points]
         return projected_points
     
 class TibaInterface:
@@ -702,6 +704,10 @@ class TibaInterface:
         self.panda.stop_controller()
         self.panda.disable_logging()
 
+    def handeye_image(self):
+        img = Image.fromarray(self.handeye.cam_image)
+        return img
+    
     def _exec_drawing_motion(self, motion):
         from panda_py import controllers
 
@@ -915,7 +921,7 @@ class TibaInterface:
         if not self.robot.check_cartesian_trajectories(linked_trajectories):
             print("Warning in computed cartesian trajectories")
             plot_cartesian_trajectories(linked_trajectories)
-            return
+            return Qs, dQs
         # planner = ilqr.iLQRPlannerAcceleration(self.robot.urdf_file,
         #                                        q,
         #                                        subsample=int(cfg.dt/cfg.robot_dt),

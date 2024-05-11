@@ -1,4 +1,4 @@
-from . import config, geom, utils, bezier, svg
+from . import config, geom, utils, bezier, svg, spatial
 from . import trajectory_utils as tu
 from . import matplotlyb as ply
 from easydict import EasyDict as edict
@@ -20,6 +20,7 @@ class TrajectoryPlanner:
                             smoothing=0.2,
                             max_depth=4.0,
                             resample_topp=False,
+                            sorted=True,
                             bezier_split_angle=54)
         self.params.update(kwargs)
         self.params = edict(self.params)
@@ -31,13 +32,16 @@ class TrajectoryPlanner:
         self.itiba.update_handeye()
 
         self.trajectories = []
-        self.trajectories_computed = []
+        self.trajectories_computed = False
         self.draft = []
         
     def load_paths(self, path):
         self.draft = load(path, self.params)
         if self.draft is None:
             return
+        self.fit_draft()
+
+    def fit_draft(self):
         pad = self.itiba.pad
         pad.offset = self.plane_offset_mm / 1000 + self.itiba.pen_offset_base_mm / 1000
         pad.pos_offset = np.array(self.offset_mm)/1000
@@ -46,7 +50,7 @@ class TrajectoryPlanner:
         paths = pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=self.penup_mm)
         self.trajectories = pad.fit_to_frame(paths)
         self.trajectories_computed = False
-                
+
     def compute_trajectories(self, debug=False):
         params = self.params
 
@@ -65,25 +69,29 @@ class TrajectoryPlanner:
             max_speed *= 2
         elif params.planner == 'Test simplify':
             traj_callback = plan_simplify_test
-        elif params.planner == 'Thick resample':
+        elif params.planner == 'Thick bezier':
+            traj_callback = plan_thick_resample_bezier
+        elif params.planner == 'Thick':
             traj_callback = plan_thick_resample
             
         if traj_callback is None:
             raise ValueError('No trajectory callback')
 
+        print("Planning draft with %d paths", len(self.draft))
         draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
-
-        trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
+        print("Resulting fitted draft", len(draft))
+        trajectories, distances = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                         self.penup_mm/1000,
                                         trajectory_includes_penup,
                                         params,
                                         debug=debug)
-
+        print("Resulting planned trajectories", len(trajectories))
         def adapt_xy(P):
             if type(P)==list:
                 return [adapt_xy(Q) for Q in P]
             return np.vstack([-P[:,1], -P[:,0]]).T
 
+        self.distances = distances
         self.trajectories_2d = adapt_xy([np.array(P)[:,:2] for P in trajectories])
         self.draft_fitted = adapt_xy([np.array(P)[:,:2] for P in draft])
 
@@ -98,7 +106,7 @@ class TrajectoryPlanner:
         trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
         self.itiba.plan_task_trajectories(trajectories)
         self.task_trajectories_augmented = trajectories
-
+ 
 
     def get_plan_image(self):
         from py5canvas import canvas
@@ -243,8 +251,34 @@ def plan_simplify_test(samples,
     simplified = [tu.simplify.dce(P, params.dce_thesh_mm/1000) for P in samples]
     return samples, simplified
 
-
 def plan_thick_resample(samples,
+                        max_speed,
+                        accel_time,
+                        penup_distance,
+                        params):
+    chains = [np.array(chain[:,:2]) for chain in samples]
+    widths = [np.array(chain[:,2]) for chain in samples]
+    width_range_mm = [np.min(np.concatenate(widths))*1000, np.max(np.concatenate(widths))*1000]
+
+    def map(x, input_range, output_range):
+        return (output_range[0] + ((x - input_range[0])/(input_range[1] - input_range[0]))
+                                    * (output_range[1] - output_range[0]))
+
+    wrange = np.array(width_range_mm)/1000.0
+    zrange = np.array([0.0, -params.max_depth])/1000.0
+
+    def width_to_z(w):
+        return map(w, wrange, zrange)
+
+    def z_to_width(z):
+        return map(z, zrange, wrange)
+
+    chains_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(chains, widths)]
+
+    trajectories,_,_ = tu.plan_polylines_time_optimal(chains_3d, cfg.cartesian_speed, cfg.acceleration_time)
+    return trajectories, [P[:,:2] for P in samples]
+
+def plan_thick_resample_bezier(samples,
                         max_speed,
                         accel_time,
                         penup_distance,
@@ -288,6 +322,7 @@ def plan_polylines(planning_callback,
     #config.progress_text = 'Planning trajectory'
     #config.progress = 0
     #config.progress_max = len(samples)
+    distances_down = []
     if not trajectory_includes_penups:
         # Plan each trajectory in 2d and then concatenate lifting motions
         if samples[0].shape[1] < 3:
@@ -307,13 +342,16 @@ def plan_polylines(planning_callback,
         if not paths:
             return []
         trajectories = [paths[0]]
+        distances_downs = [geom.chord_length(paths[0])]
         if len(paths) > 1:
             for i in range(len(paths)-1):
                 P1 = paths[i]
                 P2 = paths[i+1]
                 if geom.distance(P1[-1], P2[0]) > 2e-3:
                     trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, max_accel_time=accel_time))
+                    distances_down.append(0.0)
                 trajectories.append(P2)
+                distances_down.append(geom.chord_length(P2))
 
     else:
         # Create one motor plan with pen-ups and plan single trajectory
@@ -322,7 +360,7 @@ def plan_polylines(planning_callback,
                                                      max_speed=max_speed,
                                                      accel_time=accel_time,
                                                      params=params)
-
+        distances_down = [geom.chord_length(traj) for traj in trajectories]
 
     velocities = [np.diff(P, axis=0) / cfg.dt for P in trajectories]
     accelerations = [np.diff(P, n=2, axis=0) / (cfg.dt**2) for P in trajectories]
@@ -371,7 +409,7 @@ def plan_polylines(planning_callback,
             vals = (X[:,2])/(box[1][2] - box[0][2])
             ply.stroke3d(X, color=[ply.cmap(z, 'magma') if z >=0 else ply.cmap(-z, 'viridis') for z in vals])
         ply.show()
-    return trajectories
+    return trajectories, distances_down
 
 def load(path, params):
     if '.svg' in path:
@@ -398,6 +436,8 @@ def load_svg(path, params):
 
     dest_rect = geom.make_rect(0, 0, 1024, 768) 
     draft_in = geom.transform_to_rect(draft, dest_rect)
+    if params.sorted:
+        draft_in = spatial.sort_paths(draft_in)
     draft = []
     tol = 0.2
     for chain in draft_in: #[2:4]:
