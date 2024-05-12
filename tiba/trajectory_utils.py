@@ -341,8 +341,14 @@ def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None
         dof, max_velocity, max_acceleration, tol
     )
 
-    result = smoother.smooth_interpolate(np.array(keypoints_angle), interpolation_dt=cfg.dt, traj_dt=0.001)
-
+    
+    try: 
+        result = smoother.smooth_interpolate(np.array(keypoints_angle), interpolation_dt=cfg.dt, traj_dt=0.001)
+    except MemoryError as e:
+        print("Bad smooth trajectory for ", keypoints_angle)
+        print(e)
+        return keypoints
+    
     res = []
     for p, idx in zip(result.position, result.segment_indices):
         angle = p[3] - angles[idx]
