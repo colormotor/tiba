@@ -402,9 +402,10 @@ class TibaInterface:
 
         self.pen_offset_base_mm = 0.0
 
-        print("#################################################")
-        print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
+        
         if state.has_ros:
+            print("#################################################")
+            print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
             if False: #jupyter:
                 if jrosloader is None:
                     print("Could not load jupyter ros")
@@ -423,7 +424,7 @@ class TibaInterface:
                     # Response from server. We use the joint state message to see if a motion is done,
                     # (with name "Done") so we also update joint states with it.
                     rospy_cur.Subscriber('/tiba/response', String, self.response_callback)
-
+                print("Creating subscribers and publisher")
                 self.msg_pub = rospy_cur.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy_cur.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
                 self.jpos_pub = rospy_cur.Publisher('/tiba/jpos', JointState, queue_size=10)
@@ -432,12 +433,14 @@ class TibaInterface:
                 # rospy.Subscriber('/tiba/q', JointState, self.state_callback)
                 # rospyrospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
                 # self.send_msg('start: Tiba sketch connecting')
+                print("Init handeye coordination")
                 self.handeye = TibaHandeye(jupyter=jupyter)
             except rospy.exceptions.ROSException as e:
                 print("Ros issue, disabling")
                 state.has_ros = False
                 self.handeye = None
         else:
+            print("No ros")
             self.handeye = None
         print('end interface init')
         #self.ros_thread_running = False
@@ -489,6 +492,8 @@ class TibaInterface:
         return state.has_ros
 
     def send_msg(self, data):
+        if not self.has_ros():
+            return
         print("Sending msg", data)
         self.msg_pub.publish(data)
 
@@ -802,8 +807,8 @@ class TibaInterface:
                     with self.wait():
                         self.send_joint_trajectory(motion.Qs, motion.dQs)
         else:
-            print("No panda or ros, can't execute")
-
+            print("No panda or ros, can't execute, simulating")
+            self.simulate()
         print('Finished motion')
 
 
@@ -828,12 +833,14 @@ class TibaInterface:
         ''' Grasp with a width specified in mm'''
         if self.gripper is None:
             print('No gripper!')
+            return
         self.gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04) # Might want to increase pressure current 10 N
 
     def ungrasp(self):
         ''' Release the gripper'''
         if self.gripper is None:
             print('No gripper!')
+            return
         self.gripper.stop()
         self.gripper.move(100.0/1000, 0.2)
 
@@ -1000,17 +1007,22 @@ class TibaInterface:
             Q, dQ = tu.joint_approach(state.q, q)
             # print(Q)
             # print(dQ)
-            self.motions[-1].Qs += list(Q)
-            self.motions[-1].dQs += list(dQ)
-            update_state(self.motions[-1].Qs[-1])
-
+            if len(Q):
+                self.motions[-1].Qs += list(Q)
+                self.motions[-1].dQs += list(dQ)
+                update_state(self.motions[-1].Qs[-1])
+            else:
+                print("Empty trajectory")
         def tool_align(y):
             dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
-            self.motions[-1].Qs += list(Qs)
-            self.motions[-1].dQs += list(dQs)
-            update_state(self.motions[-1].Qs[-1])
+            if len(Qs):
+                self.motions[-1].Qs += list(Qs)
+                self.motions[-1].dQs += list(dQs)
+                update_state(self.motions[-1].Qs[-1])
+            else:
+                print("Empty trajectory")
 
         def tool_align_dip():
             tool_align([-1, 0, 0])
@@ -1021,9 +1033,12 @@ class TibaInterface:
             #dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
             trajectories = [tu.approach_sequence([state.hand_pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp')
-            self.motions[-1].Qs += list(Qs)
-            self.motions[-1].dQs += list(dQs)
-            update_state(self.motions[-1].Qs[-1])
+            if len(Qs):
+                self.motions[-1].Qs += list(Qs)
+                self.motions[-1].dQs += list(dQs)
+                update_state(self.motions[-1].Qs[-1])
+            else:
+                print("Empty trajectory")
 
         def hand_align_pick_tool():
             hand_align([0, -1, 0])
@@ -1035,9 +1050,12 @@ class TibaInterface:
             #print(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
-            self.motions[-1].Qs += list(Qs)
-            self.motions[-1].dQs += list(dQs)
-            update_state(self.motions[-1].Qs[-1])
+            if len(Qs):
+                self.motions[-1].Qs += list(Qs)
+                self.motions[-1].dQs += list(dQs)
+                update_state(self.motions[-1].Qs[-1])
+            else:
+                print("Empty trajectory")
 
         def goto_xyz_hand(pos):
             #print(state.pose)
@@ -1045,9 +1063,12 @@ class TibaInterface:
             dest_pose[:3, 3] = pos
             trajectories = [tu.approach_sequence([state.hand_pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp')
-            self.motions[-1].Qs += list(Qs)
-            self.motions[-1].dQs += list(dQs)
-            update_state(self.motions[-1].Qs[-1])
+            if len(Qs):
+                self.motions[-1].Qs += list(Qs)
+                self.motions[-1].dQs += list(dQs)
+                update_state(self.motions[-1].Qs[-1])
+            else:
+                print("Empty trajectory")
 
         def goto_xyz(pos):
             #print(state.pose)
@@ -1056,10 +1077,13 @@ class TibaInterface:
             #print(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
-            self.motions[-1].Qs += list(Qs)
-            self.motions[-1].dQs += list(dQs)
-            update_state(self.motions[-1].Qs[-1])
-
+            if len(Qs):
+                self.motions[-1].Qs += list(Qs)
+                self.motions[-1].dQs += list(dQs)
+                update_state(self.motions[-1].Qs[-1])
+            else:
+                print("Empty trajectory")
+                
         def xy_circles(radius_mm, rep):
             p0 = state.pose.t
             pts = []
@@ -1077,10 +1101,13 @@ class TibaInterface:
             orn = tu.to_pos_orn(state.pose)[3:]
             trajectories = [[np.concatenate([p, orn]) for p in P] for P in paths]
             Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
-            self.motions[-1].Qs += list(Qs)
-            self.motions[-1].dQs += list(dQs)
-            update_state(self.motions[-1].Qs[-1])
-
+            if len(Qs):
+                self.motions[-1].Qs += list(Qs)
+                self.motions[-1].dQs += list(dQs)
+                update_state(self.motions[-1].Qs[-1])
+            else:
+                print("Empty trajectory")
+            
         def grasp(mm=cfg.default_grasp_mm):
             self.motions.append(Motion([], [], grasp=mm))
 
