@@ -236,7 +236,7 @@ def gui():
         threads.append(t1)
         threads.append(t2)
     if imgui.button('Load Paths...'):
-        path = sketch.open_file_dialog(['svg', 'json'], title='Open SVG or Json (thick) file...')
+        path = sketch.open_file_dialog(['json', 'svg'], title='Open SVG or Json (thick) file...')
         if path:
             load(path)
             params.path = path
