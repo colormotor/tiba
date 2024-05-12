@@ -923,7 +923,7 @@ class TibaSketch:
                         [size,0,0],
                         [0,size,0],
                         [0,0,size]]
-                projected_points = handeye.project_points(points, 'aruco')
+                projected_points = handeye.project_points(points, 'aruco', fudge=False)
                 cc = canvas.Canvas(w, h)
                 cc.image(cam_image)
                 cc.no_fill()

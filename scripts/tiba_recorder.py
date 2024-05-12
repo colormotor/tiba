@@ -307,7 +307,7 @@ def gui():
         tsketch.plan_script(script['file'], **args)
         if tsketch.itiba.Qs:
             print('Script plan sizes:', len(tsketch.itiba.Qs), len(tsketch.itiba.dQs))
-            tsketch.itiba.plot_trajectory_stats()
+            # tsketch.itiba.plot_trajectory_stats()
     ui.imgui_text_separator("Motion")
     if imgui.button('Align hand for tool'):
         #tsketch.itiba.set_programming_mode(desk, False)
@@ -330,7 +330,7 @@ def gui():
 
         trajectories = [tu.approach_sequence([cur_pos, dest_pos])]
         tsketch.plan_task_trajectories(trajectories, tip_frame='tiba_hand_tcp')
-        tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+        # tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
         #
     if imgui.button('Align pen for dip'):
         #tsketch.itiba.set_programming_mode(desk, False)
@@ -392,13 +392,14 @@ def gui():
         if ui.imgui_color_button('Joint move to position'):
             q = tsketch.itiba.editor.get_cur_position()
             tsketch.plan_joint_approach(q)
-            tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+            #tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
 
     if dest_position is not None:
         cur_pos = tsketch.robot.pen_tcp_pos()
         trajectories = [tu.approach_sequence([cur_pos, dest_position])]
         tsketch.plan_task_trajectories(trajectories)
-        tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+        
+        # tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
     tsketch.gui()
 
     if tsketch.itiba.Qs:

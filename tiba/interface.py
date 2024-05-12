@@ -328,7 +328,7 @@ class TibaHandeye:
                    p - ay*vo - ax*hw - ay*ph]
             v3d.polyline(pts, closed=True)
 
-    def project_points(self, pts, space='world'):
+    def project_points(self, pts, space='world', fudge=True):
         pts = np.array(pts)
         inv_cam = np.linalg.inv(self.cam_frame)
         aruco_frame_eye = inv_cam @ self.aruco_frame
@@ -346,7 +346,8 @@ class TibaHandeye:
         points_aruco = geom.tsm(aruco_frame_eye_inv, points_eye)
         projected_points, _ = cv2.projectPoints(points_aruco, rot, pos, cam_matrix, distortion)
         projected_points = [p[0] for p in projected_points]
-        projected_points = [P + self.fudge_offset for P in projected_points]
+        if fudge:
+            projected_points = [P + self.fudge_offset for P in projected_points]
         return projected_points
     
 class TibaInterface:
@@ -1131,6 +1132,7 @@ class TibaInterface:
 
         self.trajectory_status = self.robot.check_joint_trajectory(self.Qs, self.dQs)
         if not self.trajectory_status or self.safe_mode:
+            print("Plotting with safe mode:", self.safe_mode, "status:", self.trajectory_status)
             self.plot_trajectory_stats()
 
 def plot_cartesian_trajectories(trajectories):
