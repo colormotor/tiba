@@ -77,7 +77,7 @@ class FrankaButton:
         return res
 
 class PositionEditor:
-    def __init__(self, positions_path='../settings/key_positions.json'):
+    def __init__(self, positions_path):
         try:
             self.positions = utils.load_json(positions_path)
         except Exception as e:
@@ -216,7 +216,7 @@ def ros_camera_info_to_cv(cam_info):
 
 
 class TibaHandeye:
-    def __init__(self, jupyter=False, ros_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml'):
+    def __init__(self, ros_config_path):
         try:
             with open(os.path.expanduser(ros_config_path), 'r') as f:
                 self.config = yaml.load(f, Loader=yaml.FullLoader)
@@ -355,19 +355,22 @@ class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
                  pad_path='../settings/drawing_pad.json',
                  scripts_file='../settings/motions/motions.yaml',
+                 positions_path='../settings/key_positions.json',
                  plot_path='trajectory.png',
-                 base_path=None,
-                 jupyter=False
+                 handeye_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml',
+                 base_path=None
                  ):
 
         if base_path is None:
             print('base path', base_path)
             base_path = os.path.dirname(os.path.abspath(__file__))
-
+        self.base_path = base_path
         pad_path = os.path.join(base_path, pad_path)
         scripts_file = os.path.join(base_path, scripts_file)
+        handeye_config_path = os.path.join(base_path, handeye_config_path)
+        positions_path = os.path.join(base_path, positions_path)
 
-        self.editor = PositionEditor()
+        self.editor = PositionEditor(positions_path)
         self.pad = drawing_pad.DrawingPad(pad_path)
         self.pad.load()
         self.pad.update()
@@ -436,7 +439,7 @@ class TibaInterface:
                 # rospyrospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
                 # self.send_msg('start: Tiba sketch connecting')
                 print("Init handeye coordination")
-                self.handeye = TibaHandeye(jupyter=jupyter)
+                self.handeye = TibaHandeye(handeye_config_path) #jupyter=jupyter)
             except rospy.exceptions.ROSException as e:
                 print("Ros issue, disabling")
                 state.has_ros = False
@@ -960,7 +963,7 @@ class TibaInterface:
             return
         script = self.scripts[key]
         args = script['args'] if 'args' in script else {}
-        self.plan_script(script['file'], **args)
+        self.plan_script(os.path.join(self.base_path, script['file']), **args)
 
     def plan_script(self, path, **kwargs):
         if path in self.scripts:
