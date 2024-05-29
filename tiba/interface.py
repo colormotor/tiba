@@ -25,6 +25,7 @@ from spatialmath.base import trnorm
 import cv2
 from collections import namedtuple
 import swift
+from PIL import Image
 
 from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
