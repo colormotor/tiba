@@ -99,7 +99,7 @@ class iLQRPlannerVelocity:
 
     def plan(self, trajectories,
              num_iter=20,
-             r=1e-5,
+             r=1e-6,
              weights=np.ones(7),
              rest = 0.1,
              limits=[],
