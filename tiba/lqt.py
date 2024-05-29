@@ -226,7 +226,7 @@ def solve_lqt_iterative(sys, reference, d, r=None):
 
     # In this case we keep the column layout
     Xi_hat = MuQ 
-    print(Xi_hat.shape, Q.shape, A.shape, n)
+    # print(Xi_hat.shape, Q.shape, A.shape, n)
     # Sensor matrix (assuming only position is observed) 
     # Actually unused here and directly setting unobserved Q entries to 0 weight
     C = np.kron(np.hstack([np.ones((1,1)), np.zeros((1, k-1))]),
@@ -890,7 +890,7 @@ def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, iterati
     if iterative:
         Q = block_diag(*Q)
         if stop_movement:
-            print("STOP MOVEMENT")
+            # print("STOP MOVEMENT")
             # TODO add constraint here
             # i = (n-1)*cDim
             # K = np.zeros((cDim, n*cDim))
@@ -917,7 +917,7 @@ def cartesian_reference(sys, P, Sigma, activation_sigma, periodic=False, iterati
     else:
         K = None
         if stop_movement:
-            print("STOP MOVEMENT")
+            #print("STOP MOVEMENT")
             # TODO add constraint here
             # i = (n-1)*cDim
             # K = np.zeros((cDim, n*cDim))
@@ -989,7 +989,7 @@ def sparse_reference(sys, P, Sigma, activation_sigma, periodic=False, stop_movem
     else:
         K = None
         if stop_movement:
-            print("STOP MOVEMENT")
+            # print("STOP MOVEMENT")
             # TODO add constraint here
             # i = (n-1)*cDim
             # K = np.zeros((cDim, n*cDim))
@@ -1028,7 +1028,7 @@ def semitied_lqt(P, **kwargs):
     for p in P.T:
         Sigma.append(cov)
     if params['variability']:
-        print(params['variability'])
+        # print(params['variability'])
         Sigma = [w*s for w, s in zip(params['variability'], Sigma)]
 
     Sigma = np.array(Sigma).T

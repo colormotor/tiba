@@ -12,7 +12,7 @@ class TrajectoryPlanner:
     def __init__(self, itiba, **kwargs):
         self.itiba = itiba
         self.params = dict(planner='Trapezoidal',
-                           dce_thresh_mm=100,
+                            dce_thresh_mm=100,
                             jerk_iterations=450,
                             topp_tol_mm=100.0,
                             isotropy=1.0,
@@ -186,7 +186,7 @@ def plan_calligraphic(samples,
                       accel_time,
                       penup_distance,
                       params):
-    simplified = [tu.simplify.dce(P, params.dce_thesh_mm/1000) for P in samples]
+    simplified = [tu.simplify.dce(P, params.dce_thresh_mm/1000) for P in samples]
     simplified = [P for P in simplified if len(P) > 1]
     if not simplified:
         return [], []
@@ -239,10 +239,10 @@ def plan_min_jerk(samples,
                  penup_distance,
                  params):
     paths, simplified = tu.plan_polylines_jerk(samples,
-                                                                params.dce_thesh_mm/1000,
+                                                                params.dce_thresh_mm/1000,
                                                                 max_speed=max_speed,
                                                                 max_accel_time=accel_time,
-                                                                maxiter=params.max_jerk_iterations)
+                                                                maxiter=params.jerk_iterations)
     return paths, simplified
 
 
@@ -251,7 +251,7 @@ def plan_simplify_test(samples,
                  accel_time,
                  penup_distance,
                  params):
-    simplified = [tu.simplify.dce(P, params.dce_thesh_mm/1000) for P in samples]
+    simplified = [tu.simplify.dce(P, params.dce_thresh_mm/1000) for P in samples]
     return samples, simplified
 
 def plan_thick_resample(samples,
@@ -369,23 +369,28 @@ def plan_polylines(planning_callback,
     max_accel = max_speed / accel_time
 
     if debug:
+        def adapt_xy(P):
+            if type(P)==list:
+                return [adapt_xy(Q) for Q in P]
+            return np.vstack([-P[:,1], P[:,0]]).T
+
         ply.figure(title='Cartesian trajectory')
 
         Tv = 0.0
         Ta = 0.0
-
+        lw = 3
         for i, X in enumerate(trajectories):
             #speed = velocities[i] #tu.compute_speed(X, cfg.dt)
             #accel = accelerations[i] #tu.compute_accel(X, cfg.dt)
             tv = np.linspace(0, (len(velocities[i])-1)*cfg.dt, len(velocities[i])) + Tv
             ta = np.linspace(0, (len(accelerations[i])-1)*cfg.dt, len(accelerations[i])) + Ta
             ply.subplot(1, 1, title='Velocity')
-            ply.plot(tv, velocities[i][:,0], color=ply.categorical_color(i))
-            ply.plot(tv, velocities[i][:,1], color=ply.categorical_color(i))
+            ply.plot(tv, velocities[i][:,0], color=ply.categorical_color(i), lw=lw)
+            ply.plot(tv, velocities[i][:,1], color=ply.categorical_color(i), lw=lw)
             ply.plot(tv, velocities[i][:,2], color='b', alpha=0.5)
             ply.subplot(1, 2, title='Acceleration')
-            ply.plot(ta, accelerations[i][:,0], color=ply.categorical_color(i))
-            ply.plot(ta, accelerations[i][:,1], color=ply.categorical_color(i))
+            ply.plot(ta, accelerations[i][:,0], color=ply.categorical_color(i), lw=lw)
+            ply.plot(ta, accelerations[i][:,1], color=ply.categorical_color(i), lw=lw)
             ply.plot(ta, accelerations[i][:,2], color='b', alpha=0.5)
             Tv = tv[-1] + cfg.dt
             Ta = ta[-1] + cfg.dt
@@ -397,9 +402,9 @@ def plan_polylines(planning_callback,
 
 
         ply.subplot(2, 1, title='Trajectory 2d')
-        ply.stroke(samples, 'k', alpha=0.25)
-        ply.stroke(simplified, 'r', ls=':', lw=1)
-        ply.stroke(trajectories, 'k')
+        ply.stroke(adapt_xy(samples), 'k', alpha=0.25, lw=lw)
+        for i in range(len(trajectories)):            
+            ply.stroke(adapt_xy(trajectories[i]), ply.categorical_color(i), lw=lw)
         ply.axis_equal(True)
 
         ply.subplot(2, 2, title='Trajectory 3d')
