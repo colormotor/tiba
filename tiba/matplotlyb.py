@@ -14,6 +14,7 @@ and not having to deal too much with the Plotly API. The interface is similar to
 
 import matplotlib.pyplot as plt
 import plotly
+import plotly.express as px
 from collections import defaultdict
 import matplotlib.colors as mcolors
 from plotly.subplots import make_subplots
@@ -137,6 +138,16 @@ class Plot:
         self.label = from_kwargs(kwargs, ['label'], None)
         self.clr = from_kwargs(kwargs, ['clr', 'color', 'c'], None)
         self.fill = from_kwargs(kwargs, ['fill'], None)
+
+class Image:
+    def __init__(self, *args, **kwargs):
+        self.cmap = from_kwargs(kwargs, ['cmap'], 'gray')
+        if len(args)==1:
+            self.im = args[0]
+        elif len(args)==2:
+            self.im = args[0]
+            self.cmap = args[1]
+
 
 class Plot2d(Plot):
     def __init__(self, *args, **kwargs):
@@ -267,6 +278,9 @@ def rectangle(*args, color=None, fill=False, **kwargs):
         fill = None
     stroke(X, color, fill=fill, **kwargs)
 
+def imshow(*args, **kwargs):
+    glob.fig.add_plot(Image(*args, **kwargs))
+
 def axis_equal(flag=True):
     glob.fig.axis_equal(flag)
 
@@ -327,6 +341,8 @@ def show_plt(fig):
                         else:
                             clr = plot.clr
                         plt.plot(plot.x, plot.y, color=clr, lw=plot.lw, ls=plot.ls, alpha=plot.alpha, label=plot.label)
+                    elif type(plot) == Image:
+                        plt.imshow(plot.im, cmap=plot.cmap)
                     elif type(plot) == Bar:
                         y = np.array(plot.vals)
                         if len(y.shape) == 1:
@@ -461,6 +477,9 @@ def show_plotly(fig):
                                                     ),
                                                     row=i+1, col=j+1
                                                     )
+                    elif type(plot) == Image:
+                        pfig.add_trace(go.Image(z=plot.img))
+                        #px.imshow(plot.img, color_continuous_scale=plot.cmap)
                     elif type(plot) == Bar:
                         y = np.array(plot.vals)
                         if len(y.shape) == 1:
