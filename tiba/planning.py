@@ -38,8 +38,10 @@ class TrajectoryPlanner:
         self.trajectories_computed = False
         self.draft = []
         
-    def load_paths(self, path):
+    def load_paths(self, path, max_paths=None):
         self.draft = load(path, self.params)
+        if max_paths is not None:
+            self.draft = self.draft[:max_paths]
         if self.draft is None:
             return
         self.fit_draft()
@@ -112,7 +114,7 @@ class TrajectoryPlanner:
         self.itiba.plan_task_trajectories(trajectories)
         self.task_trajectories_augmented = trajectories
  
-    def compute_and_pan_with_dips(self, distance=1000.0, predip=False, dip_command='Dip-0'):
+    def compute_and_plan_with_dips(self, distance=1.0, predip=False, dip_command='Dip-0'):
         params = self.params
 
         max_speed = cfg.cartesian_speed
@@ -144,17 +146,21 @@ class TrajectoryPlanner:
         draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
         print("Resulting fitted draft", len(draft))
         trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
-                                                        self.penup_mm/1000)
+                                                        self.penup_mm/1000,
+                                      params=params)
 
         # Split into dip chunks
         d = 0.0
         chunks = [[]]
         for traj in trajectories:
+            print("Chunk with size", traj.shape)
             chunks[-1].append(traj)
             d += geom.chord_length(traj)
             if d > distance:
+                print('Total distance: ', d)
                 chunks.append([])
                 d = 0
+        print('Total distance: ', d)
 
         # Add penups within chunks
         chunks = [insert_penups(c, self.penup_mm/1000, accel_time) for c in chunks if c]
@@ -173,6 +179,8 @@ class TrajectoryPlanner:
         # self.trajectories_2d = adapt_xy([np.array(P)[:,:2] for P in trajectories])
         # self.draft_fitted = adapt_xy([np.array(P)[:,:2] for P in draft])
 
+        for c in chunks:
+            print("Shapes", [P.shape for P in c])
         chunks = [self.itiba.pad.fit_to_frame(c) for c in chunks]
         chunks = [self.itiba.pad.augment_with_pen_orientation(c, self.itiba.robot, self.itiba.robot.qr)
                   for c in chunks]
@@ -186,13 +194,17 @@ class TrajectoryPlanner:
                 q = self.itiba.Qs[-1]
             else:
                 q = robot.q
-            if i != 0 or pre_dip:
-                self.itiba.plan_script_key_name(dip_command, append_to_configuration=q)
+            if i != 0 or predip:
+                self.itiba.plan_script(dip_command, append_to_configuration=q)
                 if not self.itiba.trajectory_status:
                     print("Error computing dip trajectory")
                     break
                 else:
                     print("Dip OK")
+                if self.itiba.motions:
+                    q = self.itiba.Qs[-1]
+                else:
+                    q = robot.q
             Qs, dQs = self.itiba.compute_task_trajectories(chunk, q=q)
             self.itiba.trajectory_status = robot.check_joint_trajectory(Qs, dQs)
             if not self.itiba.trajectory_status:
@@ -200,7 +212,7 @@ class TrajectoryPlanner:
                 break
             self.itiba.motions.append(Motion(Qs, dQs))
 
-        if self.itiba.trjectory_status:
+        if self.itiba.trajectory_status:
             if self.itiba.motions:
                 q = self.itiba.Qs[-1]
             else:
@@ -214,7 +226,7 @@ class TrajectoryPlanner:
             else:
                 print("Error computing return to initial trajectory")
 
-        if not self.trajectory_status or self.itiba.safe_mode:
+        if not self.itiba.trajectory_status or self.itiba.safe_mode:
             self.itiba.plot_trajectory_stats()
 
     def get_plan_image(self):
@@ -423,7 +435,7 @@ def append_penups(paths, penup_distance, accel_time):
     end = paths[-1][-1] + np.array([0, 0, penup_distance/1000])
     arrival = tu.approach(start, paths[0][0])
     departure = tu.approach(paths[-1][-1], end)
-    return [arrival] + paths + [departure]
+    return [arrival[:,:3]] + paths + [departure[:,:3]]
 
 def insert_penups(paths, penup_distance, accel_time):
     trajectories = [paths[0]]
@@ -433,10 +445,10 @@ def insert_penups(paths, penup_distance, accel_time):
             P2 = paths[i+1]
             if geom.distance(P1[-1], P2[0]) > 2e-3:
                 trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, accel_time=accel_time))
-                penup_distance.append(True)
+                #penup_distance.append(True)
                 #distances_down.append(0.0)
             trajectories.append(P2)
-            penup_flags.append(False)
+
     return trajectories
 
 def plan_polylines(planning_callback,
@@ -505,7 +517,7 @@ def plan_polylines_and_penups(planning_callback,
                 P2 = paths[i+1]
                 if geom.distance(P1[-1], P2[0]) > 2e-3:
                     trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, accel_time=accel_time))
-                    penup_distance.append(True)
+                    penup_flags.append(True)
                     #distances_down.append(0.0)
                 trajectories.append(P2)
                 penup_flags.append(False)

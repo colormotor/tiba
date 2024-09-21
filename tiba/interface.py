@@ -878,6 +878,7 @@ class TibaInterface:
 
     def clear_motions(self):
         self.motions = []
+        self.trajectory_status = True
 
     def plan_joint_approach(self, q):
         ''' Plan a joint approach to a target position'''
@@ -886,8 +887,6 @@ class TibaInterface:
         self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
         if not self.trajectory_status or self.safe_mode:
             self.plot_trajectory_stats()
-
-
 
     def plan_joint_trajectory(self, Qs, dQs, plot=False, task_trajectories=[]):
         self.read_states()
@@ -971,6 +970,7 @@ class TibaInterface:
             return
         script = self.scripts[key]
         args = script['args'] if 'args' in script else {}
+
         self.plan_script(os.path.join(self.base_path, script['file']),
                          append_to_configuration=append_to_configuration,
                          **args)
@@ -979,8 +979,10 @@ class TibaInterface:
         ''' Plan a script with a given path
 
         '''
+        self.reload_scripts()
+
         if path in self.scripts:
-            return self.plan_script_key_name(path)
+            return self.plan_script_key_name(path, append_to_configuration)
 
         # Local functions
         import numpy as np
@@ -1002,7 +1004,7 @@ class TibaInterface:
 
         # self.Qs = []
         # self.dQs = []
-
+        print("Script arguments:")
         print(kwargs)
         # local variable context for script (updated later)
         var_context = {}
@@ -1155,9 +1157,10 @@ class TibaInterface:
             traceback.print_exc()
 
         self.trajectory_status = self.robot.check_joint_trajectory(self.Qs, self.dQs)
-        if not self.trajectory_status or self.safe_mode:
-            print("Plotting with safe mode:", self.safe_mode, "status:", self.trajectory_status)
-            self.plot_trajectory_stats()
+        if append_to_configuration is None:
+            if not self.trajectory_status or self.safe_mode:
+                print("Plotting with safe mode:", self.safe_mode, "status:", self.trajectory_status)
+                self.plot_trajectory_stats()
 
 def plot_cartesian_trajectories(trajectories):
     return

@@ -1,0 +1,748 @@
+#+title: Thick Portraits
+#+PROPERTY: header-args:jupyter-python :session py :async yes :exports results :kernel ros_env
+
+* Setup
+#+BEGIN_SRC jupyter-python :session py
+from importlib import reload
+from tiba import svg, geom, bezier, spatial, interface, config
+import tiba.matplotlyb as ply
+import tiba.trajectory_utils as tu
+import numpy as np
+import matplotlib.pyplot as plt
+from tiba import utils, lqt
+import os
+from py5canvas import canvas
+from PIL import Image
+
+reload(ply)
+reload(spatial)
+reload(interface)
+import os
+
+os.environ['ROS_IPV6']='off'
+os.environ['ROS_MASTER_URI']='http://158.223.48.89:11311' #Running ROS
+
+interface.state.has_ros = True # Set to false if you don't need to communicate with the server
+
+itiba = interface.TibaInterface(init_node='tiba_notebook') #, jupyter=True)
+itiba.set_tool(interface.robot.tools['Calli-brush-01'])
+itiba.safe_mode = False
+cfg = config.cfg
+
+itiba.print_available_tools()
+itiba.print_available_positions()
+itiba.print_available_scripts()
+itiba.send_msg('getq')
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Loading ros
+base path None
+Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+#################################################
+STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE
+Initializing node tiba_notebook
+Creating subscribers and publisher
+Sending msg start: Tiba sketch connecting
+Init handeye coordination
+Loading handeye info
+Subscribed to aruco marker
+Subscribed to realsense
+Subscribed to camera info
+end interface init
+Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+Available tools:
+dict_keys(['Default', 'Probe', 'Edding', 'Calli-brush-01', 'Squeezer'])
+Available key positions:
+dict_keys(['Aruco', 'Dip', 'Handip', 'Home', 'Tool drop start', 'Tool side start', 'View'])
+Available scripts:
+dict_keys(['Dip-Rim-0', 'Dip-0', 'Dip-1', 'Dip-2', 'Pick-0', 'Pick-Squeeze-0', 'Drop-0'])
+Sending msg getq
+#+end_example
+
+
+* Prepare and preview
+** Go home
+#+BEGIN_SRC jupyter-python :session py :async
+itiba.goto_joint_position('Home')
+#+END_SRC
+
+#+RESULTS:
+: goto  [-0.07348355578820649, -0.6406848793249571, 0.14414278314814566, -2.2053375955748025, -0.002115707922495155, 2.265591827123818, 0.8315813678712944]
+
+** Select brush and pick
+
+Select brush
+#+BEGIN_SRC jupyter-python :session py
+itiba.safe_mode = False
+itiba.set_tool(interface.robot.tools['Calli-brush-01'])
+#+END_SRC
+
+#+RESULTS:
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+
+And pick
+#+BEGIN_SRC jupyter-python :session py
+itiba.safe_mode = False
+itiba.plan_and_execute_script('Pick-0')
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+{}
+Compiling script
+Smoother
+Post init
+Smoother
+Post init
+Smoother
+Post init
+Align hand
+Post init
+Post init
+Iteration 1, Cost: 2.02919e-07, alpha= 1, time= 0.00191258
+Iteration 2, Cost: 1.63508e-07, alpha= 1, time= 0.00154208
+Iteration 3, Cost: 1.63505e-07, alpha= 1, time= 0.00162787
+Iteration 4, Cost: 1.63505e-07, alpha= 1, time= 0.00157463
+Iteration 5, Cost: 1.63505e-07, alpha= 1, time= 0.00188188
+Iteration 6, Cost: 1.63505e-07, alpha= 1, time= 0.00135858
+Iteration 7, Cost: 1.63505e-07, alpha= 1, time= 0.000571458
+Iteration 8, Cost: 1.63505e-07, alpha= 1, time= 0.0005575
+Iteration 9, Cost: 1.63505e-07, alpha= 1, time= 0.00055025
+Iteration 10, Cost: 1.63505e-07, alpha= 0.25, time= 0.00214212
+Max accel local: 1.0884711479833393
+dt_pre: 0.01
+Post init
+Post init
+Iteration 1, Cost: 1.07755e-05, alpha= 1, time= 0.00354729
+Iteration 2, Cost: 1.68137e-06, alpha= 1, time= 0.00295833
+Iteration 3, Cost: 1.68098e-06, alpha= 1, time= 0.00243729
+Iteration 4, Cost: 1.68098e-06, alpha= 1, time= 0.00190704
+Iteration 5, Cost: 1.68098e-06, alpha= 1, time= 0.00128067
+Iteration 6, Cost: 1.68098e-06, alpha= 1, time= 0.00172933
+Iteration 7, Cost: 1.68098e-06, alpha= 1, time= 0.00334004
+Iteration 8, Cost: 1.68098e-06, alpha= 1, time= 0.00237638
+Iteration 9, Cost: 1.68098e-06, alpha= 0.015625, time= 0.00470446
+Max accel local: 1.2272500300119475
+dt_pre: 0.01
+Post init
+Post init
+Iteration 1, Cost: 0.0323583, alpha= 1, time= 0.00458271
+Iteration 2, Cost: 0.000223811, alpha= 1, time= 0.00350192
+Iteration 3, Cost: 2.47506e-05, alpha= 1, time= 0.00328483
+Iteration 4, Cost: 2.47228e-05, alpha= 1, time= 0.00346896
+Iteration 5, Cost: 2.47209e-05, alpha= 1, time= 0.00482462
+Iteration 6, Cost: 2.47205e-05, alpha= 1, time= 0.00639808
+Iteration 7, Cost: 2.47204e-05, alpha= 1, time= 0.00874304
+Iteration 8, Cost: 2.47204e-05, alpha= 1, time= 0.00921104
+Iteration 9, Cost: 2.47204e-05, alpha= 1, time= 0.00756221
+Iteration 10, Cost: 2.47204e-05, alpha= 1, time= 0.00526096
+Iteration 11, Cost: 2.47204e-05, alpha= 1, time= 0.00577967
+Iteration 12, Cost: 2.47204e-05, alpha= 1, time= 0.00364525
+Iteration 13, Cost: 2.47204e-05, alpha= 1, time= 0.00719708
+Iteration 14, Cost: 2.47204e-05, alpha= 1, time= 0.00316392
+Iteration 15, Cost: 2.47204e-05, alpha= 1, time= 0.00361708
+Iteration 16, Cost: 2.47204e-05, alpha= 0.125, time= 0.010326
+Max accel local: 1.1159425791800759
+dt_pre: 0.01
+Post init
+Post init
+Iteration 1, Cost: 0.0278318, alpha= 1, time= 0.00726913
+Iteration 2, Cost: 0.000142607, alpha= 1, time= 0.00602987
+Iteration 3, Cost: 2.45384e-05, alpha= 1, time= 0.00845858
+Iteration 4, Cost: 2.4529e-05, alpha= 1, time= 0.00805896
+Iteration 5, Cost: 2.45268e-05, alpha= 1, time= 0.00604538
+Iteration 6, Cost: 2.45263e-05, alpha= 1, time= 0.00542317
+Iteration 7, Cost: 2.45262e-05, alpha= 1, time= 0.007469
+Iteration 8, Cost: 2.45262e-05, alpha= 1, time= 0.00664167
+Iteration 9, Cost: 2.45262e-05, alpha= 1, time= 0.00778812
+Iteration 10, Cost: 2.45262e-05, alpha= 1, time= 0.00703417
+Iteration 11, Cost: 2.45262e-05, alpha= 1, time= 0.00602425
+Iteration 12, Cost: 2.45262e-05, alpha= 1, time= 0.00797858
+Iteration 13, Cost: 2.45262e-05, alpha= 1, time= 0.00668146
+Iteration 14, Cost: 2.45262e-05, alpha= 1, time= 0.00348708
+Iteration 15, Cost: 2.45262e-05, alpha= 0.015625, time= 0.0206347
+Max accel local: 1.12410673642693
+dt_pre: 0.01
+Smoother
+Post init
+Waiting for response
+-Done
+Received grasping with parameters, not implemented yet
+Sending msg exec:grasp
+Waiting for response
+\Done
+Waiting for response
+/Done
+Finished motion
+#+end_example
+
+
+#+BEGIN_SRC jupyter-python :session py
+from importlib import reload
+from tiba import planning
+from tiba import trajectory_utils as tu
+import os
+reload(planning)
+reload(canvas)
+
+#itiba.handeye.fudge_offset = [6, 0]
+itiba.send_msg('getq')
+itiba.update_handeye()
+itiba.safe_mode = True
+itiba.set_tool(interface.robot.tools['Calli-brush-01'])
+planner = planning.TrajectoryPlanner(itiba, planner='Thick bezier',
+                                     resample_topp=True)
+planner.offset_mm = [-50, 40]
+planner.padding_mm = 0
+planner.plane_offset_mm = -0.3
+path = '~/Dropbox/develop_box/py5sketches/tiba_tests/outputs/tibahair1b.json' #spock_new_guess_05rw.json'
+path = '~/Dropbox/transfer_box/data/portraits/tiba-b5-01.json'  #py5sketches/tiba_tests/outputs/spock_new_guess_05rw.json'
+planner.load_paths(os.path.expanduser(path), max_paths=2)
+c = canvas.Canvas(512, 512)
+c.background(255)
+new_draft = []
+#print(len(planner.draft))
+for Xw in planner.draft:
+    stroke = geom.thick_curve(Xw)
+    c.fill(0)
+    c.no_stroke()
+    c.shape(stroke, closed=True)
+c.show()
+
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: Perlin noise not installed. Use `pip install perlin-noise` to install
+: Sending msg getq
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+[[file:./.ob-jupyter/e46468ecffa2a6ed3b11fa34c8f0bd993be99f3d.png]]
+:END:
+
+** Plan
+#+BEGIN_SRC jupyter-python :session py :async no
+itiba.safe_mode = True
+planner.compute_and_plan_with_dips(predip=True)
+planner.get_plan_image()
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+#+begin_example
+Planning draft with %d paths 5
+Resulting fitted draft 5
+TOPRA tol 0.01
+1 of 5: Planning 3153 points
+Post init
+Success 1
+7965 points
+TOPRA tol 0.01
+2 of 5: Planning 477 points
+Post init
+Success 1
+1249 points
+TOPRA tol 0.01
+3 of 5: Planning 65 points
+Post init
+Success 1
+212 points
+TOPRA tol 0.01
+4 of 5: Planning 41 points
+Post init
+Success 1
+60 points
+TOPRA tol 0.01
+5 of 5: Planning 25 points
+Post init
+Success 1
+24 points
+Finished planning
+Chunk with size (7965, 3)
+Chunk with size (1249, 3)
+Chunk with size (212, 3)
+Chunk with size (60, 3)
+Chunk with size (24, 3)
+TOPRA tol 0.5
+1 of 1: Planning 5 points
+Post init
+Success 1
+145 points
+Finished planning
+TOPRA tol 0.5
+1 of 1: Planning 5 points
+Post init
+Success 1
+152 points
+Finished planning
+TOPRA tol 0.5
+1 of 1: Planning 5 points
+Post init
+Success 1
+161 points
+Finished planning
+TOPRA tol 0.5
+1 of 1: Planning 5 points
+Post init
+Success 1
+156 points
+Finished planning
+Post init
+Post init
+Shapes [(3, 3), (7965, 3), (145, 3), (1249, 3), (152, 3), (212, 3), (161, 3), (60, 3), (156, 3), (24, 3), (3, 3)]
+Script arguments:
+{'dip_pos': [0.14519407169608442, -0.3990736446425928, 0.09632479208423864], 'dip_radius_mm': 12.0, 'dip_depth_mm': 35.0}
+Compiling script
+Smoother
+Post init
+Smoother
+Post init
+Post init
+Post init
+Iteration 1, Cost: 0.0119419, alpha= 1, time= 0.00313642
+Iteration 2, Cost: 6.53874e-05, alpha= 1, time= 0.00319771
+Iteration 3, Cost: 6.40922e-05, alpha= 1, time= 0.00310975
+Iteration 4, Cost: 6.40914e-05, alpha= 1, time= 0.00309662
+Iteration 5, Cost: 6.40912e-05, alpha= 1, time= 0.00311817
+Iteration 6, Cost: 6.40912e-05, alpha= 1, time= 0.00309646
+Iteration 7, Cost: 6.40912e-05, alpha= 1, time= 0.00310883
+Iteration 8, Cost: 6.40912e-05, alpha= 1, time= 0.00309475
+Iteration 9, Cost: 6.40912e-05, alpha= 1, time= 0.00310079
+Iteration 10, Cost: 6.40912e-05, alpha= 1, time= 0.00309208
+Iteration 11, Cost: 6.40912e-05, alpha= 1, time= 0.00310308
+Iteration 12, Cost: 6.40912e-05, alpha= 0.25, time= 0.00535663
+Iteration 13, Cost: 6.40912e-05, alpha= 0.5, time= 0.0042425
+Iteration 14, Cost: 6.40912e-05, alpha= 0.000976562, time= 0.0144664
+Max accel local: 1.462533026141196
+dt_pre: 0.01
+Post init
+Post init
+Iteration 1, Cost: 0.0253615, alpha= 1, time= 0.00274225
+Iteration 2, Cost: 5.09539e-05, alpha= 1, time= 0.00279454
+Iteration 3, Cost: 2.23674e-05, alpha= 1, time= 0.00281238
+Iteration 4, Cost: 2.23672e-05, alpha= 1, time= 0.00278779
+Iteration 5, Cost: 2.23672e-05, alpha= 1, time= 0.00280188
+Iteration 6, Cost: 2.23672e-05, alpha= 1, time= 0.00281567
+Iteration 7, Cost: 2.23672e-05, alpha= 1, time= 0.00305825
+Iteration 8, Cost: 2.23672e-05, alpha= 1, time= 0.00323933
+Iteration 9, Cost: 2.23672e-05, alpha= 1, time= 0.00299842
+Iteration 10, Cost: 2.23672e-05, alpha= 0.5, time= 0.00391562
+Iteration 11, Cost: 2.23672e-05, alpha= 0.25, time= 0.00496383
+Iteration 12, Cost: 2.23672e-05, alpha= 0.000976562, time= 0.013333
+Max accel local: 1.1360062392784613
+dt_pre: 0.01
+Post init
+Post init
+Iteration 1, Cost: 0.00622313, alpha= 1, time= 0.00231871
+Iteration 2, Cost: 1.68873e-05, alpha= 1, time= 0.00235196
+Iteration 3, Cost: 1.47845e-05, alpha= 1, time= 0.00234021
+Iteration 4, Cost: 1.47842e-05, alpha= 1, time= 0.00232263
+Iteration 5, Cost: 1.47842e-05, alpha= 1, time= 0.00234013
+Iteration 6, Cost: 1.47842e-05, alpha= 1, time= 0.00234421
+Iteration 7, Cost: 1.47842e-05, alpha= 1, time= 0.00233812
+Iteration 8, Cost: 1.47842e-05, alpha= 1, time= 0.00233321
+Iteration 9, Cost: 1.47842e-05, alpha= 1, time= 0.0023295
+Iteration 10, Cost: 1.47842e-05, alpha= 1, time= 0.0023435
+Iteration 11, Cost: 1.47842e-05, alpha= 1, time= 0.00233796
+Iteration 12, Cost: 1.47842e-05, alpha= 0.000976562, time= 0.0110093
+Max accel local: 1.1224765486371913
+dt_pre: 0.01
+TOPRA tol 0.01
+1 of 3: Planning 2 points
+Post init
+Success 1
+34 points
+TOPRA tol 0.01
+2 of 3: Planning 3196 points
+Post init
+Success 1
+425 points
+TOPRA tol 0.01
+3 of 3: Planning 2 points
+Post init
+Success 1
+34 points
+Finished planning
+Post init
+Post init
+Post init
+Iteration 1, Cost: 9.34342e-07, alpha= 1, time= 0.000806833
+Iteration 2, Cost: 3.66781e-07, alpha= 1, time= 0.000803667
+Iteration 3, Cost: 3.66762e-07, alpha= 1, time= 0.000802042
+Iteration 4, Cost: 3.66762e-07, alpha= 1, time= 0.000810125
+Iteration 5, Cost: 3.66762e-07, alpha= 1, time= 0.000797833
+Iteration 6, Cost: 3.66762e-07, alpha= 1, time= 0.00079675
+Iteration 7, Cost: 3.66762e-07, alpha= 0.5, time= 0.00111133
+Iteration 8, Cost: 3.66762e-07, alpha= 0.0625, time= 0.00197571
+Max accel local: 0.7050774388246688
+dt_pre: 0.01
+Iteration 1, Cost: 0.000186669, alpha= 1, time= 0.00966392
+Iteration 2, Cost: 2.63576e-05, alpha= 1, time= 0.00997392
+Iteration 3, Cost: 2.63538e-05, alpha= 1, time= 0.00989625
+Iteration 4, Cost: 2.63537e-05, alpha= 1, time= 0.00993583
+Iteration 5, Cost: 2.63537e-05, alpha= 1, time= 0.00990658
+Iteration 6, Cost: 2.63537e-05, alpha= 1, time= 0.00990496
+Iteration 7, Cost: 2.63537e-05, alpha= 1, time= 0.00992054
+Iteration 8, Cost: 2.63537e-05, alpha= 1, time= 0.00989988
+Iteration 9, Cost: 2.63537e-05, alpha= 1, time= 0.0101201
+Iteration 10, Cost: 2.63537e-05, alpha= 0.5, time= 0.0148199
+Iteration 11, Cost: 2.63537e-05, alpha= 0.000976562, time= 0.0626762
+Max accel local: 1.7623191973311192
+dt_pre: 0.01
+Iteration 1, Cost: 9.12999e-07, alpha= 1, time= 0.00153379
+Iteration 2, Cost: 3.7091e-07, alpha= 1, time= 0.000965792
+Iteration 3, Cost: 3.70882e-07, alpha= 1, time= 0.000928375
+Iteration 4, Cost: 3.70882e-07, alpha= 1, time= 0.00207754
+Iteration 5, Cost: 3.70882e-07, alpha= 1, time= 0.000862334
+Iteration 6, Cost: 3.70882e-07, alpha= 1, time= 0.0014735
+Iteration 7, Cost: 3.70882e-07, alpha= 1, time= 0.000900875
+Iteration 8, Cost: 3.70882e-07, alpha= 1, time= 0.00122163
+Iteration 9, Cost: 3.70882e-07, alpha= 0.03125, time= 0.00388787
+Max accel local: 0.7046020729919538
+dt_pre: 0.01
+Post init
+Post init
+Iteration 1, Cost: 0.00651584, alpha= 1, time= 0.00319179
+Iteration 2, Cost: 1.67533e-05, alpha= 1, time= 0.00257612
+Iteration 3, Cost: 1.47699e-05, alpha= 1, time= 0.00245238
+Iteration 4, Cost: 1.47697e-05, alpha= 1, time= 0.00245938
+Iteration 5, Cost: 1.47697e-05, alpha= 1, time= 0.00362108
+Iteration 6, Cost: 1.47697e-05, alpha= 1, time= 0.00422467
+Iteration 7, Cost: 1.47697e-05, alpha= 1, time= 0.00759783
+Iteration 8, Cost: 1.47697e-05, alpha= 1, time= 0.00440688
+Iteration 9, Cost: 1.47697e-05, alpha= 1, time= 0.00295704
+Iteration 10, Cost: 1.47697e-05, alpha= 1, time= 0.00304975
+Iteration 11, Cost: 1.47697e-05, alpha= 1, time= 0.00236738
+Iteration 12, Cost: 1.47697e-05, alpha= 0.5, time= 0.00322817
+Iteration 13, Cost: 1.47697e-05, alpha= 0.015625, time= 0.00766363
+Max accel local: 1.123281509568047
+dt_pre: 0.01
+Smoother
+Post init
+Dip OK
+Post init
+Post init
+Post init
+Post init
+Post init
+Post init
+Post init
+Post init
+Post init
+Post init
+Post init
+Iteration 1, Cost: 0.401619, alpha= 1, time= 0.00413738
+Iteration 2, Cost: 0.00356604, alpha= 1, time= 0.00425562
+Iteration 3, Cost: 5.58963e-05, alpha= 1, time= 0.00427429
+Iteration 4, Cost: 5.55528e-05, alpha= 1, time= 0.00424146
+Iteration 5, Cost: 5.55523e-05, alpha= 1, time= 0.00432575
+Iteration 6, Cost: 5.55522e-05, alpha= 1, time= 0.00424204
+Iteration 7, Cost: 5.55522e-05, alpha= 1, time= 0.00425792
+Iteration 8, Cost: 5.55522e-05, alpha= 1, time= 0.00424658
+Iteration 9, Cost: 5.55522e-05, alpha= 1, time= 0.00425371
+Iteration 10, Cost: 5.55522e-05, alpha= 1, time= 0.00430013
+Iteration 11, Cost: 5.55522e-05, alpha= 1, time= 0.00439954
+Iteration 12, Cost: 5.55522e-05, alpha= 1, time= 0.00436071
+Iteration 13, Cost: 5.55522e-05, alpha= 0.000976562, time= 0.0202725
+Max accel local: 1.6604811644157835
+dt_pre: 0.01
+Iteration 1, Cost: 6.51435e-10, alpha= 1, time= 6.8917e-05
+Iteration 2, Cost: 6.29712e-10, alpha= 1, time= 6.7875e-05
+Iteration 3, Cost: 6.29312e-10, alpha= 1, time= 6.6708e-05
+Iteration 4, Cost: 6.29293e-10, alpha= 1, time= 6.6416e-05
+Iteration 5, Cost: 6.29293e-10, alpha= 0.5, time= 9.0625e-05
+Iteration 6, Cost: 6.29292e-10, alpha= 1, time= 6.6333e-05
+Iteration 7, Cost: 6.29292e-10, alpha= 0.25, time= 0.000114792
+Max accel local: 0.46719955153219966
+dt_pre: 0.01
+Iteration 1, Cost: 3.09096, alpha= 1, time= 0.189563
+Iteration 2, Cost: 0.153302, alpha= 1, time= 0.194245
+Iteration 3, Cost: 0.00141522, alpha= 1, time= 0.235317
+Iteration 4, Cost: 0.000607284, alpha= 1, time= 0.218761
+Iteration 5, Cost: 0.000585983, alpha= 1, time= 0.208307
+Iteration 6, Cost: 0.000585959, alpha= 1, time= 0.209484
+Iteration 7, Cost: 0.000585957, alpha= 1, time= 0.196646
+Iteration 8, Cost: 0.000585957, alpha= 1, time= 0.20894
+Iteration 9, Cost: 0.000585957, alpha= 1, time= 0.19448
+Iteration 10, Cost: 0.000585957, alpha= 1, time= 0.197036
+Iteration 11, Cost: 0.000585957, alpha= 1, time= 0.194948
+Iteration 12, Cost: 0.000585957, alpha= 1, time= 0.204616
+Iteration 13, Cost: 0.000585957, alpha= 1, time= 0.199471
+Iteration 14, Cost: 0.000585957, alpha= 1, time= 0.193021
+Iteration 15, Cost: 0.000585957, alpha= 1, time= 0.196043
+Iteration 16, Cost: 0.000585957, alpha= 0.5, time= 0.268092
+Iteration 17, Cost: 0.000585957, alpha= 0.000976562, time= 0.948874
+Max accel local: 2.4864254713155653
+dt_pre: 0.01
+Iteration 1, Cost: 0.00234215, alpha= 1, time= 0.00324617
+Iteration 2, Cost: 1.2669e-05, alpha= 1, time= 0.00337183
+Iteration 3, Cost: 1.25813e-05, alpha= 1, time= 0.00334946
+Iteration 4, Cost: 1.25797e-05, alpha= 1, time= 0.00334929
+Iteration 5, Cost: 1.25794e-05, alpha= 1, time= 0.00335179
+Iteration 6, Cost: 1.25793e-05, alpha= 1, time= 0.00333842
+Iteration 7, Cost: 1.25793e-05, alpha= 1, time= 0.00334783
+Iteration 8, Cost: 1.25793e-05, alpha= 1, time= 0.00338817
+Iteration 9, Cost: 1.25793e-05, alpha= 1, time= 0.00360437
+Iteration 10, Cost: 1.25793e-05, alpha= 1, time= 0.00361417
+Iteration 11, Cost: 1.25793e-05, alpha= 1, time= 0.00370187
+Iteration 12, Cost: 1.25793e-05, alpha= 0.5, time= 0.00511408
+Iteration 13, Cost: 1.25793e-05, alpha= 0.25, time= 0.00785783
+Iteration 14, Cost: 1.25793e-05, alpha= 0.0625, time= 0.00900833
+Max accel local: 1.2227721680800718
+dt_pre: 0.01
+Iteration 1, Cost: 0.405523, alpha= 1, time= 0.029562
+Iteration 2, Cost: 0.0286737, alpha= 1, time= 0.0307529
+Iteration 3, Cost: 0.000110246, alpha= 1, time= 0.0302654
+Iteration 4, Cost: 9.39627e-05, alpha= 1, time= 0.0310349
+Iteration 5, Cost: 9.37048e-05, alpha= 1, time= 0.0303824
+Iteration 6, Cost: 9.3701e-05, alpha= 1, time= 0.029557
+Iteration 7, Cost: 9.37005e-05, alpha= 1, time= 0.0292203
+Iteration 8, Cost: 9.37003e-05, alpha= 1, time= 0.029203
+Iteration 9, Cost: 9.37003e-05, alpha= 1, time= 0.02915
+Iteration 10, Cost: 9.37003e-05, alpha= 1, time= 0.0294803
+Iteration 11, Cost: 9.37003e-05, alpha= 1, time= 0.0293025
+Iteration 12, Cost: 9.37003e-05, alpha= 1, time= 0.0298573
+Iteration 13, Cost: 9.37003e-05, alpha= 1, time= 0.0305655
+Iteration 14, Cost: 9.37003e-05, alpha= 1, time= 0.0304314
+Iteration 15, Cost: 9.37003e-05, alpha= 0.000976562, time= 0.140872
+Max accel local: 2.0659581970866756
+dt_pre: 0.01
+Iteration 1, Cost: 0.00227906, alpha= 1, time= 0.00336992
+Iteration 2, Cost: 9.32599e-06, alpha= 1, time= 0.00350546
+Iteration 3, Cost: 9.1533e-06, alpha= 1, time= 0.00348925
+Iteration 4, Cost: 9.15326e-06, alpha= 1, time= 0.00348929
+Iteration 5, Cost: 9.15325e-06, alpha= 1, time= 0.00347071
+Iteration 6, Cost: 9.15325e-06, alpha= 1, time= 0.00347525
+Iteration 7, Cost: 9.15325e-06, alpha= 1, time= 0.00349817
+Iteration 8, Cost: 9.15324e-06, alpha= 1, time= 0.00347708
+Iteration 9, Cost: 9.15324e-06, alpha= 1, time= 0.00361492
+Iteration 10, Cost: 9.15324e-06, alpha= 0.015625, time= 0.0112263
+Max accel local: 1.023303809104198
+dt_pre: 0.01
+Iteration 1, Cost: 0.00202626, alpha= 1, time= 0.00484442
+Iteration 2, Cost: 1.35352e-05, alpha= 1, time= 0.00518796
+Iteration 3, Cost: 1.32587e-05, alpha= 1, time= 0.00523508
+Iteration 4, Cost: 1.32584e-05, alpha= 1, time= 0.00533196
+Iteration 5, Cost: 1.32583e-05, alpha= 1, time= 0.00519479
+Iteration 6, Cost: 1.32583e-05, alpha= 1, time= 0.00520179
+Iteration 7, Cost: 1.32583e-05, alpha= 1, time= 0.00519058
+Iteration 8, Cost: 1.32583e-05, alpha= 1, time= 0.00520196
+Iteration 9, Cost: 1.32583e-05, alpha= 1, time= 0.00520042
+Iteration 10, Cost: 1.32583e-05, alpha= 1, time= 0.00517521
+Iteration 11, Cost: 1.32583e-05, alpha= 1, time= 0.005202
+Iteration 12, Cost: 1.32583e-05, alpha= 1, time= 0.00519917
+Iteration 13, Cost: 1.32583e-05, alpha= 0.000976562, time= 0.0230705
+Max accel local: 1.9657313027965546
+dt_pre: 0.01
+Iteration 1, Cost: 0.0285136, alpha= 1, time= 0.00354513
+Iteration 2, Cost: 7.19252e-05, alpha= 1, time= 0.00366996
+Iteration 3, Cost: 2.92136e-05, alpha= 1, time= 0.00365667
+Iteration 4, Cost: 2.92076e-05, alpha= 1, time= 0.0036625
+Iteration 5, Cost: 2.92064e-05, alpha= 1, time= 0.00365425
+Iteration 6, Cost: 2.92062e-05, alpha= 1, time= 0.00367446
+Iteration 7, Cost: 2.92061e-05, alpha= 1, time= 0.00365708
+Iteration 8, Cost: 2.92061e-05, alpha= 1, time= 0.00365921
+Iteration 9, Cost: 2.92061e-05, alpha= 1, time= 0.00364904
+Iteration 10, Cost: 2.92061e-05, alpha= 1, time= 0.00366796
+Iteration 11, Cost: 2.92061e-05, alpha= 1, time= 0.00365263
+Iteration 12, Cost: 2.92061e-05, alpha= 1, time= 0.00365458
+Iteration 13, Cost: 2.92061e-05, alpha= 1, time= 0.00366067
+Iteration 14, Cost: 2.92061e-05, alpha= 0.0625, time= 0.00915513
+Max accel local: 1.7863079922756597
+dt_pre: 0.01
+Iteration 1, Cost: 9.26303e-11, alpha= 1, time= 4.7e-05
+Iteration 2, Cost: 8.924e-11, alpha= 1, time= 4.3833e-05
+Iteration 3, Cost: 8.92081e-11, alpha= 1, time= 4.3458e-05
+Iteration 4, Cost: 8.92065e-11, alpha= 1, time= 4.3083e-05
+Iteration 5, Cost: 8.92082e-11, alpha= 0.000976562, time= 0.000200458
+Very short trajectory in iLQR, check this
+Iteration 1, Cost: 9.36346e-05, alpha= 1, time= 0.00134321
+Iteration 2, Cost: 6.21278e-06, alpha= 1, time= 0.00137242
+Iteration 3, Cost: 6.20683e-06, alpha= 1, time= 0.001377
+Iteration 4, Cost: 6.20655e-06, alpha= 1, time= 0.00137079
+Iteration 5, Cost: 6.20648e-06, alpha= 1, time= 0.00138192
+Iteration 6, Cost: 6.20646e-06, alpha= 1, time= 0.00137192
+Iteration 7, Cost: 6.20646e-06, alpha= 1, time= 0.00137746
+Iteration 8, Cost: 6.20646e-06, alpha= 1, time= 0.00137675
+Iteration 9, Cost: 6.20646e-06, alpha= 1, time= 0.00138154
+Iteration 10, Cost: 6.20646e-06, alpha= 1, time= 0.00136825
+Iteration 11, Cost: 6.20646e-06, alpha= 1, time= 0.00138062
+Iteration 12, Cost: 6.20646e-06, alpha= 0.000976562, time= 0.00644617
+Max accel local: 1.494315613128147
+dt_pre: 0.01
+Iteration 1, Cost: 0.0144388, alpha= 1, time= 0.00357825
+Iteration 2, Cost: 2.3156e-05, alpha= 1, time= 0.00356358
+Iteration 3, Cost: 1.95931e-05, alpha= 1, time= 0.00408208
+Iteration 4, Cost: 1.95902e-05, alpha= 1, time= 0.00416838
+Iteration 5, Cost: 1.95896e-05, alpha= 1, time= 0.00404433
+Iteration 6, Cost: 1.95894e-05, alpha= 1, time= 0.0036795
+Iteration 7, Cost: 1.95894e-05, alpha= 1, time= 0.00391829
+Iteration 8, Cost: 1.95894e-05, alpha= 1, time= 0.00374146
+Iteration 9, Cost: 1.95894e-05, alpha= 1, time= 0.00407975
+Iteration 10, Cost: 1.95894e-05, alpha= 1, time= 0.00386171
+Iteration 11, Cost: 1.95894e-05, alpha= 1, time= 0.00372883
+Iteration 12, Cost: 1.95894e-05, alpha= 1, time= 0.00367625
+Iteration 13, Cost: 1.95894e-05, alpha= 1, time= 0.00382112
+Iteration 14, Cost: 1.95894e-05, alpha= 1, time= 0.00365358
+Iteration 15, Cost: 1.95894e-05, alpha= 0.000976562, time= 0.0177854
+Max accel local: 1.5502137475793265
+dt_pre: 0.01
+Iteration 1, Cost: 6.57291e-08, alpha= 1, time= 0.000579375
+Iteration 2, Cost: 6.04332e-08, alpha= 1, time= 0.000575459
+Iteration 3, Cost: 6.04286e-08, alpha= 1, time= 0.000554291
+Iteration 4, Cost: 6.04286e-08, alpha= 1, time= 0.000550875
+Iteration 5, Cost: 6.04286e-08, alpha= 0.125, time= 0.00116679
+Max accel local: 1.1828726789959252
+dt_pre: 0.01
+Iteration 1, Cost: 2.22503e-10, alpha= 1, time= 7.975e-05
+Iteration 2, Cost: 2.08616e-10, alpha= 1, time= 6.7666e-05
+Iteration 3, Cost: 2.08546e-10, alpha= 1, time= 6.6542e-05
+Iteration 4, Cost: 2.08544e-10, alpha= 1, time= 6.6709e-05
+Iteration 5, Cost: 2.08544e-10, alpha= 1, time= 6.7042e-05
+Iteration 6, Cost: 2.08543e-10, alpha= 1, time= 6.8042e-05
+Max accel local: 0.07493567492941211
+dt_pre: 0.01
+#+end_example
+# [goto error]
+#+begin_example
+---------------------------------------------------------------------------
+AttributeError                            Traceback (most recent call last)
+Cell In[39], line 2
+      1 itiba.safe_mode = True
+----> 2 planner.compute_and_plan_with_dips(predip=True)
+      3 planner.get_plan_image()
+
+File ~/develop/robotics/modules/tiba/tiba/planning.py:208, in TrajectoryPlanner.compute_and_plan_with_dips(self, distance, predip, dip_command)
+    205         break
+    206     self.itiba.motions.append(Motion(Qs, dQs))
+--> 208 if self.itiba.trjectory_status:
+    209     if self.itiba.motions:
+    210         q = self.itiba.Qs[-1]
+
+AttributeError: 'TibaInterface' object has no attribute 'trjectory_status'
+#+end_example
+:END:
+
+* Exec
+#+BEGIN_SRC jupyter-python :session py
+itiba.execute()
+#+END_SRC
+
+#+RESULTS:
+: Waiting for response
+: /Done
+: Finished motion
+
+
+* Previews
+#+BEGIN_SRC jupyter-python :session py :async yes
+!ls ~/Dropbox/develop_box/py5sketches/tiba_tests/outputs
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+a1                                  spock_new_C2_01.json
+a1.svg                              spock_new_C2_01b.json
+a2.svg                              spock_new_guess_01.json
+a3.svg                              spock_new_guess_02.json
+a4.svg                              spock_new_guess_02b.json
+a5.svg                              spock_new_guess_03.json
+a6.svg                              spock_new_guess_04_aug.json
+a7.svg                              spock_new_guess_05rw.json
+a8.svg                              spock_new_locfg-01.json
+a9.svg                              spock_new_locfg-02.json
+alf-2steps-clip0.1-image0.1-C2.json spockstrokes-jerk-100-01.json
+alf-ma-01.json                      spockstrokes-jerk-100-C5-01.json
+alf1.jpg                            spockstrokes-jerk-200-01.json
+alfbad1.json                        spockstrokes-jerk-200-01b.json
+alfok1.json                         spockstrokes-jerk-200-02.json
+alfweirdC2_-20.json                 spockstrokes-jerk-300-01b.json
+alfweirdC2_-20b.json                spockthick-jerk-200-01.json
+alien-01.json                       spockthick-jerk-200-02.json
+alien-02.json                       spockthick-jerk-200-C2-02.json
+angry_spock_01.json                 spockthick-jerk-200-C2-03.json
+angry_spock_02.json                 spockthick-jerk-200-C2-04.json
+arb.json                            spockthick-jerk-200-C2-45-04.json
+ball01.json                         spockthick-jerk-200-C5-45-04.json
+ball02.json                         strokemess.json
+bunny01.json                        strokemess2.json
+china1                              strokemess3.json
+first.svg                           tea_01.json
+grey-03c2-45sketch.json             tea_02.json
+grey01.json                         teapot-sep-1.json
+gull-01.json                        teapot-sep-2.json
+gull-02.json                        teapot-sep-3.json
+gull-02_C2--20.json                 teapot-sss.json
+gull-02_C2-45.json                  testcolors.pdf
+gull-03.json                        testcolors.svg
+gull-03_C2--20.json                 testrgb-01.svg
+gull-04simp_C2--20.json             tiba-guess-01.json
+happy_spock_01.json                 tiba-guess-01b.json
+happy_spock_02.json                 tiba-k-0.01-2.json
+kuf_part_01.json                    tiba-k-0.01-2b.json
+kuf_part_02.json                    tiba-k-0.01-2c.json
+kuf_part_03.json                    tiba-k-0.01.json
+kuf_part_04.json                    tiba_01.json
+ma-01.json                          tiba_02.json
+ma-02.json                          tiba_complex_01.json
+ma-03c2-45sketch.json               tiba_complex_02.json
+ma-03c2-sketch.json                 tiba_complex_03.json
+ma-03c2.json                        tiba_complex_C2_01.json
+saladcat--C2-0.03.json              tiba_complex_C2_02.json
+saladcat--C2-20.03.json             tiba_complex_C2_03.json
+saladcat-01.json                    tiba_simple_01.json
+saladcat-02.json                    tiba_simple_C2_01.json
+saladcat-03.json                    tiba_simple_C2_02.json
+second.svg                          tiba_simple_C2_03.json
+spiral_strokes_1_01.json            tiba_simple_C2_04.json
+spiral_strokes_2_01.json            tibahair1.json
+spiral_strokes_3_01.json            tibahair1b.json
+spiral_strokes_3_02.json            worf-03c2-45sketch-b.json
+spiral_strokes_3_45_01.json         worf-03c2-45sketch-c.json
+spock_01.json                       worf-03c2-45sketch.json
+spock_02.json                       worf-03c3-45sketch-c.json
+spock_03.json                       worf-03c3-45sketch-d.json
+spock_04.json
+#+end_example
+
+#+BEGIN_SRC jupyter-python :session py
+from tiba import planning, bezier
+import os
+from polygonsoup import plut
+from matplotlib.gridspec import GridSpec
+plt = plut.plt
+
+files = [
+         ['tiba_complex_C2_03.json','spock_new_guess_05rw.json', 'spock_new_C2_01.json'],
+         ]
+#files = [['alfok1.json']]
+
+nrows = len(files)
+ncols = len(files[0])
+print(nrows, ncols)
+gs = GridSpec(nrows, ncols)
+plut.figure((15,15))
+for i, row in enumerate(files):
+    for j, col in enumerate(row):
+        plt.subplot(gs[i,j])
+        planner = planning.TrajectoryPlanner(itiba)
+        planner.load_paths(os.path.join(os.path.expanduser('~/Dropbox/develop_box/py5sketches/tiba_tests/outputs'),
+                                        files[i][j]))
+        for Xw in planner.draft:
+            stroke = bezier.thick_bezier_curve(Xw[:,:2], Xw[:,2])
+            plut.fill(stroke, 'k')
+        plut.setup()
+plt.tight_layout()
+plt.show()
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: 1 3
+[[file:./.ob-jupyter/c0a3d3ea9ba56ee5629e679a14479c8020b4d3e6.png]]
+:END:

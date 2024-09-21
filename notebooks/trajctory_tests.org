@@ -9,6 +9,12 @@ import tiba.matplotlyb as ply
 import tiba.trajectory_utils as tu
 import numpy as np
 import matplotlib.pyplot as plt
+from tiba import utils, lqt
+import os
+from py5canvas import canvas
+from PIL import Image
+
+
 reload(ply)
 reload(spatial)
 reload(interface)
@@ -26,10 +32,6 @@ cfg = config.cfg
 params = lambda: None
 params.bezier_split_angle = 110
 
-from tiba import utils, lqt
-import os
-from py5canvas import canvas
-from PIL import Image
 
 #itiba.ros_spin()
 #+END_SRC
