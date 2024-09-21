@@ -876,6 +876,9 @@ class TibaInterface:
                                             trajectories=task_trajectories,
                                             filename=self.plot_path)
 
+    def clear_motions(self):
+        self.motions = []
+
     def plan_joint_approach(self, q):
         ''' Plan a joint approach to a target position'''
         Qs, dQs = tu.joint_approach(self.robot.q, q)
@@ -883,6 +886,7 @@ class TibaInterface:
         self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
         if not self.trajectory_status or self.safe_mode:
             self.plot_trajectory_stats()
+
 
 
     def plan_joint_trajectory(self, Qs, dQs, plot=False, task_trajectories=[]):
@@ -956,16 +960,25 @@ class TibaInterface:
         if self.trajectory_status:
             self.execute()
 
-    def plan_script_key_name(self, key):
+    def plan_script_key_name(self, key, append_to_configuration=None):
+        ''' Plan a script with a name from the motions.yaml file
+        `append_to_configuration` is an optional joint state. If specified,
+        current motions will not be cleared
+        '''
         if not key in self.scripts:
             print("Script does not exist")
             print(self.scripts.keys())
             return
         script = self.scripts[key]
         args = script['args'] if 'args' in script else {}
-        self.plan_script(os.path.join(self.base_path, script['file']), **args)
+        self.plan_script(os.path.join(self.base_path, script['file']),
+                         append_to_configuration=append_to_configuration,
+                         **args)
 
-    def plan_script(self, path, **kwargs):
+    def plan_script(self, path, append_to_configuration=None, **kwargs):
+        ''' Plan a script with a given path
+
+        '''
         if path in self.scripts:
             return self.plan_script_key_name(path)
 
@@ -974,12 +987,18 @@ class TibaInterface:
 
         # Local state to incrementally build trajectory
         state = lambda: None
-        state.q = self.robot.q
+        if append_to_configuration is not None:
+            state.q = append_to_configuration
+        else:
+            state.q = self.robot.q
         state.pose = self.robot.pen_tcp_pose(state.q)
         state.hand_pose = self.robot.hand_tcp_pose(state.q)
 
-        # Clear joint trajectory
-        self.motions = [Motion([], [])]
+        # Clear joint trajectory or append a new one
+        if append_to_configuration is None:
+            self.motions = [Motion([], [])]
+        else:
+            self.motions.append(Motion([], []))
 
         # self.Qs = []
         # self.dQs = []
@@ -1018,6 +1037,7 @@ class TibaInterface:
                 update_state(self.motions[-1].Qs[-1])
             else:
                 print("Empty trajectory")
+
         def tool_align(y):
             dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]

@@ -28,6 +28,9 @@ paper = edict({
     'A5': (8.3, 5.8)
 })
 
+def cm_to_inch(v):
+    return v/2.54
+
 class Plotter:
     def __init__(self,
                  src_rect=None,
@@ -79,14 +82,17 @@ class Plotter:
         self.dev.close()
         self.dev = None
 
-    def axi_pt(self, p):
+    def axi_pt(self, p, transform=True):
+        if not transform:
+            return tuple(p)
         return tuple(geom.affine_transform(self.aximat, p) + self.pen_offset)
 
-    def axi_path(self, P, closed):
-        Pa = [self.axi_pt(p) for p in P]
+    def axi_path(self, P, closed, transform=True):
+        Pa = [self.axi_pt(p, transform) for p in P]
         if closed:
             Pa.append(Pa[0])
-        Pa = axi.crop_path(Pa, 0. , 0., *tuple(self.axi_rect[1]))[0]
+        if transform:
+            Pa = axi.crop_path(Pa, 0. , 0., *tuple(self.axi_rect[1]))[0]
         return Pa
 
     def home(self):
@@ -109,9 +115,11 @@ class Plotter:
             return
         if self.pen_down_position > 0:
             self.dev.pen_up_position = self.pen_down_position
+            print('pendown:', self.dev.pen_up_position)
             self.dev.configure()
             self.dev.pen_up()
         else:
+            print('just pd')
             self.dev.pen_down()
 
     def pen_to(self, where):
@@ -132,11 +140,16 @@ class Plotter:
             return
         self.dev.disable_motors()
 
-    def plot(self, S, closed=False,
-                        max_velocity=3,
-                        penup_speed=200,
-                        pen_offset=np.zeros(2),
-             verbose=True): #200):
+
+    def plot(self,
+             S,
+             closed=False,
+             max_velocity=3,
+             penup_speed=200,
+             pen_offset=np.zeros(2),
+             penups=True,
+             verbose=True,
+             transform=True): #200):
         self.pen_offset = pen_offset
         if self.dev is None:
             print("No axidraw device")
@@ -150,11 +163,14 @@ class Plotter:
             for i, P in enumerate(S):
                 if verbose:
                     print_same_line('path %d of %d'%(i, len(S)))
-                self.dev.pen_up()
-                self.dev.goto(*self.axi_pt(P[0]))
-                self.dev.pen_down()
-                self.dev.run_path(self.axi_path(P, closed))
-                self.dev.pen_up()
+                if penups:
+                    self.pen_up()
+                self.dev.goto(*self.axi_pt(P[0], transform))
+                if penups:
+                    self.pen_down()
+                self.dev.run_path(self.axi_path(P, closed, transform))
+                if penups:
+                    self.pen_up()
 
             self.dev.wait()
         except serial.SerialException:

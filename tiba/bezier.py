@@ -216,6 +216,7 @@ def cubic_bspline_to_bezier_chain(P, periodic=False):
         return a + t*(b - a)
 
     if periodic:
+        #P = np.vstack([P[-1], P, P[0], P[1]])
         P = np.vstack([P[-1], P, P[0], P[1]])
     else:
         P = np.vstack([P[0], P[0], P, P[-1], P[-1]])

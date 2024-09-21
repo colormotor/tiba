@@ -370,11 +370,6 @@ def approach_sequence(seq, *args, **kwargs):
     if len(seq)==2:
         return approach(seq[0], seq[1], *args, **kwargs)
     return plan_poses_time_optimal(seq, *args, **kwargs)
-    # #path, _, _ = plan_polylines_time_optimal([np.array(seq)], *args, **kwargs)
-    # traj = []
-    # for a, b in zip(seq, seq[1:]):
-    #     traj += approach(a, b, *args, **kwargs)
-    # return traj
 
 def pose_traj_to_posorn(trajectory):
     ''' Convert a trajectory made of SE3 poses to pos+quaternions'''
@@ -416,13 +411,14 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
     #max_velocity = np.ones(dof, dtype=np.float32) * max_speed
     #max_acceleration = np.ones(dof, dtype=np.float32) * max_accel
 
-
     config.state.progress_max = len(polylines)
     config.state.progress = 0
     trajectories = []
     velocities = []
     accelerations = []
+
     for idx, P in enumerate(polylines):
+        print('TOPRA tol', tol)
         # Traj dt used for computations
         nattempt = 5
         print("%d of %d: Planning %d points"%(idx+1, len(polylines), len(P)))
@@ -482,9 +478,13 @@ def plan_polylines_jerk(polylines, simp, max_speed, max_accel_time=0.5, tol=0.0,
     for i, P in enumerate(polylines):
         print("Planning polyline %d of %d"%(i+1, len(polylines)))
         config.state.progress = i+1
-        traj, Q = plan_jerk(P, simp, max_speed, max_accel_time, **kwargs) #subd, maxiter)
-        trajectories.append(traj)
-        simplified.append(Q)
+        try:
+            traj, Q = plan_jerk(P, simp, max_speed, max_accel_time, **kwargs) #subd, maxiter)
+            trajectories.append(traj)
+            simplified.append(Q)
+        except ValueError as e:
+            print(e)
+            continue
     return trajectories, simplified
 
 
@@ -542,7 +542,8 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300, dce_perim
     except ValueError as e:
         print(e)
         print('T', T)
-        pdb.set_trace()
+        raise ValueError
+        #pdb.set_trace()
 
     dbps = [bp.derivative() for bp in bps]
     ddbps = [dbp.derivative() for dbp in dbps]
@@ -748,11 +749,11 @@ def lifting_motion(a, b, height, max_speed=None, accel_time=None):
     else:
         dd = geom.normalize(d)
         P = np.array([a, a+dd*height*0.5 + up, (a+b)/2 + up, b-dd*height*0.5+up, b])
-    
+
     paths, _, _ = plan_polylines_time_optimal([P],
                                               max_speed=max_speed,
-                                              accel_time=max_accel_time,
-                                              tol=0.3)
+                                              accel_time=accel_time,
+                                              tol=0.5)
     if not len(paths):
         print(P)
         print("Failed planning lifting motion")
