@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from py5canvas import *
 from importlib import reload
 from py5canvas import canvas
 import threading, pdb
@@ -45,7 +46,9 @@ else:
 
 np.set_printoptions(suppress=True)
 
-params = {'Seed': (5, {'min': 0, 'max': 100}),
+
+def parameters():
+    return {'Seed': (5, {'min': 0, 'max': 100}),
           'GUI hue': (0.12, {'min':0, 'max': 1.0}),
           'Gripper mm': (34.0, {'min': 2, 'max': 200}),
           'Guiding': {
@@ -507,5 +510,4 @@ def mouse_dragged(button, modifiers):
 
 
 if __name__== '__main__':
-    import py5canvas
-    py5canvas.run()
+    run()
