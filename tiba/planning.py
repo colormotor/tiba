@@ -9,6 +9,7 @@ from PIL import Image
 import numpy as np
 reload(tu)
 cfg = config.cfg
+log = config.log
 
 class TrajectoryPlanner:
     def __init__(self, itiba, **kwargs):
@@ -22,6 +23,7 @@ class TrajectoryPlanner:
                             order=3,
                             smoothing=0.2,
                             max_depth=4.0,
+                            bspline_degree=5,
                             resample_topp=False,
                             sorted=True,
                             bezier_split_angle=54)
@@ -79,21 +81,21 @@ class TrajectoryPlanner:
         elif params.planner == 'Thick':
             traj_callback = plan_thick_resample
         elif params.planner == 'Thick BSpline':
-            traj_callback = plan_thick_resample
+            traj_callback = plan_thick_resample_bspline
 
         if traj_callback is None:
             raise ValueError('No trajectory callback')
 
-        print("Planning draft with %d paths", len(self.draft))
+        # print("Planning draft with %d paths", len(self.draft))
         draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
-        print("Resulting fitted draft", len(draft))
+        log("Resulting fitted draft", len(draft))
         trajectories, self.penup_flags = plan_polylines_and_penups(traj_callback, draft, max_speed, accel_time,
                                                         self.penup_mm/1000,
                                                         trajectory_includes_penup,
                                                         params,
                                                         debug=debug,
                                                         get_penup_flags=True)
-        print("Resulting planned trajectories", len(trajectories))
+        log("Resulting planned trajectories", len(trajectories))
         def adapt_xy(P):
             if type(P)==list:
                 return [adapt_xy(Q) for Q in P]
@@ -113,7 +115,43 @@ class TrajectoryPlanner:
         trajectories += [tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)] # [tu.approach(cur_pos, trajectories[-1][-1])]
         self.itiba.plan_task_trajectories(trajectories)
         self.task_trajectories_augmented = trajectories
- 
+
+    def plan_cartesian(self):
+        params = self.params
+
+        max_speed = cfg.cartesian_speed
+        accel_time = cfg.acceleration_time
+        trajectory_includes_penup = False
+
+        # Select planner from parameters
+        if params.planner == 'Trapezoidal':
+            traj_callback = plan_trapezoidal
+        elif params.planner == 'Minimum Jerk':
+            traj_callback = plan_min_jerk
+        elif params.planner == 'Calligraphic':
+            traj_callback = plan_calligraphic
+            trajectory_includes_penup = True
+            max_speed *= 2
+        elif params.planner == 'Test simplify':
+            traj_callback = plan_simplify_test
+        elif params.planner == 'Thick bezier':
+            traj_callback = plan_thick_resample_bezier
+        elif params.planner == 'Thick':
+            traj_callback = plan_thick_resample
+        elif params.planner == 'Thick BSpline':
+            traj_callback = plan_thick_resample_bspline
+
+        if traj_callback is None:
+            raise ValueError('No trajectory callback')
+
+        log("Planning draft with %d paths", len(self.draft))
+        draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
+        log("Resulting fitted draft", len(draft))
+        trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
+                                                        self.penup_mm/1000,
+                                      params=params)
+        return trajectories
+
     def compute_and_plan_with_dips(self, distance=1.0, predip=False, dip_command='Dip-0'):
         params = self.params
 
@@ -137,14 +175,14 @@ class TrajectoryPlanner:
         elif params.planner == 'Thick':
             traj_callback = plan_thick_resample
         elif params.planner == 'Thick BSpline':
-            traj_callback = plan_thick_resample
+            traj_callback = plan_thick_resample_bspline
 
         if traj_callback is None:
             raise ValueError('No trajectory callback')
 
-        print("Planning draft with %d paths", len(self.draft))
+        log("Planning draft with %d paths", len(self.draft))
         draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
-        print("Resulting fitted draft", len(draft))
+        log("Resulting fitted draft", len(draft))
         trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                                         self.penup_mm/1000,
                                       params=params)
@@ -153,14 +191,14 @@ class TrajectoryPlanner:
         d = 0.0
         chunks = [[]]
         for traj in trajectories:
-            print("Chunk with size", traj.shape)
+            log("Chunk with size", traj.shape)
             chunks[-1].append(traj)
             d += geom.chord_length(traj)
             if d > distance:
-                print('Total distance: ', d)
+                log('Total distance: ', d)
                 chunks.append([])
                 d = 0
-        print('Total distance: ', d)
+        log('Total distance: ', d)
 
         # Add penups within chunks
         chunks = [insert_penups(c, self.penup_mm/1000, accel_time) for c in chunks if c]
@@ -170,7 +208,7 @@ class TrajectoryPlanner:
         chunk_indices = [[i for _ in c] for i, c in enumerate(chunks)]
 
         # Flattened
-        # print("Resulting planned trajectories", len(trajectories))
+        # log("Resulting planned trajectories", len(trajectories))
         # def adapt_xy(P):
         #     if type(P)==list:
         #         return [adapt_xy(Q) for Q in P]
@@ -180,7 +218,7 @@ class TrajectoryPlanner:
         # self.draft_fitted = adapt_xy([np.array(P)[:,:2] for P in draft])
 
         for c in chunks:
-            print("Shapes", [P.shape for P in c])
+            log("Shapes", [P.shape for P in c])
         chunks = [self.itiba.pad.fit_to_frame(c) for c in chunks]
         chunks = [self.itiba.pad.augment_with_pen_orientation(c, self.itiba.robot, self.itiba.robot.qr)
                   for c in chunks]
@@ -197,10 +235,10 @@ class TrajectoryPlanner:
             if i != 0 or predip:
                 self.itiba.plan_script(dip_command, append_to_configuration=q)
                 if not self.itiba.trajectory_status:
-                    print("Error computing dip trajectory")
+                    log("Error computing dip trajectory")
                     break
                 else:
-                    print("Dip OK")
+                    log("Dip OK")
                 if self.itiba.motions:
                     q = self.itiba.Qs[-1]
                 else:
@@ -208,7 +246,7 @@ class TrajectoryPlanner:
             Qs, dQs = self.itiba.compute_task_trajectories(chunk, q=q)
             self.itiba.trajectory_status = robot.check_joint_trajectory(Qs, dQs)
             if not self.itiba.trajectory_status:
-                print("Error computing chunk trajectory")
+                log("Error computing chunk trajectory")
                 break
             self.itiba.motions.append(Motion(Qs, dQs))
 
@@ -224,7 +262,7 @@ class TrajectoryPlanner:
                 self.itiba.motions.append(Motion(Qs, dQs))
                 self.trajectories_computed = True
             else:
-                print("Error computing return to initial trajectory")
+                log("Error computing return to initial trajectory")
 
         if not self.itiba.trajectory_status or self.itiba.safe_mode:
             self.itiba.plot_trajectory_stats()
@@ -271,12 +309,12 @@ class TrajectoryPlanner:
                 cam_image = cc.get_image()
                 return Image.fromarray(cam_image)
             else:
-                print("Invalid handeye")
+                log("Invalid handeye")
             ref_h = 180
             #c.image(cam_image, 0, c.height-ref_h, (w/h)*ref_h, ref_h)
             
     
-        print("Handeye not configured")
+        log("Handeye not configured")
         return None
     
 
@@ -347,7 +385,7 @@ def plan_calligraphic(samples,
                                         subd=5,
                                         angle=params.angle)
     # Clip zs to zero
-    print('Deviation from base: ', np.min(trajectories[0][:,2]))
+    log('Deviation from base: ', np.min(trajectories[0][:,2]))
     #trajectories[0][:,2] = ema(np.maximum(trajectories[0][:,2], 0.0), 0.1)
     return trajectories, simplified
 
@@ -400,6 +438,39 @@ def plan_thick_resample(samples,
     trajectories,_,_ = tu.plan_polylines_time_optimal(chains_3d, cfg.cartesian_speed, cfg.acceleration_time)
     return trajectories, [P[:,:2] for P in samples]
 
+def plan_thick_resample_bspline(samples,
+                                max_speed,
+                                accel_time,
+                                penup_distance,
+                                params):
+    Cps = [np.array(P[:,:2]) for P in samples]
+    widths = [np.array(P[:,2]) for P in samples]
+    width_range_mm = [np.min(np.concatenate(widths))*1000, np.max(np.concatenate(widths))*1000]
+
+    def map(x, input_range, output_range):
+        return (output_range[0] + ((x - input_range[0])/(input_range[1] - input_range[0]))
+                                    * (output_range[1] - output_range[0]))
+
+    wrange = np.array(width_range_mm)/1000.0
+    zrange = np.array([0.0, -params.max_depth])/1000.0
+
+    def width_to_z(w):
+        return map(w, wrange, zrange)
+
+    def z_to_width(z):
+        return map(z, zrange, wrange)
+
+    Cps_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(Cps, widths)]
+
+    if params.resample_topp:
+        trajectories,_,_ = tu.plan_polylines_time_optimal([tu.bspline_samples(P, len(P)*7, params.bspline_degree)
+                                                           for P in Cps_3d],
+                                                          cfg.cartesian_speed, cfg.acceleration_time)
+    else:
+        trajectories = [tu.resample_bspline(P, params.bspline_degree, max_speed, accel_time) for P in Cps_3d]
+    return trajectories, [P[:,:2] for P in samples]
+
+
 def plan_thick_resample_bezier(samples,
                         max_speed,
                         accel_time,
@@ -425,7 +496,7 @@ def plan_thick_resample_bezier(samples,
     chains_3d = [np.hstack([Cp, width_to_z(w.reshape(-1,1))]) for Cp, w in zip(chains, widths)]
 
     if params.resample_topp:
-        trajectories,_,_ = tu.plan_bezier_chains_time_optimal(chains_3d, cfg.cartesian_speed, cfg.acceleration_time)
+        trajectories,_,_ = tu.plan_polylines_time_optimal(chains_3d, cfg.cartesian_speed, cfg.acceleration_time)
     else:
         trajectories = [tu.resample_bezier(chain, max_speed, accel_time) for chain in chains_3d]
     return trajectories, [P[:,:2] for P in samples]
@@ -504,7 +575,7 @@ def plan_polylines_and_penups(planning_callback,
                                               params=params)
         paths = [P for P in paths if len(P) > 1]
 
-        print('lens', [len(P) for P in paths])
+        log('lens', [len(P) for P in paths])
         if not paths:
             if get_penup_flags:
                 return [], []
@@ -592,24 +663,28 @@ def load(path, params):
     if '.svg' in path:
         return load_svg(path, params)
     else:
-        return load_thick_paths(path)
+        return load_thick_paths(path, bspline='bspline' in params.planner.lower())
         
-def load_thick_paths(path):
+def load_thick_paths(path, bspline=False):
     strokes = utils.load_json(path)
     if not strokes:
         return
-    chains = [np.array(P) for P in strokes['points']]
-    widths = [np.array(w) for w in strokes['stroke_widths']]
+    if bspline:
+        chains = [np.array(P) for P in strokes['control_points']]
+        widths = [np.array(w) for w in strokes['control_widths']]
+    else:
+        chains = [np.array(P) for P in strokes['points']]
+        widths = [np.array(w) for w in strokes['stroke_widths']]
     if not len(widths[0].shape):
         widths = [np.zeros(len(P)) for P in chains]
     return [np.hstack([P, w.reshape(-1,1)]) for P, w in zip(chains, widths)]
 
 def load_svg(path, params):
-    print('Loading SVG:', path)
+    log('Loading SVG:', path)
     try:
         draft = svg.load_svg_bezier_chains(path)
     except FileNotFoundError as e:
-        print(e)
+        log(e)
         return
     zz = svg.load_svg_polylines(path)
 
@@ -638,7 +713,7 @@ def load_svg(path, params):
             #P = geom.adaptive_subdivide(P, 5)
             draft += [P] # geom.split_polyline_at_angle(P, 160)
         #draft.append(P)
-        # print('chain len:', len(chain))
+        # log('chain len:', len(chain))
         # draft.append(bezier.beziers_to_chain(beziers))
 
     return draft

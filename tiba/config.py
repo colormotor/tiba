@@ -11,6 +11,7 @@ class Config:
         self.acceleration_time = 0.4
         self.joint_acceleration_time = 1.0
         self.default_grasp_mm = 34.0
+        self.verbose = False
         #self.dt = 0.001
         self.dt = 0.01
         self.robot_dt = 0.001
@@ -42,3 +43,14 @@ state.progress_max = 1
 state.progress_text = ''
 state.progress_active = False
 
+def log(*args):
+    if cfg.verbose:
+        print(*args)
+    else:
+        pass
+
+def log_error(*args):
+    #if cfg.verbose:
+    print(*args)
+    #else:
+    #    pass

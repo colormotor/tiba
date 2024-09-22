@@ -20,7 +20,7 @@ from itertools import combinations
 from scipy.special import erf
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
-from scipy.interpolate import interp1d, splprep, splev, make_interp_spline, CubicSpline, BPoly
+from scipy.interpolate import interp1d, splprep, splev, make_interp_spline, CubicSpline, BPoly, BSpline
 from roboticstoolbox.tools.trajectory import ctraj, trapezoidal_func, trapezoidal
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
@@ -688,6 +688,7 @@ def resample_bezier(Cp, max_speed, accel_time, get_t=False):
         return x, Y
     return Y
 
+
 def rownorm(dP):
     return np.sqrt(np.sum(dP**2, axis=1)) 
 
@@ -701,6 +702,77 @@ def compute_accel(X, dt):
     D = np.diff(X, axis=0, n=2)/(dt**2)
     return rownorm(D)
 
+def bspline_tc(P, p):
+    k = p+1
+    # Clamp
+    Q = np.vstack([P[0]]*(p) + [P[1:-1]] + [P[-1]]*(p))
+    # Knots
+    n = len(Q)
+    m = n+k
+    t = np.arange(m-(p)*2)
+    t = np.concatenate([-np.arange(p)[::-1]-1,
+                       t,
+                       np.arange(p)+t[-1]+1])
+    return t, Q
+
+def bspline_samples(P, num_or_u, p, der=0):
+    ''' Sample a uniform BSpline of degree `p`'''
+    dim = P.shape[1]
+    k = p+1
+    t, Q = bspline_tc(P, p)
+    n = len(Q)
+    m = n+k
+    # # Clamp
+    # Q = np.vstack([P[0]]*(p) + [P[1:-1]] + [P[-1]]*(p))
+    # # Knots
+    # n = len(Q)
+    # m = n+k
+    # t = np.arange(m-(p)*2)
+    # t = np.concatenate([-np.arange(p)[::-1]-1,
+    #                    t,
+    #                    np.arange(p)+t[-1]+1])
+    # Basis functions
+    basis_knots = np.linspace(0, k, k+1)
+    bsp = BSpline.basis_element(basis_knots).derivative(der)
+    Bk = lambda u: bsp(np.clip(u, 0, k))
+    # Design matrix
+    if isinstance(num_or_u, np.ndarray):
+        u = num_or_u
+    else:
+        u = np.linspace(t[p], t[-k], num_or_u)
+    Bu = np.zeros((n, len(u)))
+    for i in range(n):
+        Bu[i, :] = Bk(u-t[i])
+    # Samples
+    Bu = np.kron(Bu.T, np.eye(dim))
+    Qhat = np.hstack(Q)
+    return (Bu@Qhat).reshape(len(u), dim)
+
+def resample_bspline(P, p, max_speed, accel_time, get_t=False):
+    dt = cfg.dt
+    t, _ = bspline_tc(P, p)
+    k = p + 1
+    u0, u1 = t[p], t[-k]
+    u_test = np.linspace(u0, u1, len(P)*10)
+    dX = bspline_samples(P, u_test, p, der=1)
+    ddX = bspline_samples(P, u_test, p, der=2)
+
+    smax = np.max(rownorm(dX))
+    amax = np.max(rownorm(ddX))
+
+    # Compute time step that satisfies max speed and acceleration bounds
+    max_accel = max_speed/accel_time
+    #print('max speed', max_speed)
+    #print('max accel', max_accel)
+    div_s = max_speed/smax
+    div_a = np.sqrt(max_accel/amax)
+    div = min(div_s, div_a)
+
+    u = np.arange(u0, u1, dt*div)
+    X = bspline_samples(P, u, p)
+    if get_t:
+        return u, X
+    return X
 
 def lifting_motion_jerk(a, b, height, max_speed=None, accel_time=None):
     ''' Create a pen lifting motion between two points assumed to lie on the XY plane'''
