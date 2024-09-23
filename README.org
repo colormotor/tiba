@@ -125,7 +125,7 @@ mamba install ros-noetic-realsense2-camera
 #+end_example
 
 
-*** Install easy-hand-eye
+*** TODO Install easy-hand-eye
 #+begin_example
 mamba install ros-noetic-moveit-resources-panda-description ros-noetic-moveit-resources-panda-moveit-config ros-noetic-panda-moveit-config
 mamba install transforms3d
@@ -139,9 +139,17 @@ rosdep install -ir --from-paths src --skip-keys libfranka
 catkin build
 #+end_example
 
+**** Calibration
+- Run  ~roslaunch tiba_handeye handeye_calibrate_pandapy.launch~ in one terminal. This will open a system where you can save poses
+- Run ~python run_calibration_poses.py~ (from the scripts dir) in another.
+- Press enter to go home
+- Press enter again for each pose
+- For each pose save it in in the RVIZ handeye dialog
+- Once done compute and then save. The file will be saved in "~/.ros/easy_handeye/panda_eye_hand_calib_eye_on_hand.yaml". Copy the file into the "./settings" directory to finalize.
 
 
-
+**** Publish
+- Run ~~roslaunch tiba_handeye publish.launch~.
 
 ** Interface with the robot
 *** Tiba server
