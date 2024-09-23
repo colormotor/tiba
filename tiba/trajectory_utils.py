@@ -20,7 +20,7 @@ from itertools import combinations
 from scipy.special import erf
 from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
-from scipy.interpolate import interp1d, splprep, splev, make_interp_spline, CubicSpline, BPoly
+from scipy.interpolate import interp1d, splprep, splev, make_interp_spline, CubicSpline, BPoly, BSpline
 from roboticstoolbox.tools.trajectory import ctraj, trapezoidal_func, trapezoidal
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
@@ -370,11 +370,6 @@ def approach_sequence(seq, *args, **kwargs):
     if len(seq)==2:
         return approach(seq[0], seq[1], *args, **kwargs)
     return plan_poses_time_optimal(seq, *args, **kwargs)
-    # #path, _, _ = plan_polylines_time_optimal([np.array(seq)], *args, **kwargs)
-    # traj = []
-    # for a, b in zip(seq, seq[1:]):
-    #     traj += approach(a, b, *args, **kwargs)
-    # return traj
 
 def pose_traj_to_posorn(trajectory):
     ''' Convert a trajectory made of SE3 poses to pos+quaternions'''
@@ -416,13 +411,14 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
     #max_velocity = np.ones(dof, dtype=np.float32) * max_speed
     #max_acceleration = np.ones(dof, dtype=np.float32) * max_accel
 
-
     config.state.progress_max = len(polylines)
     config.state.progress = 0
     trajectories = []
     velocities = []
     accelerations = []
+
     for idx, P in enumerate(polylines):
+        print('TOPRA tol', tol)
         # Traj dt used for computations
         nattempt = 5
         print("%d of %d: Planning %d points"%(idx+1, len(polylines), len(P)))
@@ -470,25 +466,8 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
     return trajectories, velocities, accelerations
 
 
-def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5, angle_tolerance=10, subd=3, maxiter=300, tol=0.0, bezier_tol=0):
-    '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
-    with a given maximum speed and max acceleration time
-    '''
-    trajectories = []
-    for chain in chains:
-        chunk_traj = []
-        for chunk in bezier.split_chain(chain, angle_tolerance):
-            #if tol > 0:
-            #    pts = bezier.bezier_piecewise(chunk, subd=20)
-            #    beziers = fitCurve(pts, tol)
-            traj, Q = plan_bezier_chain_jerk(chunk, max_speed, max_accel_time, subd, maxiter, bezier_tol=bezier_tol)
-            chunk_traj.append(traj)
-        trajectories.append(np.vstack(chunk_traj))
-        #trajectories += chunk_traj
-    return trajectories
 
-
-def plan_polylines_jerk(polylines, simp, max_speed, max_accel_time=0.5, angle_tolerance=10, subd=3, maxiter=300, tol=0.0):
+def plan_polylines_jerk(polylines, simp, max_speed, max_accel_time=0.5, tol=0.0, **kwargs):
     '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
     with a given maximum speed and max acceleration time
     '''
@@ -497,14 +476,19 @@ def plan_polylines_jerk(polylines, simp, max_speed, max_accel_time=0.5, angle_to
     config.state.progress = 0
     config.state.progress_max = len(polylines)
     for i, P in enumerate(polylines):
+        print("Planning polyline %d of %d"%(i+1, len(polylines)))
         config.state.progress = i+1
-        traj, Q = plan_jerk(P, simp, max_speed, max_accel_time, subd, maxiter)
-        trajectories.append(traj)
-        simplified.append(Q)
+        try:
+            traj, Q = plan_jerk(P, simp, max_speed, max_accel_time, **kwargs) #subd, maxiter)
+            trajectories.append(traj)
+            simplified.append(Q)
+        except ValueError as e:
+            print(e)
+            continue
     return trajectories, simplified
 
 
-def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
+def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300, dce_perimeter=2.0, simp_only=False, scale_factor=1000, method='COBYLA'):
     # Compute points along curve
     old = P
     P = np.array(P)
@@ -512,8 +496,10 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     dim = P.shape[1]
     print('Input polyline with %d points'%len(P))
     if simp > 0:
-       _, I = simplify.dce(P[:,:2], simp, get_indices=True)
+       _, I = simplify.dce(P[:,:2], simp, get_indices=True, perimeter=dce_perimeter)
        P = P[I]
+       if simp_only:
+           return P, P
     #print('simp', P, simp)
     # Ps = P
     # #Ps = simplify.dce(P, simplify_tol)
@@ -526,8 +512,9 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     # Path-constrained minimum jerk according to Todorov and Jordan
     # we use this to get passage times, velocity and acceleration that minimize jerk
     print('Planning minimum jerk trajectory for %d via-points (simplified)'%len(P))
-    n = max(len(P)*2, 100) #chain)* #10 # Pretty arbitrary
-    traj, psg, Q, dQ, ddQ = todorov.min_jerk_todorov(P, n, get_vel_acc=True, maxiter=maxiter)
+    n = max(len(P)*subd, 100) #chain)* #10 # Pretty arbitrary
+    P = P*scale_factor
+    traj, psg, Q, dQ, ddQ = todorov.min_jerk_todorov(P, n, get_vel_acc=True, maxiter=maxiter, opt_method=method)
     opsg = psg
 
     # Check that passage times are strictly increasing
@@ -538,6 +525,7 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
         psg = np.cumsum(np.concatenate([[psg[0]], dpsg]))
         if psg[-1] > n:
             print("Passage times exceed total time")
+            print(psg[-1], n)
             psg = psg/psg[-1]*(n-1e-3)
 
     # Add zero boundary conditions and initial and final time
@@ -554,7 +542,8 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     except ValueError as e:
         print(e)
         print('T', T)
-        pdb.set_trace()
+        raise ValueError
+        #pdb.set_trace()
 
     dbps = [bp.derivative() for bp in bps]
     ddbps = [dbp.derivative() for dbp in dbps]
@@ -569,6 +558,7 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
     amax = np.max(rownorm(ddY))
 
     # Compute time step that satisfies max speed and acceleration bounds
+    max_speed = max_speed*scale_factor
     max_accel = max_speed/max_accel_time
     div_s = max_speed/smax
     div_a = np.sqrt(max_accel/amax)
@@ -578,13 +568,36 @@ def plan_jerk(P, simp, max_speed, max_accel_time, subd=2, maxiter=300):
 
     x = np.arange(0, T[-1], dt*div)
     # Compute trajectory
-    Y = np.vstack([bp(x) for bp in bps]).T
+    Y = np.vstack([bp(x) for bp in bps]).T / scale_factor
     if len(Y)==2:
         pdb.set_trace()
-    return Y, P
+    return Y, P/scale_factor
 
 
-def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300, bezier_tol=0):
+def plan_bezier_chains_jerk(chains, max_speed, max_accel_time=0.5,
+                            angle_tolerance=10, tol=0.0, bezier_subd=2, bezier_tol=0, simplify_tol=0.0, get_simplified=False, **kwargs):
+    '''Given a series (2d) of cubic Bezier chains, compute minimum jerk trajectories that track the curves
+    with a given maximum speed and max acceleration time
+    '''
+    trajectories = []
+    simplified = []
+    for i, chain in enumerate(chains):
+        chunk_traj = []
+        print("Planning chain %d of %d"%(i+1, len(chains)))
+        for chunk in bezier.split_chain(chain, angle_tolerance):
+            #if tol > 0:
+            #    pts = bezier.bezier_piecewise(chunk, subd=20)
+            #    beziers = fitCurve(pts, tol)
+            traj, Q = plan_bezier_chain_jerk(chunk, max_speed, max_accel_time, bezier_subd=bezier_subd, bezier_tol=bezier_tol, simplify_tol=simplify_tol, **kwargs)
+            simplified.append(Q)
+            chunk_traj.append(traj)
+        trajectories.append(np.vstack(chunk_traj))
+        #trajectories += chunk_traj
+    if get_simplified:
+        return trajectories, simplified
+    return trajectories
+
+def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, bezier_subd=2, bezier_tol=0, simplify_tol=0.0, **kwargs):
     '''Given a (2d) cubic Bezier chain, compute a minimum jerk trajectory that tracks the curve
     with a given maximum speed and max acceleration time
     '''
@@ -595,8 +608,8 @@ def plan_bezier_chain_jerk(chain, max_speed, max_accel_time, subd=2, maxiter=300
     if bezier_tol > 0:
         P = bezier.cubic_bezier_adaptive(chain, bezier_tol)
     else:
-        P = bezier.bezier_piecewise(chain, subd=subd)
-    return plan_jerk(P, 0.0, max_speed, max_accel_time, subd, maxiter)
+        P = bezier.bezier_piecewise(chain, subd=bezier_subd)
+    return plan_jerk(P, simplify_tol, max_speed, max_accel_time, **kwargs)
 
 def bezier_to_bpolys(chain):
     X = []
@@ -675,6 +688,7 @@ def resample_bezier(Cp, max_speed, accel_time, get_t=False):
         return x, Y
     return Y
 
+
 def rownorm(dP):
     return np.sqrt(np.sum(dP**2, axis=1)) 
 
@@ -688,9 +702,85 @@ def compute_accel(X, dt):
     D = np.diff(X, axis=0, n=2)/(dt**2)
     return rownorm(D)
 
+def bspline_tc(P, p):
+    k = p+1
+    # Clamp
+    Q = np.vstack([P[0]]*(p) + [P[1:-1]] + [P[-1]]*(p))
+    # Knots
+    n = len(Q)
+    m = n+k
+    t = np.arange(m-(p)*2)
+    t = np.concatenate([-np.arange(p)[::-1]-1,
+                       t,
+                       np.arange(p)+t[-1]+1])
+    return t, Q
 
-def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
+def bspline_samples(P, num_or_u, p, der=0):
+    ''' Sample a uniform BSpline of degree `p`'''
+    dim = P.shape[1]
+    k = p+1
+    t, Q = bspline_tc(P, p)
+    n = len(Q)
+    m = n+k
+    # # Clamp
+    # Q = np.vstack([P[0]]*(p) + [P[1:-1]] + [P[-1]]*(p))
+    # # Knots
+    # n = len(Q)
+    # m = n+k
+    # t = np.arange(m-(p)*2)
+    # t = np.concatenate([-np.arange(p)[::-1]-1,
+    #                    t,
+    #                    np.arange(p)+t[-1]+1])
+    # Basis functions
+    basis_knots = np.linspace(0, k, k+1)
+    bsp = BSpline.basis_element(basis_knots).derivative(der)
+    Bk = lambda u: bsp(np.clip(u, 0, k))
+    # Design matrix
+    if isinstance(num_or_u, np.ndarray):
+        u = num_or_u
+    else:
+        u = np.linspace(t[p], t[-k], num_or_u)
+    Bu = np.zeros((n, len(u)))
+    for i in range(n):
+        Bu[i, :] = Bk(u-t[i])
+    # Samples
+    Bu = np.kron(Bu.T, np.eye(dim))
+    Qhat = np.hstack(Q)
+    return (Bu@Qhat).reshape(len(u), dim)
+
+def resample_bspline(P, p, max_speed, accel_time, get_t=False):
+    dt = cfg.dt
+    t, _ = bspline_tc(P, p)
+    k = p + 1
+    u0, u1 = t[p], t[-k]
+    u_test = np.linspace(u0, u1, len(P)*10)
+    dX = bspline_samples(P, u_test, p, der=1)
+    ddX = bspline_samples(P, u_test, p, der=2)
+
+    smax = np.max(rownorm(dX))
+    amax = np.max(rownorm(ddX))
+
+    # Compute time step that satisfies max speed and acceleration bounds
+    max_accel = max_speed/accel_time
+    #print('max speed', max_speed)
+    #print('max accel', max_accel)
+    div_s = max_speed/smax
+    div_a = np.sqrt(max_accel/amax)
+    div = min(div_s, div_a)
+
+    u = np.arange(u0, u1, dt*div)
+    X = bspline_samples(P, u, p)
+    if get_t:
+        return u, X
+    return X
+
+def lifting_motion_jerk(a, b, height, max_speed=None, accel_time=None):
     ''' Create a pen lifting motion between two points assumed to lie on the XY plane'''
+    if max_speed is None:
+        max_speed = cfg.cartesian_speed
+    if accel_time is None:
+        accel_time = cfg.acceleration_time
+
     dt = cfg.dt
     a = np.array(a)
     b = np.array(b)
@@ -701,11 +791,41 @@ def lifting_motion(a, b, height, max_speed=150/1000, max_accel_time=0.4):
     else:
         dd = geom.normalize(d)
         P = np.array([a, a+dd*height*0.5 + up, (a+b)/2 + up, b-dd*height*0.5+up, b])
-    
+
+    path, _ = plan_jerk(P, 0.0, max_speed, accel_time, method='NLOPT_PRAXIS')
+
+    # paths, _, _ = plan_polylines_time_optimal([P],
+    #                                           max_speed=max_speed,
+    #                                           accel_time=max_accel_time,
+    #                                           tol=0.3)
+    if not len(path):
+        print(P)
+        print("Failed planning lifting motion")
+        raise ValueError
+    return path
+
+def lifting_motion(a, b, height, max_speed=None, accel_time=None):
+    ''' Create a pen lifting motion between two points assumed to lie on the XY plane'''
+    if max_speed is None:
+        max_speed = cfg.cartesian_speed
+    if accel_time is None:
+        accel_time = cfg.acceleration_time
+
+    dt = cfg.dt
+    a = np.array(a)
+    b = np.array(b)
+    d = b-a
+    up = [0, 0, height]
+    if geom.distance(a, b) < height:
+        P = np.array([a,  a+d*(1/3)+up, b-d*(1/3)+up, b])
+    else:
+        dd = geom.normalize(d)
+        P = np.array([a, a+dd*height*0.5 + up, (a+b)/2 + up, b-dd*height*0.5+up, b])
+
     paths, _, _ = plan_polylines_time_optimal([P],
                                               max_speed=max_speed,
-                                              accel_time=max_accel_time,
-                                              tol=0.3)
+                                              accel_time=accel_time,
+                                              tol=0.5)
     if not len(paths):
         print(P)
         print("Failed planning lifting motion")

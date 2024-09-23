@@ -182,6 +182,12 @@ def plan_min_jerk(samples,
                                                                 maxiter=params.config.max_iterations)
     return paths, simplified
 
+def plan_preplanned(samples,
+                    max_speed,
+                 accel_time,
+                 penup_distance,
+                 params):
+    return samples, samples
 
 def plan_simplify_test(samples,
                  max_speed,
@@ -218,6 +224,8 @@ def plan_thick_resample(samples,
 
     if params.config.resample_topp:
         trajectories,_,_ = tu.plan_bezier_chains_time_optimal(chains_3d, cfg.cartesian_speed, cfg.acceleration_time)
+    elif params.config.resample_jerk:
+        trajectories = tu.plan_bezier_chains_jerk(chains_3d, cfg.cartesian_speed, cfg.acceleration_time, maxiter=1000, bezier_subd=3, method='NLOPT_PRAXIS') #, bezier_tol=0.05)
     else:
         trajectories = [tu.resample_bezier(chain, max_speed, accel_time) for chain in chains_3d]
     return trajectories, [P[:,:2] for P in samples]
@@ -327,7 +335,7 @@ dip_pos = np.array([0.11812825731443674, -0.407704314564537, 0.10439764358100054
 #  [-0.7743211365357173, -0.10300303344311892, -0.50291393240498, -2.5627437008673333, -0.1284246296894626, 2.401976760003019, 0.7079839864811134]
 #
 
-planner_names = ['Trapezoidal', 'Minimum Jerk', 'Calligraphic', 'Test simplify', 'Thick resample']
+planner_names = ['Trapezoidal', 'Minimum Jerk', 'Calligraphic', 'Test simplify', 'Thick resample', 'Preplanned']
 
 class TibaSketch:
     def __init__(self, flags=['drawing']):
@@ -443,6 +451,7 @@ class TibaSketch:
                 'Order': (3, {'min':2, 'max':5, 'hide':True}),
                 'Max depth': (4.0, {'min':0.0, 'max':7.0, 'hide':True}),
                 'Resample TOPP': False,
+                'Resample Jerk': False,
             }
         })
 
@@ -639,7 +648,9 @@ class TibaSketch:
                 traj_callback = plan_simplify_test
             elif planner_names[params.config.cart_planner] == 'Thick resample':
                 traj_callback = plan_thick_resample
-                
+            elif planner_names[params.config.cart_planner] == 'Preplanned':
+                traj_callback = plan_preplanned
+
         if traj_callback is None:
             raise ValueError('No trajectory callback')
 
@@ -870,7 +881,7 @@ class TibaSketch:
         elif planner_names[self.params.config.cart_planner] == 'Calligraphic':
             self.hide_config_except('DCE thresh', 'Isotropy', 'Angle', 'Smoothing', 'Order')
         elif planner_names[self.params.config.cart_planner] == 'Thick resample':
-            self.hide_config_except('Max depth', 'Resample TOPP')
+            self.hide_config_except('Max depth', 'Resample TOPP', 'Resample Jerk')
         else:
             self.hide_config_except()
 

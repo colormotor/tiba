@@ -328,7 +328,6 @@ def scale_rect(rect, s, halign=0, valign=0):
 
     return [affine_transform(A, r[0]), affine_transform(A, r[1])]
 
-
 def rect_in_rect(src, dst, padding=0., axis=None):
     ''' Fit src rect into dst rect, preserving aspect ratio of src, with optional padding'''
     dst = pad_rect(dst, padding)
@@ -340,7 +339,7 @@ def rect_in_rect(src, dst, padding=0., axis=None):
     ratioh = dst_h/src_h
 
     if axis==None:
-        if ratiow <= ratioh:
+        if abs(ratiow) <= abs(ratioh):
             axis = 1
         else:
             axis = 0
@@ -357,7 +356,6 @@ def rect_in_rect(src, dst, padding=0., axis=None):
         x = dst[0][0] + dst_w*0.5 - w*0.5
 
     return make_rect(x, y, w, h)
-
 
 def rect_to_rect_transform(src, dst):
     ''' Fit src rect into dst rect, without preserving aspect ratio'''
@@ -566,6 +564,10 @@ def _affine_transform_polyline(mat, P):
     P = np.vstack([np.array(P).T, np.ones(len(P))])
     P = mat@P
     return list(P[:dim,:].T)
+
+def transform_rect(mat, rect):
+    P = np.array(rect)
+    return bounding_box(affine_transform(mat, P))
 
 def affine_transform(mat, data):
     if is_empty(data):
