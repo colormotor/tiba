@@ -95,6 +95,7 @@ class DrawingPad:
         scaled_box[1] = scaled_box[0] + self.scale*size
 
         self.scaled_box = scaled_box
+        self.scale = np.sqrt(abs(det22(frame)))
 
 
     def align_pose_to_pad(self, pose):
@@ -153,7 +154,7 @@ class DrawingPad:
 
     def get_box_points(self):
         return get_frame_aligned_xy_box_points(self.box, self.frame, self.offset)
-    
+
     def draw(self, v3d):
         ''' Draw the drawing pad using a View3d or GlView3d object'''
         v3d.frame(self.frame, 0.5)
@@ -249,7 +250,7 @@ def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, 
     else:
         S = geom.affine_transform(mat, S)
 
-    if penup_mm > 0.0 and S[0].shape[1] < 3:
+    if S[0].shape[1] < 3:
         S = [np.hstack([P, np.zeros([P.shape[0], 1])]) for P in S]
         up = np.array([0, 0, 1])
         S = [np.vstack([P[0] + up*(penup_mm/1000),

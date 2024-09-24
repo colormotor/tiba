@@ -26,6 +26,7 @@ import cv2
 from collections import namedtuple
 import swift
 from PIL import Image
+from easydict import EasyDict as edict
 
 from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
@@ -599,15 +600,32 @@ class TibaInterface:
 
     def set_tool(self, tool_dict):
         self.clear()
+        # Setting the tool recreates the robot (and URDF)
         self.robot = robot.TibaRobot(**tool_dict)
         self.robot.q = self.robot.home
         self.collision_robot = robot.TibaRobot(**tool_dict)
         self.collision_robot.q = self.collision_robot.home
+        # Propagate tool paramaters with defaults
+        self.tool_info = {'pen_offset_mm': 0.0,
+                          'min_radius_mm': 1.0,
+                          'max_radius_mm': 1.0}
+        for key, v in tool_dict.items():
+            if key in self.tool_info:
+                self.tool_info[key] = v
+        self.tool_info = edict(self.tool_info)
+        # Deprecate this
         if 'pen_offset_base_mm' in tool_dict:
             self.pen_offset_base_mm = tool_dict['pen_offset_base_mm']
         else:
             self.pen_offset_base_mm = 0.0
-
+        if 'min_radius_mm' in tool_dict:
+            self.min_radius_mm = tool_dict['min_radius_mm']
+        else:
+            self.min_radius_mm = 0.0
+        if 'max_radius_mm' in tool_dict:
+            self.max_radius_mm = tool_dict['max_radius_mm']
+        else:
+            self.max_radius_mm = 0.0
 
     def programming_mode(self, flag=True):
         if flag:

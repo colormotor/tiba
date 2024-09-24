@@ -22,6 +22,8 @@ import plotly.graph_objects as go
 import numpy as np
 import numbers
 import matplotlib
+from matplotlib.patches import Path, PathPatch
+
 
 from . import trajectory_utils as tu
 
@@ -102,9 +104,10 @@ class Figure:
     def flip_y(self, flag=True):
         self.cur_ax.flip_y = flag
 
-    def setup_2d(self):
+    def setup_2d(self, flip_y=True):
         self.axis_equal()
-        self.flip_y()
+        if flip_y:
+            self.flip_y()
 
     def title(self, title):
         self.cur_ax.title = title
@@ -169,6 +172,10 @@ class Plot2d(Plot):
             self.y = args[1]
             self.clr = args[2] # mcolors.to_rgb(args[2])
 
+class FilledShape(Plot):
+    def __init__(self, S, **kwargs):
+        super().__init__(**kwargs)
+        self.shape = S
 
 class Plot3d(Plot):
     def __init__(self, *args, **kwargs):
@@ -243,6 +250,15 @@ def stroke(X, color=None, **kwargs):
     #    color = mcolors.to_rgb(color)
     glob.fig.add_plot(Plot2d(X[:,0], X[:,1], color=color, **kwargs))
 
+def fill(S, color=None, **kwargs):
+    if type(S) != list or is_number(S[0][0]):
+        S = [S]
+
+    if not S:
+        return
+    S = [np.array(P) for P in S]
+    glob.fig.add_plot(FilledShape(S, color=color,**kwargs))
+
 def axis_3d(A, size, **kwargs):
     glob.fig.add_plot(Plot3d([A[:3,3], A[:3,3] + A[:3,0]*size], 'r', **kwargs))
     glob.fig.add_plot(Plot3d([A[:3,3], A[:3,3] + A[:3,1]*size], 'g', **kwargs))
@@ -287,8 +303,8 @@ def axis_equal(flag=True):
 def flip_y(flag=True):
     glob.fig.flip_y(flag)
 
-def setup_2d():
-    glob.fig.setup_2d()
+def setup_2d(flip_y=True):
+    glob.fig.setup_2d(flip_y)
 
 def title(title):
     glob.fig.title(title)
@@ -298,6 +314,22 @@ def show(impl='plotly'):
 
 
 ## Matploltlib-like API
+def plt_fill(S, color, **kwargs):
+    if type(S)==list and not S:
+        # print('Empty shape')
+        return
+
+    path = []
+    cmds = []
+    for P in S:
+        if not len(P):
+            continue
+        path += [p for p in P] + [P[0]]
+        cmds += [Path.MOVETO] + [Path.LINETO for p in P[:-1]] + [Path.CLOSEPOLY]
+    if path:
+        plt.gca().add_patch(PathPatch(Path(path, cmds), color=color, fill=True, linewidth=0, **kwargs))
+
+
 
 def show_plt(fig):
     '''
@@ -341,6 +373,12 @@ def show_plt(fig):
                         else:
                             clr = plot.clr
                         plt.plot(plot.x, plot.y, color=clr, lw=plot.lw, ls=plot.ls, alpha=plot.alpha, label=plot.label)
+                    if type(plot) == FilledShape:
+                        if plot.clr is None:
+                            clr = categorical_color(k)
+                        else:
+                            clr = plot.clr
+                        plt_fill(plot.shape, color=clr, alpha=plot.alpha, label=plot.label)
                     elif type(plot) == Image:
                         plt.imshow(plot.im, cmap=plot.cmap)
                     elif type(plot) == Bar:

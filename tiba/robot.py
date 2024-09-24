@@ -76,7 +76,10 @@ tools = {
     'Calli-brush-01': {
         'tip_dist_mm': 72.0,
         'tip_height_mm': 5.0,
-        'pen_offset_base_mm': 9.2
+        'pen_offset_base_mm': 9.2,
+        'min_radius_mm': 0.5,
+        'max_radius_mm': 3.0
+
     },
 
     'Squeezer': {
