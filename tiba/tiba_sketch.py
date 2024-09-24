@@ -892,7 +892,7 @@ class TibaSketch:
         params = self.params 
         # Udate drawing pad data
         if 'drawing' in self.flags:
-            self.pad.offset = params.drawing.plane_offset / 1000 + self.itiba.pen_offset_base_mm / 1000
+            self.pad.offset = params.drawing.plane_offset / 1000 + self.itiba.tool_info.offset_mm / 1000
             self.pad.pos_offset = [params.drawing.pos_offset_x, params.drawing.pos_offset_y]
             self.pad.update()
 

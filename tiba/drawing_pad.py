@@ -252,8 +252,9 @@ def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, 
 
     if S[0].shape[1] < 3:
         S = [np.hstack([P, np.zeros([P.shape[0], 1])]) for P in S]
-        up = np.array([0, 0, 1])
-        S = [np.vstack([P[0] + up*(penup_mm/1000),
+        if penup_mm > 0:
+            up = np.array([0, 0, 1])
+            S = [np.vstack([P[0] + up*(penup_mm/1000),
                         P,
                         P[-1] + up*(penup_mm/1000)]) for P in S]
 

@@ -406,9 +406,7 @@ class TibaInterface:
 
         self.server_busy = False
 
-        self.pen_offset_base_mm = 0.0
 
-        
         if state.has_ros:
             print("#################################################")
             print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
@@ -606,26 +604,28 @@ class TibaInterface:
         self.collision_robot = robot.TibaRobot(**tool_dict)
         self.collision_robot.q = self.collision_robot.home
         # Propagate tool paramaters with defaults
-        self.tool_info = {'pen_offset_mm': 0.0,
+        self.tool_info = {'offset_mm': 0.0,
+                          'range_mm': 0.0,
                           'min_radius_mm': 1.0,
-                          'max_radius_mm': 1.0}
+                          'max_radius_mm': 1.0,
+                          }
         for key, v in tool_dict.items():
             if key in self.tool_info:
                 self.tool_info[key] = v
         self.tool_info = edict(self.tool_info)
         # Deprecate this
-        if 'pen_offset_base_mm' in tool_dict:
-            self.pen_offset_base_mm = tool_dict['pen_offset_base_mm']
-        else:
-            self.pen_offset_base_mm = 0.0
-        if 'min_radius_mm' in tool_dict:
-            self.min_radius_mm = tool_dict['min_radius_mm']
-        else:
-            self.min_radius_mm = 0.0
-        if 'max_radius_mm' in tool_dict:
-            self.max_radius_mm = tool_dict['max_radius_mm']
-        else:
-            self.max_radius_mm = 0.0
+        # if 'pen_offset_base_mm' in tool_dict:
+        #     self.pen_offset_base_mm = tool_dict['pen_offset_base_mm']
+        # else:
+        #     self.pen_offset_base_mm = 0.0
+        # if 'min_radius_mm' in tool_dict:
+        #     self.min_radius_mm = tool_dict['min_radius_mm']
+        # else:
+        #     self.min_radius_mm = 0.0
+        # if 'max_radius_mm' in tool_dict:
+        #     self.max_radius_mm = tool_dict['max_radius_mm']
+        # else:
+        #     self.max_radius_mm = 0.0
 
     def programming_mode(self, flag=True):
         if flag:
