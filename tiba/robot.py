@@ -74,8 +74,8 @@ tools = {
     },
 
     'Molotow-slim': {
-        'tip_dist_mm': 47.0,
-        'tip_height_mm': 10.0,
+        'tip_dist_mm': 34.0,
+        'tip_height_mm': 13.0,
         'offset_mm': 4.5,
         'range_mm': 0.0,
     },
@@ -105,7 +105,7 @@ tools = {
         'tip_height_mm': 2.0,
         'offset_mm' : 5.0,
         'range_mm': 10.0,
-        'min_radius_mm': 3.0,
+        'min_radius_mm': 1.0,
         'max_radius_mm': 10.0
 
     },
@@ -114,9 +114,9 @@ tools = {
         'tip_dist_mm': 59.0,
         'tip_height_mm': 2.0,
         'offset_mm' : 5.0,
-        'range_mm': 7.0,
-        'min_radius_mm': 1.0,
-        'max_radius_mm': 5.0
+        'range_mm': 5.0,
+        'min_radius_mm': 0.5,
+        'max_radius_mm': 8.0
 
     },
 

@@ -24,10 +24,10 @@ def make_rect_mm(*args):
     return geom.make_centered_rect(np.array(c)/1000,
                                    np.array(s)/1000)
 
-def plan_paths(itiba, paths, dest_rect, planner='Trapezoidal', **kwargs):
+def plan_paths(itiba, paths, dest_rect, src_rect=None, planner='Trapezoidal', **kwargs):
     pl = TrajectoryPlanner(itiba, planner=planner, **kwargs)
     pl.draft = [np.array(P) for P in paths]
-    pl.fit_draft(dest_rect)
+    pl.fit_draft(dest_rect, src_rect=src_rect)
     return pl
 
 class TrajectoryPlanner:
@@ -58,40 +58,48 @@ class TrajectoryPlanner:
         self.plane_offset_mm = 0.0
         self.offset_mm = [0.0, 0.0]
 
+        if 'plane_offset_mm' in kwargs:
+            self.plane_offset_mm = kwargs['plane_offset_mm']
         self.itiba.update_handeye()
 
         self.trajectories = []
         self.trajectories_computed = False
         self.draft = []
         self.penup_flags = []
+        self.src_rect = None
 
-    def load_paths(self, path, max_paths=None, dest_rect=None, select_indices=[]):
+    def load_paths(self, path, max_paths=None, dest_rect=None, src_rect=None, select_indices=[]):
         self.draft = load(path, self.params)
-        if max_paths is not None:
-            if max_paths < 0:
-                self.draft = self.draft[max_paths:]
-            else:
-                self.draft = self.draft[:max_paths]
         if self.draft is None:
             return
-        self.fit_draft(dest_rect, select_indices)
+        self.fit_draft(dest_rect, max_paths, select_indices, src_rect=src_rect)
 
-    def fit_draft(self, dest_rect=None, select_indices=[]):
+    def fit_draft(self, dest_rect=None, max_paths=None, select_indices=[], src_rect=None):
         pad = self.itiba.pad
-        pad.offset = self.plane_offset_mm / 1000 + self.itiba.tool_info.offset_mm / 1000
+        pad.offset = self.plane_offset_mm / 1000  #+ self.itiba.tool_info.offset_mm / 1000
         pad.pos_offset = np.array(self.offset_mm)/1000
         pad.update()
         if dest_rect is not None:
             pad.scaled_box = dest_rect
-        paths = pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0) #self.penup_mm)
+        paths = pad.fit_to_box(self.draft, src_rect=src_rect, padding=self.padding_mm, penup_mm=0) #self.penup_mm)
         #print('Paths before', paths)
         paths = [np.hstack([P[:,:2], radius_to_z(self.params, P[:,2]).reshape(-1,1)])
                  for P in paths]
         #print('Paths after', paths)
         self.trajectories = pad.fit_to_frame(paths)
+        self.src_rect = src_rect
+
         if select_indices:
             self.trajectories = [self.trajectories[i] for i in select_indices]
             self.draft = [self.draft[i] for i in select_indices]
+        if max_paths is not None:
+            if max_paths < 0:
+                self.draft = self.draft[max_paths:]
+                self.trajectories = self.trajectories[max_paths:]
+            else:
+                self.draft = self.draft[:max_paths]
+                self.trajectories = self.trajectories[:max_paths]
+
         #print('Trajs', self.trajectories)
         self.trajectories_computed = False
         self.penup_flags = [False for _ in self.trajectories]
@@ -126,7 +134,7 @@ class TrajectoryPlanner:
             raise ValueError('No trajectory callback')
 
         # print("Planning draft with %d paths", len(self.draft))
-        draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
+        draft = self.itiba.pad.fit_to_box(self.draft, src_rect=self.src_rect, padding=self.padding_mm, penup_mm=0.0)
         log("Resulting fitted draft", len(draft))
         trajectories, self.penup_flags = plan_polylines_and_penups(traj_callback, draft, max_speed, accel_time,
                                                         self.penup_mm/1000,
@@ -186,7 +194,7 @@ class TrajectoryPlanner:
             raise ValueError('No trajectory callback')
 
         log("Planning draft with %d paths", len(self.draft))
-        draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
+        draft = self.itiba.pad.fit_to_box(self.draft, src_rect=self.src_rect, padding=self.padding_mm, penup_mm=0.0)
         log("Resulting fitted draft", len(draft))
         trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                                         self.penup_mm/1000,
@@ -225,7 +233,7 @@ class TrajectoryPlanner:
             raise ValueError('No trajectory callback')
 
         log("Planning draft with %d paths", len(self.draft))
-        draft = self.itiba.pad.fit_to_box(self.draft, padding=self.padding_mm, penup_mm=0.0)
+        draft = self.itiba.pad.fit_to_box(self.draft, src_rect=self.src_rect, padding=self.padding_mm, penup_mm=0.0)
         log("Resulting fitted draft", len(draft))
         trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                                         self.penup_mm/1000,
@@ -367,7 +375,7 @@ class TrajectoryPlanner:
                 if False: #self.itiba.handeye_valid():
                     projected_points = handeye.project_points(points, 'world')
                 else:
-                    m = np.linalg.inv(pad.frame)
+                    m = np.linalg.inv(pad.get_offset_frame()) #frame)
                     projected_points = geom.affine_transform(m, points)
                     projected_points = flip_transform(projected_points)
 
@@ -381,7 +389,7 @@ class TrajectoryPlanner:
                     if False: #self.itiba.handeye_valid():
                         projected_points = handeye.project_points(trajectory, 'world')
                     else:
-                        m = np.linalg.inv(pad.frame)
+                        m = np.linalg.inv(pad.get_offset_frame()) #frame)
                         projected_points = geom.affine_transform(m, trajectory)
                         projected_points = flip_transform(projected_points)
                         #print('flip', projected_points)
@@ -440,7 +448,7 @@ class TrajectoryPlanner:
                     if self.itiba.handeye_valid():
                         projected_points = handeye.project_points(points, 'world')
                     else:
-                        mat = np.linalg.inv(pad.frame)
+                        mat = np.linalg.inv(pad.get_offset_frame()) #pad.frame)
                         projected_points = mat@points
 
                     cc.polygon(projected_points)
@@ -449,7 +457,7 @@ class TrajectoryPlanner:
                         if self.itiba.handeye_valid():
                             projected_points = handeye.project_points(trajectory, 'world')
                         else:
-                            mat = np.linalg.inv(pad.frame)
+                            mat = np.linalg.inv(pad.get_offset_frame()) #frame)
                             projected_points = mat@trajectory
 
                         cc.stroke(255, 0, 0, 128)
@@ -584,13 +592,15 @@ def remap(x, input_range, output_range):
 
 def radius_to_z(params, r):
     wrange = [params.tool_info.min_radius_mm/1000, params.tool_info.max_radius_mm/1000]
-    zrange = [0.0, -params.tool_info.max_radius_mm/1000]
-    return remap(r, wrange, zrange)
+    #zrange = [0.0+params.tool_info.offset_mm/1000, -params.tool_info.range_mm/1000+params.tool_info.offset_mm/1000]
+    zrange = [0.0, -params.tool_info.range_mm/1000]
+    return remap(r, wrange, zrange) + (params.tool_info.offset_mm/1000)
 
-def z_to_radius(params, r):
+def z_to_radius(params, z):
     wrange = [params.tool_info.min_radius_mm/1000, params.tool_info.max_radius_mm/1000]
-    zrange = [0.0, -params.tool_info.max_radius_mm/1000]
-    return remap(r, zrange[::-1], wrange[::-1])
+    #zrange = [0.0+params.tool_info.offset_mm/1000, -params.tool_info.range_mm/1000+params.tool_info.offset_mm/1000]
+    zrange = [0.0, -params.tool_info.range_mm/1000]
+    return remap(z - (params.tool_info.offset_mm/1000), zrange[::-1], wrange[::-1])
 
 def plan_thick_resample_bspline(samples,
                                 max_speed,

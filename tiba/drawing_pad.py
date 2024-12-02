@@ -128,10 +128,13 @@ class DrawingPad:
             return trajectories[0]
         return trajectories
 
-    def fit_to_box(self, S, padding=0, penup_mm=50.0, get_mat=False):
+    def fit_to_box(self, S, src_rect=None, padding=0, penup_mm=50.0, get_mat=False):
         ''' Fits an input 2d trajectory to the given 2d box'''
-        res = fit_to_box_and_augment(S, self.scaled_box, padding, penup_mm=penup_mm, get_mat=get_mat)
+        res = fit_to_box_and_augment(S, self.scaled_box, padding, src_rect=src_rect, penup_mm=penup_mm, get_mat=get_mat)
         return res
+
+    def get_offset_frame(self):
+        return get_offset_frame(self.frame, self.offset)
 
     def fit_to_frame(self, S, clamp_z=False):
         ''' Fits a 3d trajectory assumed to lie on the XY plane, to the frame of the drawing pad'''
@@ -215,7 +218,7 @@ def draw_frame_aligned_xy_box(v3d, box, frame, offset=0):
 def det22(mat):
     return mat[0,0] * mat[1,1] - mat[0,1]*mat[1,0]
 
-def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, penup_mm=0.0, get_mat=False):
+def fit_to_box_and_augment(S, box, input_padding=10, src_rect=None, flip_x=False, flip_y=True, penup_mm=0.0, get_mat=False):
     compound = True
     if not geom.is_compound(S):
         S = [S]
@@ -236,7 +239,9 @@ def fit_to_box_and_augment(S, box, input_padding=10, flip_x=False, flip_y=True, 
     mat = geom.rot_2d(geom.radians(-90)) @ mat
 
     #S = geom.affine_transform(geom.rot_2d(geom.radians(-90)), S)
-    mat = mat @ geom.rect_in_rect_transform(geom.bounding_box([P[:,:2] for P in S], input_padding), box)
+    if src_rect is None:
+        src_rect = geom.bounding_box([P[:,:2] for P in S], input_padding)
+    mat = mat @ geom.rect_in_rect_transform(src_rect, box)
     scale = np.sqrt(abs(det22(mat)))
 
     # If we have thickness profile, scale it to fit the drawing

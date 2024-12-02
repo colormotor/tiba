@@ -182,7 +182,9 @@ class iLQRPlannerVelocity:
                 #print("Shapes, ", len(Q_batch), len(dQ_batch))
                 #dQ_batch = list(np.diff(np.array(Q_batch), axis=0)/cfg.dt)
                 if len(Q_batch) < 3:
+                    print(states)
                     log_error("Very short trajectory in iLQR, check this")
+
                     continue
 
                 # The iLQR optimizer seems to create non zero velocities at the start of the trajectory
@@ -249,6 +251,7 @@ class iLQRPlannerVelocity:
                 q0 = Q_batch[-1]
 
             except Exception as e:
+                print(states)
                 log_error('ILQR exception')
                 raise(e)
             config.state.progress = tindex+1
