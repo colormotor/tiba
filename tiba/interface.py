@@ -26,6 +26,7 @@ import cv2
 from collections import namedtuple
 import swift
 from PIL import Image
+from easydict import EasyDict as edict
 
 from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
@@ -77,7 +78,7 @@ class FrankaButton:
         return res
 
 class PositionEditor:
-    def __init__(self, positions_path='../settings/key_positions.json'):
+    def __init__(self, positions_path):
         try:
             self.positions = utils.load_json(positions_path)
         except Exception as e:
@@ -216,7 +217,7 @@ def ros_camera_info_to_cv(cam_info):
 
 
 class TibaHandeye:
-    def __init__(self, jupyter=False, ros_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml'):
+    def __init__(self, ros_config_path):
         try:
             with open(os.path.expanduser(ros_config_path), 'r') as f:
                 self.config = yaml.load(f, Loader=yaml.FullLoader)
@@ -353,21 +354,24 @@ class TibaHandeye:
     
 class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
-                 pad_path='../settings/drawing_pad.json',
-                 scripts_file='../settings/motions/motions.yaml',
+                 pad_path='drawing_pad.json',
+                 scripts_file='motions/motions.yaml',
+                 positions_path='key_positions.json',
                  plot_path='trajectory.png',
-                 base_path=None,
-                 jupyter=False
+                 handeye_config_path='panda_eye_hand_calib_eye_on_hand.yaml',
+                 base_path='./../robots/tiba/settings'
                  ):
 
-        if base_path is None:
+        if not os.path.isdir(base_path):
+            base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), base_path)
             print('base path', base_path)
-            base_path = os.path.dirname(os.path.abspath(__file__))
-
+        self.base_path = base_path
         pad_path = os.path.join(base_path, pad_path)
         scripts_file = os.path.join(base_path, scripts_file)
+        handeye_config_path = os.path.join(base_path, handeye_config_path)
+        positions_path = os.path.join(base_path, positions_path)
 
-        self.editor = PositionEditor()
+        self.editor = PositionEditor(positions_path)
         self.pad = drawing_pad.DrawingPad(pad_path)
         self.pad.load()
         self.pad.update()
@@ -402,8 +406,9 @@ class TibaInterface:
 
         self.server_busy = False
 
-        self.pen_offset_base_mm = 0.0
 
+        self.recorded_Qs = []
+        self.recorded_dQs = []
         
         if state.has_ros:
             print("#################################################")
@@ -419,10 +424,12 @@ class TibaInterface:
 
             try:
                 if init_node:
+                    # This will be initialized in a client setting
                     print("Initializing node", init_node)
                     rospy.init_node(init_node, anonymous=True, log_level=rospy.ERROR)
                     rospy_cur.Subscriber('/tiba/q', JointState, self.state_callback)
                     rospy_cur.Subscriber('/tiba/qdone', JointState, self.qdone_callback)
+                    rospy_cur.Subscriber('/tiba/executed_traj', JointTrajectory, self.executed_traj_callback)
                     # Response from server. We use the joint state message to see if a motion is done,
                     # (with name "Done") so we also update joint states with it.
                     rospy_cur.Subscriber('/tiba/response', String, self.response_callback)
@@ -436,7 +443,7 @@ class TibaInterface:
                 # rospyrospy.init_node('motion_generator', log_level=rospy.ERROR, anonymous=True) #
                 # self.send_msg('start: Tiba sketch connecting')
                 print("Init handeye coordination")
-                self.handeye = TibaHandeye(jupyter=jupyter)
+                self.handeye = TibaHandeye(handeye_config_path) #jupyter=jupyter)
             except rospy.exceptions.ROSException as e:
                 print("Ros issue, disabling")
                 state.has_ros = False
@@ -470,6 +477,7 @@ class TibaInterface:
     #     # self.ros_thread_running = True
     #     # self.ros_thread.start()
 
+    
     def print_available_tools(self):
         print("Available tools:")
         print(robot.tools.keys())
@@ -547,6 +555,13 @@ class TibaInterface:
         self.jpos_pub.publish(p)
         rospy.loginfo("Sent joint position")
 
+    def executed_traj_callback(data):
+        rospy.loginfo(rospy.get_caller_id() + "Robot executed joint trajectory with %d points"%(len(data.points)))
+        Qs = [p.positions for p in data.points]
+        dQs = [p.velocities for p in data.points]
+        self.recorded_Qs = Qs
+        self.recorded_dQs = dQs
+        
     def response_callback(self, data):
         print("Received response: ", data.data)
         # if data.data == 'Done':
@@ -596,15 +611,34 @@ class TibaInterface:
 
     def set_tool(self, tool_dict):
         self.clear()
+        # Setting the tool recreates the robot (and URDF)
         self.robot = robot.TibaRobot(**tool_dict)
         self.robot.q = self.robot.home
         self.collision_robot = robot.TibaRobot(**tool_dict)
         self.collision_robot.q = self.collision_robot.home
-        if 'pen_offset_base_mm' in tool_dict:
-            self.pen_offset_base_mm = tool_dict['pen_offset_base_mm']
-        else:
-            self.pen_offset_base_mm = 0.0
-
+        # Propagate tool paramaters with defaults
+        self.tool_info = {'offset_mm': 0.0,
+                          'range_mm': 0.0,
+                          'min_radius_mm': 1.0,
+                          'max_radius_mm': 1.0,
+                          }
+        for key, v in tool_dict.items():
+            if key in self.tool_info:
+                self.tool_info[key] = v
+        self.tool_info = edict(self.tool_info)
+        # Deprecate this
+        # if 'pen_offset_base_mm' in tool_dict:
+        #     self.pen_offset_base_mm = tool_dict['pen_offset_base_mm']
+        # else:
+        #     self.pen_offset_base_mm = 0.0
+        # if 'min_radius_mm' in tool_dict:
+        #     self.min_radius_mm = tool_dict['min_radius_mm']
+        # else:
+        #     self.min_radius_mm = 0.0
+        # if 'max_radius_mm' in tool_dict:
+        #     self.max_radius_mm = tool_dict['max_radius_mm']
+        # else:
+        #     self.max_radius_mm = 0.0
 
     def programming_mode(self, flag=True):
         if flag:
@@ -768,6 +802,7 @@ class TibaInterface:
 
     def execute(self, delay=1.0, force_drawing=False):
         ''' Execute the current joint motion'''
+        
         if self.panda is not None:
             self.delay(delay)
 
@@ -873,6 +908,10 @@ class TibaInterface:
                                             trajectories=task_trajectories,
                                             filename=self.plot_path)
 
+    def clear_motions(self):
+        self.motions = []
+        self.trajectory_status = True
+
     def plan_joint_approach(self, q):
         ''' Plan a joint approach to a target position'''
         Qs, dQs = tu.joint_approach(self.robot.q, q)
@@ -880,7 +919,6 @@ class TibaInterface:
         self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
         if not self.trajectory_status or self.safe_mode:
             self.plot_trajectory_stats()
-
 
     def plan_joint_trajectory(self, Qs, dQs, plot=False, task_trajectories=[]):
         self.read_states()
@@ -953,34 +991,52 @@ class TibaInterface:
         if self.trajectory_status:
             self.execute()
 
-    def plan_script_key_name(self, key):
+    def plan_script_key_name(self, key, append_to_configuration=None):
+        ''' Plan a script with a name from the motions.yaml file
+        `append_to_configuration` is an optional joint state. If specified,
+        current motions will not be cleared
+        '''
         if not key in self.scripts:
             print("Script does not exist")
             print(self.scripts.keys())
             return
         script = self.scripts[key]
         args = script['args'] if 'args' in script else {}
-        self.plan_script(script['file'], **args)
 
-    def plan_script(self, path, **kwargs):
+        self.plan_script(os.path.join(self.base_path, script['file']),
+                         append_to_configuration=append_to_configuration,
+                         **args)
+
+    def plan_script(self, path, append_to_configuration=None, **kwargs):
+        ''' Plan a script with a given path
+
+        '''
+        self.reload_scripts()
+
         if path in self.scripts:
-            return self.plan_script_key_name(path)
+            return self.plan_script_key_name(path, append_to_configuration)
 
         # Local functions
         import numpy as np
 
         # Local state to incrementally build trajectory
         state = lambda: None
-        state.q = self.robot.q
+        if append_to_configuration is not None:
+            state.q = append_to_configuration
+        else:
+            state.q = self.robot.q
         state.pose = self.robot.pen_tcp_pose(state.q)
         state.hand_pose = self.robot.hand_tcp_pose(state.q)
 
-        # Clear joint trajectory
-        self.motions = [Motion([], [])]
+        # Clear joint trajectory or append a new one
+        if append_to_configuration is None:
+            self.motions = [Motion([], [])]
+        else:
+            self.motions.append(Motion([], []))
 
         # self.Qs = []
         # self.dQs = []
-
+        print("Script arguments:")
         print(kwargs)
         # local variable context for script (updated later)
         var_context = {}
@@ -1015,6 +1071,7 @@ class TibaInterface:
                 update_state(self.motions[-1].Qs[-1])
             else:
                 print("Empty trajectory")
+
         def tool_align(y):
             dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
@@ -1132,9 +1189,10 @@ class TibaInterface:
             traceback.print_exc()
 
         self.trajectory_status = self.robot.check_joint_trajectory(self.Qs, self.dQs)
-        if not self.trajectory_status or self.safe_mode:
-            print("Plotting with safe mode:", self.safe_mode, "status:", self.trajectory_status)
-            self.plot_trajectory_stats()
+        if append_to_configuration is None:
+            if not self.trajectory_status or self.safe_mode:
+                print("Plotting with safe mode:", self.safe_mode, "status:", self.trajectory_status)
+                self.plot_trajectory_stats()
 
 def plot_cartesian_trajectories(trajectories):
     return

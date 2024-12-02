@@ -9,6 +9,12 @@ import tiba.matplotlyb as ply
 import tiba.trajectory_utils as tu
 import numpy as np
 import matplotlib.pyplot as plt
+from tiba import utils, lqt
+import os
+from py5canvas import canvas
+from PIL import Image
+
+
 reload(ply)
 reload(spatial)
 reload(interface)
@@ -26,10 +32,6 @@ cfg = config.cfg
 params = lambda: None
 params.bezier_split_angle = 110
 
-from tiba import utils, lqt
-import os
-from py5canvas import canvas
-from PIL import Image
 
 #itiba.ros_spin()
 #+END_SRC
@@ -73,60 +75,6 @@ itiba.plan_script('Pick-0')
 itiba.plot_trajectory_stats()
 #+END_SRC
 
-#+RESULTS:
-#+begin_example
-dict_keys(['Dip-0', 'Pick-0', 'Pick-Squeeze-0', 'Drop-0'])
-{}
-Compiling script
-Smoother
-Post init
-Smoother
-Post init
-Align hand
-Post init
-Post init
-Iteration 1, Cost: 1.64936e-06, alpha= 1, time= 0.000561125
-Iteration 2, Cost: 1.61378e-06, alpha= 1, time= 0.000543125
-Iteration 3, Cost: 1.61378e-06, alpha= 1, time= 0.00053775
-Iteration 4, Cost: 1.61378e-06, alpha= 1, time= 0.00053475
-Iteration 5, Cost: 1.61378e-06, alpha= 1, time= 0.000522541
-Iteration 6, Cost: 1.61378e-06, alpha= 1, time= 0.000514125
-Max accel local: 1.0829115210717222
-dt_pre: 0.01
-Post init
-Post init
-Iteration 1, Cost: 2.45019e-05, alpha= 1, time= 0.000985042
-Iteration 2, Cost: 1.52558e-05, alpha= 1, time= 0.000991042
-Iteration 3, Cost: 1.52556e-05, alpha= 1, time= 0.000992
-Iteration 4, Cost: 1.52556e-05, alpha= 1, time= 0.000977375
-Iteration 5, Cost: 1.52556e-05, alpha= 0.000976562, time= 0.0043985
-Max accel local: 1.0566006851305374
-dt_pre: 0.01
-Post init
-Post init
-Iteration 1, Cost: 0.0358238, alpha= 1, time= 0.00298287
-Iteration 2, Cost: 0.00053782, alpha= 1, time= 0.0030895
-Iteration 3, Cost: 0.000212053, alpha= 1, time= 0.00308758
-Iteration 4, Cost: 0.000212043, alpha= 1, time= 0.00308325
-Iteration 5, Cost: 0.000212043, alpha= 1, time= 0.00308425
-Iteration 6, Cost: 0.000212043, alpha= 1, time= 0.00308421
-Iteration 7, Cost: 0.000212043, alpha= 0.25, time= 0.0053335
-Max accel local: 1.0037545888550587
-dt_pre: 0.01
-Post init
-Post init
-Iteration 1, Cost: 0.0309068, alpha= 1, time= 0.0030375
-Iteration 2, Cost: 0.000474322, alpha= 1, time= 0.00313471
-Iteration 3, Cost: 0.000210416, alpha= 1, time= 0.00313221
-Iteration 4, Cost: 0.000210415, alpha= 1, time= 0.00312358
-Iteration 5, Cost: 0.000210415, alpha= 1, time= 0.00313267
-Iteration 6, Cost: 0.000210415, alpha= 1, time= 0.00312575
-Iteration 7, Cost: 0.000210415, alpha= 0.25, time= 0.00541021
-Max accel local: 1.0158993005365806
-dt_pre: 0.01
-Smoother
-Post init
-#+end_example
 
 #+BEGIN_SRC jupyter-python :session py
 itiba.execute()

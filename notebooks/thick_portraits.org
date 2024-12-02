@@ -1,0 +1,332 @@
+#+title: Thick Portraits
+#+PROPERTY: header-args:jupyter-python :session py :async yes :exports results :kernel ros_env
+
+* Setup
+#+BEGIN_SRC jupyter-python :session py
+from importlib import reload
+from tiba import svg, geom, bezier, spatial, interface, config
+import tiba.matplotlyb as ply
+import tiba.trajectory_utils as tu
+import numpy as np
+import matplotlib.pyplot as plt
+from tiba import utils, lqt
+import os
+from py5canvas import canvas
+from PIL import Image
+
+reload(ply)
+reload(spatial)
+reload(interface)
+import os
+
+os.environ['ROS_IPV6']='off'
+os.environ['ROS_MASTER_URI']='http://158.223.48.89:11311' #Running ROS
+
+interface.state.has_ros = False # True # Set to false if you don't need to communicate with the server
+
+itiba = interface.TibaInterface(init_node='tiba_notebook') #, jupyter=True)
+itiba.set_tool(interface.robot.tools['Calli-brush-01'])
+itiba.safe_mode = False
+cfg = config.cfg
+
+itiba.print_available_tools()
+itiba.print_available_positions()
+itiba.print_available_scripts()
+itiba.send_msg('getq')
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+/Users/colormotor/opt/miniconda3/envs/ros_env/lib/python3.9/site-packages/scipy/__init__.py:155: UserWarning: A NumPy version >=1.18.5 and <1.25.0 is required for this version of SciPy (detected version 1.26.0
+  warnings.warn(f"A NumPy version >={np_minversion} and <{np_maxversion}"
+Could not find drawSvg module
+Loading ros
+Loading ros
+Perlin noise not installed. Use `pip install perlin-noise` to install
+Loading ros
+base path None
+Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+No ros
+end interface init
+Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+Available tools:
+dict_keys(['Default', 'Probe', 'Edding', 'Calli-brush-01', 'Squeezer'])
+Available key positions:
+dict_keys(['Aruco', 'Dip', 'Handip', 'Home', 'Tool drop start', 'Tool side start', 'View'])
+Available scripts:
+dict_keys(['Dip-Rim-0', 'Dip-0', 'Dip-1', 'Dip-2', 'Pick-0', 'Pick-Squeeze-0', 'Drop-0'])
+#+end_example
+
+
+* Prepare and preview
+** Go home
+#+BEGIN_SRC jupyter-python :session py :async
+itiba.goto_joint_position('Home')
+#+END_SRC
+
+#+RESULTS:
+: goto  [-0.07348355578820649, -0.6406848793249571, 0.14414278314814566, -2.2053375955748025, -0.002115707922495155, 2.265591827123818, 0.8315813678712944]
+
+** Select brush and pick
+
+Select brush
+#+BEGIN_SRC jupyter-python :session py
+itiba.safe_mode = False
+itiba.set_tool(interface.robot.tools['Calli-brush-01'])
+#+END_SRC
+
+#+RESULTS:
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+: Saving URDF to:  /Users/colormotor/develop/robotics/modules/tiba/tiba/../urdf/franka_description/tiba_test.urdf
+
+And pick
+#+BEGIN_SRC jupyter-python :session py
+itiba.safe_mode = False
+itiba.plan_and_execute_script('Pick-0')
+#+END_SRC
+
+
+
+#+BEGIN_SRC jupyter-python :session py
+from importlib import reload
+from tiba import planning
+from tiba import trajectory_utils as tu
+import os
+reload(planning)
+reload(canvas)
+
+#itiba.handeye.fudge_offset = [6, 0]
+itiba.send_msg('getq')
+itiba.update_handeye()
+itiba.safe_mode = True
+itiba.set_tool(interface.robot.tools['Calli-brush-01'])
+planner = planning.TrajectoryPlanner(itiba, planner='Thick BSpline',
+                                     resample_topp=True)
+planner.offset_mm = [-50, 40]
+planner.padding_mm = 0
+planner.plane_offset_mm = -0.3
+path = '~/Dropbox/develop_box/py5sketches/tiba_tests/outputs/tibahair1b.json' #spock_new_guess_05rw.json'
+path = '~/Dropbox/transfer_box/data/portraits/tiba-b5-01.json'  #py5sketches/tiba_tests/outputs/spock_new_guess_05rw.json'
+planner.load_paths(os.path.expanduser(path), max_paths=2)
+c = canvas.Canvas(512, 512)
+c.background(255)
+new_draft = []
+#print(len(planner.draft))
+for Xw in planner.draft:
+    stroke = geom.thick_curve(Xw)
+    c.fill(0)
+    c.no_stroke()
+    c.shape(stroke, closed=True)
+c.show()
+
+#+END_SRC
+
+
+#+BEGIN_SRC jupyter-python :session py
+from tiba import planning
+from tiba import trajectory_utils as tu
+from easydict import EasyDict as edict
+import os
+reload(planning)
+reload(canvas)
+reload(tu)
+
+strokes = edict(utils.load_json(os.path.expanduser(path)))
+
+
+c = canvas.Canvas(512, 512)
+c.background(255)
+c.no_stroke()
+c.fill(0)
+
+for P, w in zip(strokes.control_points, strokes.control_widths):
+    Pw = np.hstack([P, np.array(w).reshape(-1,1)])
+    X = tu.bspline_samples(Pw, len(Pw)*5, 5)
+    S = geom.thick_curve(X)
+    c.shape(S)
+    #c.polyline(X[:,:2])
+c.show()
+
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: Perlin noise not installed. Use `pip install perlin-noise` to install
+[[file:./.ob-jupyter/c6baa50d55f461bf69ec74ed51ef466d3918d799.png]]
+:END:
+
+#+BEGIN_SRC jupyter-python :session py :async no
+from polygonsoup import plut
+#trajectories = planner.plan_cartesian()
+plut.figure((9,6))
+plt.subplot(121)
+for X in trajectories:
+    plut.stroke(X[:,:2], 'k')
+plut.setup()
+plt.subplot(122)
+dX = np.diff(X, axis=0)/cfg.dt
+ddX = np.diff(dX, axis=0)/cfg.dt
+speed = tu.rownorm(dX)
+plt.plot(speed)
+#plt.plot([0, len(speed)], [cfg.cartesian_speed/cfg.acceleration_time, cfg.cartesian_speed/cfg.acceleration_time])
+plt.show()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/8922d8ca18f0923ce6db57cc61efb1efc7c2c79c.png]]
+
+#+BEGIN_SRC jupyter-python :session py
+type(planner).__name__
+#+END_SRC
+
+#+RESULTS:
+: TrajectoryPlanner
+
+** Plan
+#+BEGIN_SRC jupyter-python :session py :async no
+itiba.safe_mode = True
+planner.compute_and_plan_with_dips(predip=True)
+planner.get_plan_image()
+#+END_SRC
+
+
+* Exec
+#+BEGIN_SRC jupyter-python :session py
+itiba.execute()
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+#+begin_example
+Waiting for response
+/Done
+
+Waiting for response
+-Done
+
+Waiting for response
+-Done
+Waiting for response
+\Done
+Waiting for response
+-Done
+Finished motion
+#+end_example
+:END:
+
+#+BEGIN_SRC jupyter-python :session py
+itiba.simulate()
+#+END_SRC
+
+#+RESULTS:
+
+
+* Previews
+#+BEGIN_SRC jupyter-python :session py :async yes
+!ls ~/Dropbox/develop_box/py5sketches/tiba_tests/outputs
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+a1                                  spock_new_C2_01.json
+a1.svg                              spock_new_C2_01b.json
+a2.svg                              spock_new_guess_01.json
+a3.svg                              spock_new_guess_02.json
+a4.svg                              spock_new_guess_02b.json
+a5.svg                              spock_new_guess_03.json
+a6.svg                              spock_new_guess_04_aug.json
+a7.svg                              spock_new_guess_05rw.json
+a8.svg                              spock_new_locfg-01.json
+a9.svg                              spock_new_locfg-02.json
+alf-2steps-clip0.1-image0.1-C2.json spockstrokes-jerk-100-01.json
+alf-ma-01.json                      spockstrokes-jerk-100-C5-01.json
+alf1.jpg                            spockstrokes-jerk-200-01.json
+alfbad1.json                        spockstrokes-jerk-200-01b.json
+alfok1.json                         spockstrokes-jerk-200-02.json
+alfweirdC2_-20.json                 spockstrokes-jerk-300-01b.json
+alfweirdC2_-20b.json                spockthick-jerk-200-01.json
+alien-01.json                       spockthick-jerk-200-02.json
+alien-02.json                       spockthick-jerk-200-C2-02.json
+angry_spock_01.json                 spockthick-jerk-200-C2-03.json
+angry_spock_02.json                 spockthick-jerk-200-C2-04.json
+arb.json                            spockthick-jerk-200-C2-45-04.json
+ball01.json                         spockthick-jerk-200-C5-45-04.json
+ball02.json                         strokemess.json
+bunny01.json                        strokemess2.json
+china1                              strokemess3.json
+first.svg                           tea_01.json
+grey-03c2-45sketch.json             tea_02.json
+grey01.json                         teapot-sep-1.json
+gull-01.json                        teapot-sep-2.json
+gull-02.json                        teapot-sep-3.json
+gull-02_C2--20.json                 teapot-sss.json
+gull-02_C2-45.json                  testcolors.pdf
+gull-03.json                        testcolors.svg
+gull-03_C2--20.json                 testrgb-01.svg
+gull-04simp_C2--20.json             tiba-guess-01.json
+happy_spock_01.json                 tiba-guess-01b.json
+happy_spock_02.json                 tiba-k-0.01-2.json
+kuf_part_01.json                    tiba-k-0.01-2b.json
+kuf_part_02.json                    tiba-k-0.01-2c.json
+kuf_part_03.json                    tiba-k-0.01.json
+kuf_part_04.json                    tiba_01.json
+ma-01.json                          tiba_02.json
+ma-02.json                          tiba_complex_01.json
+ma-03c2-45sketch.json               tiba_complex_02.json
+ma-03c2-sketch.json                 tiba_complex_03.json
+ma-03c2.json                        tiba_complex_C2_01.json
+saladcat--C2-0.03.json              tiba_complex_C2_02.json
+saladcat--C2-20.03.json             tiba_complex_C2_03.json
+saladcat-01.json                    tiba_simple_01.json
+saladcat-02.json                    tiba_simple_C2_01.json
+saladcat-03.json                    tiba_simple_C2_02.json
+second.svg                          tiba_simple_C2_03.json
+spiral_strokes_1_01.json            tiba_simple_C2_04.json
+spiral_strokes_2_01.json            tibahair1.json
+spiral_strokes_3_01.json            tibahair1b.json
+spiral_strokes_3_02.json            worf-03c2-45sketch-b.json
+spiral_strokes_3_45_01.json         worf-03c2-45sketch-c.json
+spock_01.json                       worf-03c2-45sketch.json
+spock_02.json                       worf-03c3-45sketch-c.json
+spock_03.json                       worf-03c3-45sketch-d.json
+spock_04.json
+#+end_example
+
+#+BEGIN_SRC jupyter-python :session py
+from tiba import planning, bezier
+import os
+from polygonsoup import plut
+from matplotlib.gridspec import GridSpec
+plt = plut.plt
+
+files = [
+         ['tiba_complex_C2_03.json','spock_new_guess_05rw.json', 'spock_new_C2_01.json'],
+         ]
+#files = [['alfok1.json']]
+
+nrows = len(files)
+ncols = len(files[0])
+print(nrows, ncols)
+gs = GridSpec(nrows, ncols)
+plut.figure((15,15))
+for i, row in enumerate(files):
+    for j, col in enumerate(row):
+        plt.subplot(gs[i,j])
+        planner = planning.TrajectoryPlanner(itiba)
+        planner.load_paths(os.path.join(os.path.expanduser('~/Dropbox/develop_box/py5sketches/tiba_tests/outputs'),
+                                        files[i][j]))
+        for Xw in planner.draft:
+            stroke = bezier.thick_bezier_curve(Xw[:,:2], Xw[:,2])
+            plut.fill(stroke, 'k')
+        plut.setup()
+plt.tight_layout()
+plt.show()
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: 1 3
+[[file:./.ob-jupyter/c0a3d3ea9ba56ee5629e679a14479c8020b4d3e6.png]]
+:END:

@@ -31,7 +31,7 @@ from scipy.interpolate import BPoly
 
 from . import utils, geom, config
 from . import trajectory_utils as tu
-from .config import cfg
+from .config import cfg, log, log_error
 from . import draw
 from . import matplotlyb as ply
 
@@ -51,6 +51,10 @@ reload(ply)
 # q_min_panda = np.array([-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973])
 # q_max_panda = np.array([2.8973,1.7628,2.8973,-0.0698,2.8973,3.7525,2.8973])
 # panda_limits = [q_min_panda, q_max_panda]
+
+class ILQRCallbackMessage(PythonCallbackMessage):
+    def notify(self, s):
+        log(s)
 
 def is_number(x):
     return isinstance(x, numbers.Number)
@@ -79,7 +83,7 @@ def subsample_polynomial(derivs, subsample=10):
             polys.append(BPoly.from_derivatives(T, np.vstack([derivs[:, d, i] for i in range(nderiv)]).T))
             dpolys.append(polys[-1].derivative())
     except Exception as e:
-        print(e)
+        log_error(e)
         raise(ValueError)
     T = np.arange(0, T[-1], cfg.robot_dt) # np.linspace(0, T[-1], (n-1)*subsample+1)
     X = np.vstack([bp(T) for bp in polys]).T
@@ -99,7 +103,7 @@ class iLQRPlannerVelocity:
 
     def plan(self, trajectories,
              num_iter=20,
-             r=1e-5,
+             r=1e-6,
              weights=np.ones(7),
              rest = 0.1,
              limits=[],
@@ -178,7 +182,7 @@ class iLQRPlannerVelocity:
                 #print("Shapes, ", len(Q_batch), len(dQ_batch))
                 #dQ_batch = list(np.diff(np.array(Q_batch), axis=0)/cfg.dt)
                 if len(Q_batch) < 3:
-                    print("Very short trajectory in iLQR, check this")
+                    log_error("Very short trajectory in iLQR, check this")
                     continue
 
                 # The iLQR optimizer seems to create non zero velocities at the start of the trajectory
@@ -194,10 +198,10 @@ class iLQRPlannerVelocity:
 
                 acc = np.diff(np.array(dQ_batch), axis=0)/cfg.dt
                 if np.any(np.abs(acc) > 4):
-                    print('High acceleration inside trajectory')
-                    print(acc)
+                    log_error('High acceleration inside trajectory')
+                    # print(acc)
                     #pdb.set_trace()
-                print('Max accel local:', np.max(np.abs(acc)))
+                log('Max accel local:', np.max(np.abs(acc)))
 
                 n = len(Q_batch)
                 Q_batch, dQ_batch = tu.bspline((n-1)*self.subsample+1, Q_batch, der=1, duration=(n-1)*cfg.dt)
@@ -245,7 +249,7 @@ class iLQRPlannerVelocity:
                 q0 = Q_batch[-1]
 
             except Exception as e:
-                print('ILQR exception')
+                log_error('ILQR exception')
                 raise(e)
             config.state.progress = tindex+1
 
@@ -401,7 +405,7 @@ class iLQRPlannerAcceleration:
                 q0 = QdQs_batch[-1][:7]
 
             except Exception as e:
-                print(e)
+                log_error(e)
             config.state.progress = tindex+1
 
 

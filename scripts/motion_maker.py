@@ -144,6 +144,10 @@ def load_thick_paths(path):
         return
     chains = [np.array(P) for P in strokes['points']]
     widths = [np.array(w) for w in strokes['stroke_widths']]
+    print(widths)
+    if len(chains) != len(widths) or not len(widths[0].shape) or len(chains[0]) != len(widths[0]):
+        widths = [np.zeros(len(P)) for P in chains]
+
     tsketch.set_draft([np.hstack([P, w.reshape(-1,1)]) for P, w in zip(chains, widths)])
 
 def load_svg(path):
