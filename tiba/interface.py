@@ -659,10 +659,14 @@ class TibaInterface:
             url = '/desk/api/operating-mode/programming'
         else:
             url = '/desk/api/operating-mode/execution'
-        desk._request('post',
+        try:
+            desk._request('post',
                   url,
                   files={'force': True},
                   headers={'X-Control-Token': desk._token.token})
+        except ConnectionError as e:
+            print(e)
+            
 
     def simulate(self):
         ''' Simulate current trajectories using Swift'''

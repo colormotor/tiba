@@ -37,7 +37,7 @@ reload(ui)
 
 # Add the --robot argument
 parser = argparse.ArgumentParser()
-parser.add_argument('--robot', type=str, default='tiba', help='Name of the robot (default: tiba)')
+parser.add_argument('--robot', type=str, default='davie', help='Name of the robot (default: tiba)')
 # Parse the arguments
 args = parser.parse_args()
 base_path = './../robots/' + args.robot + '/settings'
@@ -50,6 +50,7 @@ if panda_loader is not None:
     from panda_py import controllers
     has_robot = True
 else:
+    print("!!!! Panda py not installed, not connecting to robot")
     has_robot = False
 
 np.set_printoptions(suppress=True)
@@ -122,7 +123,7 @@ if has_robot:
     if not desk.has_control():
         print("Forcing control")
         desk.take_control(True)
-        desk.activate_fci()
+    desk.activate_fci()
     panda = panda_py.Panda(hostname)
     gripper = libfranka.Gripper(hostname)
 
@@ -219,7 +220,7 @@ def setup():
     # Load parameters here for standalone
     global params
     tsketch.add_parameters(params)
-    params = sketch.parameters(params)
+    params = sketch._prepare_parameters(params)
 
     #sketch.set_gui_callback(gui)
     create_canvas(1024, 768, 350) #, 300)
@@ -488,7 +489,7 @@ def draw():
     text_size(15)
     fill(1)
     for i in range(3):
-        text([10, 60 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
+        text(['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]), [10, 60 + i*20])
 
     # tsketch.itiba.editor.draw_steps(tsketch.v3d, tsketch.robot, [0, height-70], 70, width)
 
