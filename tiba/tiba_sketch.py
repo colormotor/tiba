@@ -360,6 +360,7 @@ class TibaSketch:
              input_tools=None,
              panda=None,
              gripper=None,
+             base_path='./../robots/tiba/settings',
              init_node=''):
 
         # The py5canvas "sketch" that will be used to run this
@@ -376,7 +377,7 @@ class TibaSketch:
         # Actual interface to robot (computes IK, holds reference to robot model and drawing pad
         print("Init interface")
 
-        self.itiba = TibaInterface(panda=panda, gripper=gripper, init_node=init_node)
+        self.itiba = TibaInterface(panda=panda, gripper=gripper, init_node=init_node, base_path=base_path)
         # 3d view for the robot
         self.v3d = GlView3d(sketch)
         # Reference to the drawing pad

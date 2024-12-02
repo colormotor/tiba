@@ -2,7 +2,7 @@
 from py5canvas import *
 from importlib import reload
 from py5canvas import canvas
-import threading, pdb
+import threading, pdb, argparse
 import os
 
 import numpy as np
@@ -34,6 +34,14 @@ from spatialmath.base import trnorm
 
 reload(tu)
 reload(ui)
+
+# Add the --robot argument
+parser = argparse.ArgumentParser()
+parser.add_argument('--robot', type=str, default='tiba', help='Name of the robot (default: tiba)')
+# Parse the arguments
+args = parser.parse_args()
+base_path = './../robots/' + args.robot + '/settings'
+
 
 panda_loader = importlib.find_loader('panda_py')
 if panda_loader is not None:
@@ -109,7 +117,7 @@ def on_event(event):
 
 if has_robot:
     hostname = '172.16.0.2'
-    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    desk = panda_py.Desk(hostname, 'admin', 'adminadmin') #'colormotor', 'Rapidograph22!')
     print("Created desk")
     if not desk.has_control():
         print("Forcing control")
@@ -126,6 +134,7 @@ else:
 #robot = TibaRobot(45, 11.5, 15) # Molotow
 #robot = TibaRobot(60, 0, 0) # Molotow
 # robot = TibaRobot(74, 0, 15) # Small brush
+
 
 handeye_poses_path = '../settings/handeye_poses.json'
 state = lambda: None
@@ -217,7 +226,7 @@ def setup():
     set_color_scale(1.0)
 
     try:
-        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_recorder')
+        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_recorder', base_path='./../robots/tiba/settings')
     except Exception as e:
         print(e)
         assert(False)

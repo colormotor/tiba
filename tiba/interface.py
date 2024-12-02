@@ -354,17 +354,17 @@ class TibaHandeye:
     
 class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
-                 pad_path='../settings/drawing_pad.json',
-                 scripts_file='../settings/motions/motions.yaml',
-                 positions_path='../settings/key_positions.json',
+                 pad_path='drawing_pad.json',
+                 scripts_file='motions/motions.yaml',
+                 positions_path='key_positions.json',
                  plot_path='trajectory.png',
-                 handeye_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml',
-                 base_path=None
+                 handeye_config_path='panda_eye_hand_calib_eye_on_hand.yaml',
+                 base_path='./../robots/tiba/settings'
                  ):
 
-        if base_path is None:
+        if not os.path.isdir(base_path):
+            base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), base_path)
             print('base path', base_path)
-            base_path = os.path.dirname(os.path.abspath(__file__))
         self.base_path = base_path
         pad_path = os.path.join(base_path, pad_path)
         scripts_file = os.path.join(base_path, scripts_file)
