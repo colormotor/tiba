@@ -1,0 +1,244 @@
+#+title: Tiba-robot
+
+* Package install
+The robot systems runs on a dedicated laptop that is connected directly to the robot. The laptop runs a specific version of Ubuntu with a realtime kernel, which currently seems to break the NVidia GPU driver. That means that graphics applications are particularly slow and the computer is not ideal for robot visualization.
+A typical usage of the systm will be:
+
+- On the control laptop, run a server script that listens for commands and spawns controllers that drive the robot
+- On a secondary laptop connected to the same network, run software that generates trajctories, visualizes them and sends them over the network to the server.
+
+Network communication is implemented through ROS (noetic), which needs to be intalled on both machines. But robot-specific packages and libraries need to be installed only only the control laptop (these have specific hardware/OS requirements).
+
+The robot is controlled with the Franka Emika API through the Python [[https://github.com/JeanElsner/panda-py][Panda-py]] API. This greatly simplifies and speeds up interaction with the robot. We use a custom controller (written in C++) for drawing so we will rely on a fork of the API located [[https://github.com/colormotor/panda-py][here]].
+
+** On all platforms
+The dependency installation procedure depends on the [[https://docs.conda.io/en/latest/][conda package mananger]]. One ideal way to install conda is to use the reduced [[https://github.com/conda-forge/miniforge][miniforge]] installer. To speed up installation, it is recommended to install mamba alongside conda (since "vanilla" conda is written in Python and can be extremely slow). To install mamba use:
+#+begin_example
+conda install conda-forge::mamba
+#+end_example
+With mamba installed, create a conda environment for the dependencies and install [[https://www.ros.org][ROS]] through [[https://github.com/RoboStack/ros-noetic][RoboStack]] with (Note the official instructions don't specify the python version, which seems to be important):
+#+begin_example
+mamba create -n ros_env python=3.9
+mamba activate ros_env
+
+# this adds the conda-forge channel to the new created environment configuration
+conda config --env --add channels conda-forge
+# and the robostack channel
+conda config --env --add channels robostack-staging
+# remove the defaults channel just in case, this might return an error if it is not in the list which is ok
+conda config --env --remove channels defaults
+#+end_example
+And then install ROS1 with
+#+begin_example
+mamba install ros-noetic-desktop
+#+end_example
+Then deactivate and reactivate the environment with
+#+begin_example
+mamba deactivate
+mamba activate ros_env
+#+end_example
+For describing robot poses and kinematics calculations we use [[https://github.com/petercorke/robotics-toolbox-python][Robotics Toolbox Python]]. With the ROS environment active, install it with:
+#+begin_example
+mamba install conda-forge::roboticstoolbox-python
+#+end_example
+
+Installl other deps:
+#+begin_example
+mamba install plotly networkx tqdm svgpathtools
+#+end_example
+
+*** Install path planning utilities
+The package provides path planning functionalities and these partially depend on two external libraries:
+- https://github.com/colormotor/trajectory_smoothing For time-optimal path parametrization (TOPP, useful to draw arbitrary SVG paths)
+- https://github.com/colormotor/ilqr_planner For path plannning and inverse kinematics computations using iterative linear quadratic regulation (iLQR), developed at the Idiap research institute.
+Both are forks with some slight modifications of the original codes.
+
+With the conda environment active, install the TOPP package with:
+#+begin_example
+pip install trajectory_smoothing@git+https://github.com/colormotor/trajectory_smoothing.git
+#+end_example
+
+Then in a directory of choice clone [[https://github.com/colormotor/ilqr_planner][ilqr_planner]], navigate to the directory and install with:
+#+begin_example
+git submodule update --init --recursive
+./build.sh
+#+end_example
+
+*** Install py5canvas for interactive visualization
+The Tiba system relies on graphic interface software to create/visualize trajectories and to setup interaction with the robot. For more rapid development, the programs to do so are implemented in Python using the [[https://github.com/colormotor/py5canvas][py5canvas]] API, which is a Python framework similar in spirit to Processing/p5js. To install it:
+#+begin_example
+conda activate ros_env
+mamba install conda-forge::pycairo
+mamba install conda-forge::moderngl
+pip install pyglet
+pip install imgui[pyglet]
+pip install easydict
+pip install xdialog
+#+end_example
+
+And then, either install locally by cloning the the [[https://github.com/colormotor/py5canvas][py5canvas]] repository and then
+#+begin_example
+pip install -e .
+#+end_example
+or through pip with:
+#+begin_example
+pip install git+https://github.com/colormotor/py5canvas.git
+#+end_example
+
+** Server installation (for Franka robot)
+First install [[https://github.com/frankaemika/libfranka][libfranka]] for the FR3 (modified version of [[https://frankaemika.github.io/docs/installation_linux.html][these instructions]]. First clone
+#+begin_example
+git clone --recursive https://github.com/frankaemika/libfranka
+cd libfranka
+#+end_example
+or
+#+begin_example
+git clone --recursive https://github.com/frankaemika/libfranka --branch 0.10.0 # only for FR3
+cd libfranka
+#+end_example
+for FR3
+
+For the Panda version you may have to install Pinocchio with:
+#+begin_example
+mamba install conda-forge::pinocchio
+#+end_example
+
+
+The unusual step here is that we will install within the conda environment with
+#+begin_example
+conda activate ros_env
+mkdir build; cd build;
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX:PATH=$CONDA_PREFIX ..
+cmake --build .
+make install
+#+end_example
+
+Now *with the conda environment still active** and in another directory of choice:
+#+begin_example
+https://github.com/colormotor/panda-py.git
+cd panda-py
+pip install .
+#+end_example
+
+*** Install Franka ROS
+First create a ROS workspace, by creating a directory (we will call it ~catkin_ws~) and create a subdirectory ~src~ within it. Again we will not follow the exact instructions because we want to use the latest version of libfranka and Robostack for ROS. From the ~catkin_ws~ directory and with *the ros conda environment active*:
+#+begin_example
+git clone --recursive https://github.com/frankaemika/franka_ros src/franka_ros
+rosdep install --from-paths src --ignore-src --rosdistro noetic -y --skip-keys libfranka
+catkin build --cmake-args -DCMAKE_BUILD_TYPE=Release
+#+end_example
+Then activate the workspace with
+#+begin_example
+source devel/setup.bash
+#+end_example
+*** Install realsense stuff
+#+begin_example
+
+mamba install ros-noetic-realsense2-camera
+#+end_example
+
+
+*** Install easy-hand-eye
+#+begin_example
+mamba install ros-noetic-moveit-resources-panda-description ros-noetic-moveit-resources-panda-moveit-config ros-noetic-panda-moveit-config
+mamba install transforms3d
+mamba install ros-noetic-moveit-visual-tools
+cd src
+git clone https://github.com/pal-robotics/aruco_ros.git
+git checkout noetic-devel
+cd ..
+catkin build aruco_ros
+rosdep install -ir --from-paths src --skip-keys libfranka
+catkin build
+#+end_example
+
+
+
+
+
+** Interface with the robot
+*** Tiba server
+Describe
+*** Recording motions
+*** Scripting motions
+Predefined motions of the robot (e.g. picking brushes/pens, dipping) are defined as simple Python scripts that can be dinamically loaded by a ~TibaInterface~ object. A script can accept a number of "arguments". A simple example of a script contained in a Python file could be:
+#+begin_example
+require_args("offset_x_mm", "offset_y_mm")
+offset = np.array([offset_x, offset_y, 0.0])/1000 # Movement in meters
+move_xyz(offset)
+#+end_example
+The scripts moves the end effector along the "x" and "y" directions (forward/back, sidewise) by the given amounts `offset_x_mm` and `offset_y_mm` specified in millimeters and without changing the orientation of the end effector.
+The ~require_args~ function at the beginning makes sure that an error is thrown early on if the required arguments are not provided.  From code, the path for the robot can be computed using the ~plan_script~ method in ~TibaInterface~, e.g. if we have an interface object ~itiba~ and a script in the "move_xy.py" file, we can plan the motion with ~itiba.plan_script('move_xy.py', offset_x_mm=10, offset_y_mm=2)~. The arguments passed to the functions will be injected into the script and made avaialbe.
+
+#+BEGIN_SRC python
+#!/usr/bin/env python3
+require_args("dip_radius_mm", "clean_radius_mm")
+
+# Position for center of rim
+dip_pos = np.array([0.11702348446934795, -0.4045200962012843, 0.1051926181034665])
+
+up = np.array([0, 0, 1])
+
+start_offset = 70/1000
+dip_offset = -35/1000
+clean_offset = -12/1000
+
+joint_move('Home')
+joint_move('Dip')
+tool_align_dip()
+
+# Move above cup
+goto_xyz(dip_pos + up*start_offset)
+# Move inside cup
+goto_xyz(dip_pos + up*dip_offset)
+# Dipping circles
+xy_circles(dip_radius_mm, 4)
+# # Move to rim pos
+goto_xyz(dip_pos + up*clean_offset)
+# # Cleaning circles
+xy_circles(clean_radius_mm, 4)
+goto_xyz(dip_pos + up*start_offset)
+joint_move('Home')
+
+#+END_SRC
+
+** Comunication with robot
+Tiba uses ROS minmally to communicate to/from the robot control laptop and a client machine that sends sequences of joint coordinates to be executed with the robot. To install ROS use the robos
+* Setup
+** "Client" laptop
+The Tiba API does not necessarily require a robot to be connected and most operations can be tested using the [[https://github.com/jhavl/swift][swift]] browser-based simulator (it comes bundled with [[https://github.com/petercorke/robotics-toolbox-python][roboticstoolbox]]). To run the UI you will need to install [[https://github.com/colormotor/py5canvas][p5canvas]], which enables writing scripts similar to Processing/p5js using Python. Scripts can be edited with live-reloading making development easier.
+** Trajectory planning
+TODO
+** Robot control laptop
+*** Desk setup
+- Open desk at https://172.16.0.2/desk/
+- Unlock joints and make sure gripper is initialized
+- Activate FCI
+*** Network setup
+**** Server setup
+The machine currently cannot run the GPU, which makes graphics apps pretty slow.
+In order to allow external communication with the server and connect to the robot open one terminal with
+#+begin_example
+conda activate ros_env
+roscore
+#+end_example
+
+Now Open the Franka desk on a browser at this address:
+- https://172.16.0.2/desk
+For using the robot we will need to:
+- unlock the joints (little "unlock" icon)
+- Set the robot to "execution mode"
+- Activate FCI (from the top menu with the IP address)
+
+**** Client setup
+The client *should not* run ~roscore~ but should have the approriate ROS (https://robostack.github.io) conda environment activated. We will need to tell the client machine who is running ~roscore~ by setting the relevant env variable and this can be done in the current terminal by running (from the ~scripts~ directory):
+#+begin_example
+source rosmaster.sh
+#+end_example
+* Caveats
+** Quaternion conventions in Panda-py
+The Panda-py backend is implemented with Eigen, which has a really confusing convention with Quaternions. In Eigen the API exposes quaternions in the order $w, xi, yj, zk$  (scalar first), but internally the memory layout is $xi, yj, zk, w$. This means that doing an assigment from a vector, e.g. ~Eigen::Quaterniond q = Eigen::Vector4d(0.0, 0.0, 0.0, 1.0)~ will follow the second convention.
+
+Because Panda-py exposes all orientations as ~Eigen::Vector4d~ (since these get automatically exposed as numpy arrays/lists in the Python bindings), this means that Panda-py specific functions require this order. This differs from spatialmath/roboticstoobox, as well as the ilqr_planner code. Making an error can lead to unexpected behavior of the robot so quite dangerous.
+* Resources
+- [[https://rcfs.ch][Robotics codes from scratch]]
