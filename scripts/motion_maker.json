@@ -1,7 +1,7 @@
 {
     "params": {
         "seed": 5,
-        "path": "/home/colormotor/Dropbox/develop_box/py5sketches/tiba_tests/outputs/tibahair1.json",
+        "path": "/home/colormotor/Dropbox/develop_box/py5sketches/tiba_tests/outputs/teapot-sep-2.json",
         "gui_hue": 0.5529999732971191,
         "bezier_split_angle": 54.974998474121094,
         "traj": {
@@ -10,7 +10,7 @@
             "angle": 0.0
         },
         "config": {
-            "tool": 6,
+            "tool": 0,
             "cart_planner": 4,
             "dce_thresh": 416,
             "max_iterations": 307,
@@ -19,7 +19,8 @@
             "angle": 50.0989990234375,
             "smoothing": 1.656999945640564,
             "order": 3,
-            "max_depth": 4.447999954223633
+            "max_depth": 4.447999954223633,
+            "resample_topp": true
         },
         "drawing": {
             "plane_offset": 0.49300000071525574,

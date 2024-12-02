@@ -408,6 +408,8 @@ class TibaInterface:
 
         self.pen_offset_base_mm = 0.0
 
+        self.recorded_Qs = []
+        self.recorded_dQs = []
         
         if state.has_ros:
             print("#################################################")
@@ -423,10 +425,12 @@ class TibaInterface:
 
             try:
                 if init_node:
+                    # This will be initialized in a client setting
                     print("Initializing node", init_node)
                     rospy.init_node(init_node, anonymous=True, log_level=rospy.ERROR)
                     rospy_cur.Subscriber('/tiba/q', JointState, self.state_callback)
                     rospy_cur.Subscriber('/tiba/qdone', JointState, self.qdone_callback)
+                    rospy_cur.Subscriber('/tiba/executed_traj', JointTrajectory, self.executed_traj_callback)
                     # Response from server. We use the joint state message to see if a motion is done,
                     # (with name "Done") so we also update joint states with it.
                     rospy_cur.Subscriber('/tiba/response', String, self.response_callback)
@@ -474,6 +478,7 @@ class TibaInterface:
     #     # self.ros_thread_running = True
     #     # self.ros_thread.start()
 
+    
     def print_available_tools(self):
         print("Available tools:")
         print(robot.tools.keys())
@@ -551,6 +556,13 @@ class TibaInterface:
         self.jpos_pub.publish(p)
         rospy.loginfo("Sent joint position")
 
+    def executed_traj_callback(data):
+        rospy.loginfo(rospy.get_caller_id() + "Robot executed joint trajectory with %d points"%(len(data.points)))
+        Qs = [p.positions for p in data.points]
+        dQs = [p.velocities for p in data.points]
+        self.recorded_Qs = Qs
+        self.recorded_dQs = dQs
+        
     def response_callback(self, data):
         print("Received response: ", data.data)
         # if data.data == 'Done':
@@ -789,6 +801,7 @@ class TibaInterface:
 
     def execute(self, delay=1.0, force_drawing=False):
         ''' Execute the current joint motion'''
+        
         if self.panda is not None:
             self.delay(delay)
 

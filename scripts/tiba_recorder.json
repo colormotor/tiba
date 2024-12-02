@@ -4,10 +4,10 @@
         "gui_hue": 0.20200000703334808,
         "gripper_mm": 16.631000518798828,
         "guiding": {
-            "x": false,
-            "y": false,
-            "z": false,
-            "rot": true,
+            "x": true,
+            "y": true,
+            "z": true,
+            "rot": false,
             "elbow": true
         },
         "config": {
@@ -20,15 +20,17 @@
             "angle": 50.0,
             "smoothing": 0.0,
             "order": 3,
-            "max_depth": 4.0
+            "max_depth": 4.0,
+            "resample_topp": false,
+            "resample_jerk": false
         },
         "tsm": {
             "dist": 2.050001621246338,
-            "xoffset": -0.12000005692243576,
-            "voffset": -0.5299999117851257,
-            "rotx": -3,
-            "roty": 60,
-            "rotz": -176
+            "xoffset": 0.11000001430511475,
+            "voffset": -0.18999998271465302,
+            "rotx": -6,
+            "roty": -29,
+            "rotz": -177
         }
     },
     "presets": {},
