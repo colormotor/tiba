@@ -91,6 +91,19 @@ First install [[https://github.com/frankaemika/libfranka][libfranka]] for the FR
 git clone --recursive https://github.com/frankaemika/libfranka
 cd libfranka
 #+end_example
+or
+#+begin_example
+git clone --recursive https://github.com/frankaemika/libfranka --branch 0.10.0 # only for FR3
+cd libfranka
+#+end_example
+for FR3
+
+For the Panda version you may have to install Pinocchio with:
+#+begin_example
+mamba install conda-forge::pinocchio
+#+end_example
+
+
 The unusual step here is that we will install within the conda environment with
 #+begin_example
 conda activate ros_env
