@@ -67,6 +67,12 @@ tools = {
     #     'tip_height_mm': 9.0
     # },
 
+    'Unipen': {
+        'tip_dist_mm': 50.0,
+        'tip_height_mm': 9.0,
+        'offset_mm': 5.5
+    },
+
     'Edding': {
         'tip_dist_mm': 50.0,
         'tip_height_mm': 11.0,

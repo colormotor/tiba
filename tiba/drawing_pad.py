@@ -77,9 +77,13 @@ class DrawingPad:
         if P is not None:
             self.points = P
 
+        print("Insufficient points")
         if len(self.points) < 4:
             return
 
+        print("Computing plane for %d points"%(len(self.points)))
+        print(self.points)
+        print("Pos offset", self.pos_offset)
         U, S, mu = principal_components(self.points)
         frame = np.eye(4)
         frame[:3,:3] = U

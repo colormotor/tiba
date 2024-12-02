@@ -360,6 +360,7 @@ class TibaSketch:
              input_tools=None,
              panda=None,
              gripper=None,
+             base_path='./../robots/tiba/settings',
              init_node=''):
 
         # The py5canvas "sketch" that will be used to run this
@@ -376,7 +377,7 @@ class TibaSketch:
         # Actual interface to robot (computes IK, holds reference to robot model and drawing pad
         print("Init interface")
 
-        self.itiba = TibaInterface(panda=panda, gripper=gripper, init_node=init_node)
+        self.itiba = TibaInterface(panda=panda, gripper=gripper, init_node=init_node, base_path=base_path)
         # 3d view for the robot
         self.v3d = GlView3d(sketch)
         # Reference to the drawing pad
@@ -901,6 +902,8 @@ class TibaSketch:
                 self.trajectories = self.pad.fit_to_frame(paths)
                 self.trajectories_computed = False
                 self.dirty = False
+        else:
+            self.pad.update()
 
 
         # Update handeye info
@@ -910,18 +913,18 @@ class TibaSketch:
         c = self.sketch.canvas
         c.text_size(20)
         c.fill(1)
-        c.text([10, 30], 'Current tool: ' + self.get_tool_name(self.params.config.tool))
+        c.text('Current tool: ' + self.get_tool_name(self.params.config.tool), [10, 30])
         c.text_size(12)
         if self.itiba.trajectory_status:
             c.fill(0,1,0)
-            c.text([10, 45], 'Trajectory status: OK')
+            c.text( 'Trajectory status: OK', [10, 45])
         else:
             c.fill(1,0,0)
-            c.text([10, 45], 'Trajectory status: Error')
+            c.text('Trajectory status: Error', [10, 45])
 
         c.text_size(12)
         c.fill(0.5)
-        c.text([c.width-290, 20], 'Drag to rotate, Ctrl-drag to zoom, Shift-drag to zoom')
+        c.text('Drag to rotate, Ctrl-drag to zoom, Shift-drag to zoom', [c.width-290, 20])
 
         handeye = self.itiba.handeye
         if handeye is not None and handeye.cam_image is not None:

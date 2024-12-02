@@ -25,7 +25,7 @@ import numpy as np
 import sys
 import pdb, math
 from . import utils
-import nlopt
+#import nlopt
 
 def print_same_line(s):
     sys.stdout.write("\r" + str(s))

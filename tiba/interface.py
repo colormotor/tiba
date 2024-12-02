@@ -354,17 +354,17 @@ class TibaHandeye:
     
 class TibaInterface:
     def __init__(self, panda=None, gripper=None, init_node='',
-                 pad_path='../settings/drawing_pad.json',
-                 scripts_file='../settings/motions/motions.yaml',
-                 positions_path='../settings/key_positions.json',
+                 pad_path='drawing_pad.json',
+                 scripts_file='motions/motions.yaml',
+                 positions_path='key_positions.json',
                  plot_path='trajectory.png',
-                 handeye_config_path='../settings/panda_eye_hand_calib_eye_on_hand.yaml',
-                 base_path=None
+                 handeye_config_path='panda_eye_hand_calib_eye_on_hand.yaml',
+                 base_path='./../robots/tiba/settings'
                  ):
 
-        if base_path is None:
+        if not os.path.isdir(base_path):
+            base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), base_path)
             print('base path', base_path)
-            base_path = os.path.dirname(os.path.abspath(__file__))
         self.base_path = base_path
         pad_path = os.path.join(base_path, pad_path)
         scripts_file = os.path.join(base_path, scripts_file)
@@ -407,6 +407,9 @@ class TibaInterface:
         self.server_busy = False
 
 
+        self.recorded_Qs = []
+        self.recorded_dQs = []
+        
         if state.has_ros:
             print("#################################################")
             print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
@@ -421,10 +424,12 @@ class TibaInterface:
 
             try:
                 if init_node:
+                    # This will be initialized in a client setting
                     print("Initializing node", init_node)
                     rospy.init_node(init_node, anonymous=True, log_level=rospy.ERROR)
                     rospy_cur.Subscriber('/tiba/q', JointState, self.state_callback)
                     rospy_cur.Subscriber('/tiba/qdone', JointState, self.qdone_callback)
+                    rospy_cur.Subscriber('/tiba/executed_traj', JointTrajectory, self.executed_traj_callback)
                     # Response from server. We use the joint state message to see if a motion is done,
                     # (with name "Done") so we also update joint states with it.
                     rospy_cur.Subscriber('/tiba/response', String, self.response_callback)
@@ -472,6 +477,7 @@ class TibaInterface:
     #     # self.ros_thread_running = True
     #     # self.ros_thread.start()
 
+    
     def print_available_tools(self):
         print("Available tools:")
         print(robot.tools.keys())
@@ -549,6 +555,13 @@ class TibaInterface:
         self.jpos_pub.publish(p)
         rospy.loginfo("Sent joint position")
 
+    def executed_traj_callback(data):
+        rospy.loginfo(rospy.get_caller_id() + "Robot executed joint trajectory with %d points"%(len(data.points)))
+        Qs = [p.positions for p in data.points]
+        dQs = [p.velocities for p in data.points]
+        self.recorded_Qs = Qs
+        self.recorded_dQs = dQs
+        
     def response_callback(self, data):
         print("Received response: ", data.data)
         # if data.data == 'Done':
@@ -646,10 +659,14 @@ class TibaInterface:
             url = '/desk/api/operating-mode/programming'
         else:
             url = '/desk/api/operating-mode/execution'
-        desk._request('post',
+        try:
+            desk._request('post',
                   url,
                   files={'force': True},
                   headers={'X-Control-Token': desk._token.token})
+        except ConnectionError as e:
+            print(e)
+            
 
     def simulate(self):
         ''' Simulate current trajectories using Swift'''
@@ -789,6 +806,7 @@ class TibaInterface:
 
     def execute(self, delay=1.0, force_drawing=False):
         ''' Execute the current joint motion'''
+        
         if self.panda is not None:
             self.delay(delay)
 

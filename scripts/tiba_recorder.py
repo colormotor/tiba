@@ -2,7 +2,7 @@
 from py5canvas import *
 from importlib import reload
 from py5canvas import canvas
-import threading, pdb
+import threading, pdb, argparse
 import os
 
 import numpy as np
@@ -35,6 +35,14 @@ from spatialmath.base import trnorm
 reload(tu)
 reload(ui)
 
+# Add the --robot argument
+parser = argparse.ArgumentParser()
+parser.add_argument('--robot', type=str, default='davie', help='Name of the robot (default: tiba)')
+# Parse the arguments
+args = parser.parse_args()
+base_path = './../robots/' + args.robot + '/settings'
+
+
 panda_loader = importlib.find_loader('panda_py')
 if panda_loader is not None:
     import panda_py
@@ -42,6 +50,7 @@ if panda_loader is not None:
     from panda_py import controllers
     has_robot = True
 else:
+    print("!!!! Panda py not installed, not connecting to robot")
     has_robot = False
 
 np.set_printoptions(suppress=True)
@@ -109,12 +118,12 @@ def on_event(event):
 
 if has_robot:
     hostname = '172.16.0.2'
-    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    desk = panda_py.Desk(hostname, 'admin', 'adminadmin') #'colormotor', 'Rapidograph22!')
     print("Created desk")
     if not desk.has_control():
         print("Forcing control")
         desk.take_control(True)
-        desk.activate_fci()
+    desk.activate_fci()
     panda = panda_py.Panda(hostname)
     gripper = libfranka.Gripper(hostname)
 
@@ -126,6 +135,7 @@ else:
 #robot = TibaRobot(45, 11.5, 15) # Molotow
 #robot = TibaRobot(60, 0, 0) # Molotow
 # robot = TibaRobot(74, 0, 15) # Small brush
+
 
 handeye_poses_path = '../settings/handeye_poses.json'
 state = lambda: None
@@ -210,14 +220,14 @@ def setup():
     # Load parameters here for standalone
     global params
     tsketch.add_parameters(params)
-    params = sketch.parameters(params)
+    params = sketch._prepare_parameters(params)
 
     #sketch.set_gui_callback(gui)
     create_canvas(1024, 768, 350) #, 300)
     set_color_scale(1.0)
 
     try:
-        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_recorder')
+        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_recorder', base_path='./../robots/tiba/settings')
     except Exception as e:
         print(e)
         assert(False)
@@ -479,7 +489,7 @@ def draw():
     text_size(15)
     fill(1)
     for i in range(3):
-        text([10, 60 + i*20], ['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]))
+        text(['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]), [10, 60 + i*20])
 
     # tsketch.itiba.editor.draw_steps(tsketch.v3d, tsketch.robot, [0, height-70], 70, width)
 
