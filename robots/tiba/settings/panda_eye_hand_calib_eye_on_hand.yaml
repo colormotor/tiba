@@ -1,0 +1,18 @@
+parameters:
+  eye_on_hand: true
+  freehand_robot_movement: true
+  move_group: panda_arm
+  move_group_namespace: /
+  namespace: /panda_eye_hand_calib_eye_on_hand/
+  robot_base_frame: panda_link0
+  robot_effector_frame: panda_hand
+  tracking_base_frame: camera_color_optical_frame
+  tracking_marker_frame: camera_marker
+transformation:
+  qw: 0.7115985749501531
+  qx: 0.0029729952851748715
+  qy: 0.006877550938956589
+  qz: 0.7025463178474626
+  x: 0.029117210004048922
+  y: -0.03760976421325334
+  z: 0.05912767639118709
