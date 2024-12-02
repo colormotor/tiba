@@ -8,6 +8,9 @@ from easydict import EasyDict as edict
 from PIL import Image
 import numpy as np
 reload(tu)
+
+import  pdb
+
 cfg = config.cfg
 log = config.log
 
@@ -62,7 +65,7 @@ class TrajectoryPlanner:
         self.draft = []
         self.penup_flags = []
 
-    def load_paths(self, path, max_paths=None, dest_rect=None):
+    def load_paths(self, path, max_paths=None, dest_rect=None, select_indices=[]):
         self.draft = load(path, self.params)
         if max_paths is not None:
             if max_paths < 0:
@@ -71,11 +74,11 @@ class TrajectoryPlanner:
                 self.draft = self.draft[:max_paths]
         if self.draft is None:
             return
-        self.fit_draft(dest_rect)
+        self.fit_draft(dest_rect, select_indices)
 
-    def fit_draft(self, dest_rect=None):
+    def fit_draft(self, dest_rect=None, select_indices=[]):
         pad = self.itiba.pad
-        pad.offset = self.plane_offset_mm / 1000 #+ self.itiba.pen_offset_base_mm / 1000
+        pad.offset = self.plane_offset_mm / 1000 + self.itiba.tool_info.offset_mm / 1000
         pad.pos_offset = np.array(self.offset_mm)/1000
         pad.update()
         if dest_rect is not None:
@@ -86,9 +89,13 @@ class TrajectoryPlanner:
                  for P in paths]
         #print('Paths after', paths)
         self.trajectories = pad.fit_to_frame(paths)
+        if select_indices:
+            self.trajectories = [self.trajectories[i] for i in select_indices]
+            self.draft = [self.draft[i] for i in select_indices]
         #print('Trajs', self.trajectories)
         self.trajectories_computed = False
         self.penup_flags = [False for _ in self.trajectories]
+        self.chunk_indices = [i for i in range(len(self.trajectories))]
 
     def compute_trajectories(self, debug=False):
         params = self.params
@@ -138,8 +145,10 @@ class TrajectoryPlanner:
 
         self.trajectories = self.itiba.pad.fit_to_frame(trajectories)
         self.trajectories_computed = True
+        self.chunk_indices = [0]
 
     def compute_and_plan_trajectories(self, debug=False):
+        raise ValueError('Deprecated function')
         self.compute_trajectories(debug)
 
         cur_pos = self.itiba.robot.pen_tcp_pos(self.itiba.robot.q)
@@ -184,6 +193,9 @@ class TrajectoryPlanner:
                                       params=params)
         return trajectories
 
+    def compute_and_plan(self):
+        self.compute_and_plan_with_dips(distance=np.inf, predip=False)
+
     def compute_and_plan_with_dips(self, distance=1.0, predip=False, dip_command='Dip-0'):
         params = self.params
 
@@ -219,6 +231,7 @@ class TrajectoryPlanner:
                                                         self.penup_mm/1000,
                                       params=params)
 
+        #pdb.set_trace()
         # Split into dip chunks
         d = 0.0
         chunks = [[]]
@@ -231,17 +244,24 @@ class TrajectoryPlanner:
                 chunks.append([])
                 d = 0
         log('Total distance: ', d)
+
         chunks = [paths for paths in chunks if paths]
+        #chunks = [(paths, [False for _ in paths]) for paths in chunks]
+        #pdb.set_trace()
         # Add penups within chunks
         chunks = [insert_penups(paths, self.penup_mm/1000, accel_time) for paths in chunks if paths]
         # Add approaches
         chunks = [append_penups(paths, penups, self.penup_mm/1000, accel_time) for paths, penups in chunks]
         # Add indices for visualization
-        chunk_indices = [[i for _ in c] for i, c in enumerate(chunks)]
-        self.chunk_indices = chunk_indices
+        chunk_indices = [[i for _ in chunk[0]] for i, chunk in enumerate(chunks)]
+
+        self.chunk_indices = sum(chunk_indices, [])
+
+        #print(len(self.chunk_indices), 'Chunk indices', [c for c in chunk_indices])
 
         chunk_penups = [chunk[1] for chunk in chunks]
         chunk_paths = [chunk[0] for chunk in chunks]
+
 
         # Flattened
         # log("Resulting planned trajectories", len(trajectories))
@@ -256,6 +276,7 @@ class TrajectoryPlanner:
         #for c in chunks:
         #    log("Shapes", [P.shape for P in c])
         chunk_paths = [self.itiba.pad.fit_to_frame(paths) for paths in chunk_paths]
+        #pdb.set_trace()
         self.trajectories = sum(chunk_paths, [])
         self.penup_flags = sum(chunk_penups, [])
         chunk_paths = [self.itiba.pad.augment_with_pen_orientation(paths, self.itiba.robot, self.itiba.robot.qr)
@@ -305,7 +326,7 @@ class TrajectoryPlanner:
         if not self.itiba.trajectory_status or self.itiba.safe_mode:
             self.itiba.plot_trajectory_stats()
 
-    def plot_plan_image(self, backend='plt', show=False):
+    def plot_plan_image(self, backend='plt', show=False, figsize=(7,7), color=None, alpha=0.8):
         self.itiba.update_handeye()
         handeye = self.itiba.handeye
 
@@ -323,7 +344,7 @@ class TrajectoryPlanner:
             return geom.affine_transform(flipm, P)
 
         if show:
-            ply.figure(figsize=(5,5))
+            ply.figure(figsize=figsize)
             ply.subplot(1,1)
         if handeye is not None and handeye.cam_image is not None:
             cam_image = np.array(handeye.cam_image)
@@ -365,16 +386,21 @@ class TrajectoryPlanner:
                         projected_points = flip_transform(projected_points)
                         #print('flip', projected_points)
 
+                    if color is None:
+                        clr = ply.categorical_color(self.chunk_indices[i])
+                    else:
+                        clr = color
                     if trajectory.shape[1] > 2:
                         #print('z', projected_points[:,2])
                         w = z_to_radius(self.params, projected_points[:,2])
                         #print('z', projected_points[:,2])
                         #print('radius', w)
                         points = projected_points[:,:2]
-                        ply.fill(geom.thick_curve(np.hstack([points, w.reshape(-1,1)])), 'k', alpha=0.8)
+                        ply.fill(geom.thick_curve(np.hstack([points, w.reshape(-1,1)])), clr, alpha=alpha)
                     else:
-                        ply.stroke(projected_points[:,:2], 'k', label='Trajectory' if i==0 else '', lw=2)
-
+                        ply.stroke(projected_points[:,:2], clr, label='Trajectory' if i==0 else '', lw=2, alpha=alpha)
+                    if not self.trajectories_computed:
+                        ply.text('%d'%i, projected_points[0][:2], color='k', size=7)
         if show:
             ply.setup_2d(flip_y=False)
             ply.show(backend)
@@ -599,9 +625,9 @@ def plan_thick_resample_bezier(samples,
         trajectories = [tu.resample_bezier(chain, max_speed, accel_time) for chain in chains_3d]
     return trajectories, [P[:,:2] for P in samples]
 
-def append_penups(paths, penup_flags, penup_distance, accel_time):
-    start = paths[0][0] + np.array([0, 0, penup_distance/1000])
-    end = paths[-1][-1] + np.array([0, 0, penup_distance/1000])
+def append_penups(paths, penup_flags, penup_distance_m, accel_time):
+    start = paths[0][0] + np.array([0, 0, penup_distance_m])
+    end = paths[-1][-1] + np.array([0, 0, penup_distance_m])
     arrival = tu.approach(start, paths[0][0])
     departure = tu.approach(paths[-1][-1], end)
     return [arrival[:,:3]] + paths + [departure[:,:3]], [True] + penup_flags + [True]
@@ -614,6 +640,7 @@ def insert_penups(paths, penup_distance, accel_time):
             P1 = paths[i]
             P2 = paths[i+1]
             if geom.distance(P1[-1], P2[0]) > 2e-3:
+                #pdb.set_trace()
                 trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, accel_time=accel_time))
                 penup_flags.append(True)
                 #penup_distance.append(True)

@@ -1196,7 +1196,6 @@ def bspline(n, pts, closed=False, alpha=1, degree=3, smooth_k=0, w=None, der=0, 
 
     dim = pts.shape[1]
     u = np.linspace(0, duration, pts.shape[0])
-    print('dt_pre:', u[1] - u[0])
     degree = min(degree, pts.shape[0]-1)
     if clamped:
         bc_type=([(1, np.zeros(dim))], [(1, np.zeros(dim))])

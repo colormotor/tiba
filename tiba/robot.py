@@ -70,17 +70,56 @@ tools = {
     'Edding': {
         'tip_dist_mm': 50.0,
         'tip_height_mm': 11.0,
-        'pen_offset_base_mm': 5.5
+        'offset_mm': 5.5
+    },
+
+    'Molotow-slim': {
+        'tip_dist_mm': 47.0,
+        'tip_height_mm': 10.0,
+        'offset_mm': 4.5,
+        'range_mm': 0.0,
     },
 
     'Calli-brush-01': {
         'tip_dist_mm': 72.0,
         'tip_height_mm': 5.0,
-        'pen_offset_base_mm': 9.2,
+        'offset_mm' : 0.0,
+        'range_mm': 9.2,
         'min_radius_mm': 0.5,
         'max_radius_mm': 3.0
 
     },
+
+    'Labor-brush-0': {
+        'tip_dist_mm': 80.0,
+        'tip_height_mm': 2.0,
+        'offset_mm' : 5.0,
+        'range_mm': 5.0,
+        'min_radius_mm': 7.5,
+        'max_radius_mm': 13.0
+
+    },
+
+    'Labor-brush-1': {
+        'tip_dist_mm': 72.0,
+        'tip_height_mm': 2.0,
+        'offset_mm' : 5.0,
+        'range_mm': 10.0,
+        'min_radius_mm': 3.0,
+        'max_radius_mm': 10.0
+
+    },
+
+    'Labor-brush-2': {
+        'tip_dist_mm': 59.0,
+        'tip_height_mm': 2.0,
+        'offset_mm' : 5.0,
+        'range_mm': 7.0,
+        'min_radius_mm': 1.0,
+        'max_radius_mm': 5.0
+
+    },
+
 
     'Squeezer': {
         'is_squeezer': True

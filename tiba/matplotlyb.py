@@ -177,6 +177,13 @@ class FilledShape(Plot):
         super().__init__(**kwargs)
         self.shape = S
 
+class Text(Plot):
+    def __init__(self, text, pos, size=12, **kwargs):
+        super().__init__(**kwargs)
+        self.text = text
+        self.pos = pos
+        self.size = size
+
 class Plot3d(Plot):
     def __init__(self, *args, **kwargs):
         super().__init__(**kwargs)
@@ -294,6 +301,9 @@ def rectangle(*args, color=None, fill=False, **kwargs):
         fill = None
     stroke(X, color, fill=fill, **kwargs)
 
+def text(txt, pos, size=12, **kwargs):
+    glob.fig.add_plot(Text(txt, pos, size, **kwargs))
+
 def imshow(*args, **kwargs):
     glob.fig.add_plot(Image(*args, **kwargs))
 
@@ -379,6 +389,12 @@ def show_plt(fig):
                         else:
                             clr = plot.clr
                         plt_fill(plot.shape, color=clr, alpha=plot.alpha, label=plot.label)
+                    elif type(plot) == Text:
+                        if plot.clr is None:
+                            clr = categorical_color(k)
+                        else:
+                            clr = plot.clr
+                        plt.text(*plot.pos, plot.text, size=plot.size, color=clr, alpha=plot.alpha)
                     elif type(plot) == Image:
                         plt.imshow(plot.im, cmap=plot.cmap)
                     elif type(plot) == Bar:
