@@ -780,7 +780,10 @@ def categorical_color(i):
 default_color = categorical_color
 
 def cmap(v, colormap='turbo'): #turbo'): #'PuRd'):
-    c = matplotlib.cm.get_cmap(colormap)
+    try:
+        c = matplotlib.cm.get_cmap(colormap)
+    except AttributeError:
+        c = matplotlib.colormaps.get_cmap(colormap)
     return c(v)
 
 
