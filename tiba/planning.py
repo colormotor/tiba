@@ -294,6 +294,7 @@ class TrajectoryPlanner:
         robot = self.itiba.robot
         initial_q = robot.q
 
+        print("Computing chunk trajectories")
         for i, chunk in enumerate(chunk_paths):
             if self.itiba.motions:
                 q = self.itiba.Qs[-1]
@@ -314,7 +315,7 @@ class TrajectoryPlanner:
             self.itiba.trajectory_status = robot.check_joint_trajectory(Qs, dQs)
             if not self.itiba.trajectory_status:
                 log("Error computing chunk trajectory")
-                break
+                #break
             self.itiba.motions.append(Motion(Qs, dQs))
 
         if self.itiba.trajectory_status:
@@ -331,6 +332,7 @@ class TrajectoryPlanner:
             else:
                 log("Error computing return to initial trajectory")
 
+        print("Supposed to plot")
         if not self.itiba.trajectory_status or self.itiba.safe_mode:
             self.itiba.plot_trajectory_stats()
 
