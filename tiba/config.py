@@ -12,6 +12,7 @@ class Config:
         self.joint_acceleration_time = 1.0
         self.default_grasp_mm = 34.0
         self.verbose = False
+        self.ilqr_r = 1e-6
         #self.dt = 0.001
         self.dt = 0.01
         self.robot_dt = 0.001

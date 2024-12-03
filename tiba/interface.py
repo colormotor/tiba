@@ -980,7 +980,7 @@ class TibaInterface:
                                            tip_frame=tip_frame
                                            )
         #
-        Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, get_trajectories=True)
+        Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, get_trajectories=True, r=cfg.ilqr_r)
 
         self.trajectory_status = self.robot.check_cartesian_trajectories(linked_trajectories)
         if not self.trajectory_status:

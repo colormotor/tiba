@@ -1005,7 +1005,7 @@ class shapes:
 
     @staticmethod
     def circle(center, r, subd=80):
-        return close_path(np.array([vec(np.cos(th), np.sin(th))*r + center
+        return _close_path(np.array([vec(np.cos(th), np.sin(th))*r + center
                                     for th in np.linspace(0, np.pi*2, subd)[:-1]]))
 
     @staticmethod
@@ -1020,10 +1020,6 @@ class shapes:
         P = np.array(P)
         return P
 
-    @staticmethod
-    def circle(center, r, subd=80):
-        return close_path(np.array([vec(np.cos(th), np.sin(th))*r + center
-                                    for th in np.linspace(0, np.pi*2, subd)[:-1]]))
 
     @staticmethod
     def random_radial_polygon(n, min_r=0.5, max_r=1., center=[0,0]):
