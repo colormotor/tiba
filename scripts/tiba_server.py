@@ -22,7 +22,15 @@ from tiba.robot import TibaRobot
 from tiba.draw import View3d, SketchView3d, GlView3d
 from tiba import cfg
 
-import os, socket
+import os, socket, argparse
+
+# Add the --robot argument
+parser = argparse.ArgumentParser()
+parser.add_argument('--robot', type=str, default='davie', help='Name of the robot (default: tiba)')
+# Parse the arguments
+args = parser.parse_args()
+base_path = './../robots/' + args.robot + '/settings'
+
 
 def get_ip():
     ''' Gets IP of machine'''
@@ -48,12 +56,14 @@ if has_robot:
     # panda = panda_py.Panda(hostname)
     # gripper = libfranka.Gripper(hostname)
     hostname = '172.16.0.2'
-    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    #desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    desk = panda_py.Desk(hostname, 'admin', 'adminadmin')
+
     print("Created desk")
     if not desk.has_control():
         print("Forcing control")
         desk.take_control(True)
-        desk.activate_fci()
+    desk.activate_fci()
     panda = panda_py.Panda(hostname)
     gripper = libfranka.Gripper(hostname)
 else:
@@ -65,7 +75,7 @@ else:
 
 circle_button = FrankaButton('circle')
 
-itiba = TibaInterface(panda, gripper)
+itiba = TibaInterface(panda, gripper, base_path=base_path)
 itiba.safe_mode = False
 #robot.q = robot.qr
 

@@ -29,7 +29,7 @@ from . import interface
 reload(interface)
 
 from .interface import TibaInterface
-from .robot import TibaRobot, tools
+from .robot import TibaRobot
 from . import matplotlyb as ply
 from .config import cfg
 from . import trajectory_utils as tu
@@ -354,7 +354,7 @@ class TibaSketch:
         self.arcball = geom.ArcBall()
         self.thread_funcs = []
         self.itiba = None
-
+        
     def init(self, sketch,
              callback=None,
              input_tools=None,
@@ -367,29 +367,35 @@ class TibaSketch:
         self.sketch = sketch
         self.trajectory_callback = callback
 
-        # Actual interface to the robot. Here this is not used to control the robot directly
-        # but to plan and execute trajectories
-        if input_tools is None:
-            self.tools = dict(tools)
-        else:
-            self.tools = input_tools
-
         # Actual interface to robot (computes IK, holds reference to robot model and drawing pad
         print("Init interface")
-
+        print("Base path is ", base_path)
         self.itiba = TibaInterface(panda=panda, gripper=gripper, init_node=init_node, base_path=base_path)
+
+        if input_tools is not None:
+            raise ValueError("Input tools is deprecated")
+        # # Tools
+        # # Actual interface to the robot. Here this is not used to control the robot directly
+        # # but to plan and execute trajectories
+        # if input_tools is None:
+        #     self.tools = self.itiba.tools 
+        # else:
+        #     self.tools = input_tools
+
+
         # 3d view for the robot
         self.v3d = GlView3d(sketch)
         # Reference to the drawing pad
         self.pad = self.itiba.pad
 
+        
         # Visualization limits, trajectories will be quantized to fit these numbers
         self.max_steps = 500
         self.max_trajectory_points = 200
 
         # Setup robot
-        tool_data = self.get_tool_by_index(self.params.config.tool)
-        self.set_tool(tool_data)
+        tool_name = self.get_tool_name(self.params.config.tool) #get_tool_by_index(self.params.config.tool)
+        self.set_tool(tool_name)
 
         # For launching interface scripts
         self.cur_script = -1
@@ -494,16 +500,16 @@ class TibaSketch:
         self.drawing_data = data
 
     def get_tool_names(self):
-        names = list(self.tools.keys())
+        names = list(self.itiba.tools.keys())
         return names
 
     def get_tool_name(self, index):
-        names = list(self.tools.keys())
+        names = list(self.itiba.tools.keys())
         return names[index]
 
     def get_tool_by_index(self, index):
-        names = list(self.tools.keys())
-        return self.tools[names[index]]
+        names = list(self.itiba.tools.keys())
+        return self.itiba.tools[names[index]]
 
     def compute_steps(self, Qs):
         max_steps = self.max_steps

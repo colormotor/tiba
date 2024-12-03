@@ -227,7 +227,7 @@ def setup():
     set_color_scale(1.0)
 
     try:
-        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_recorder', base_path='./../robots/tiba/settings')
+        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_recorder', base_path=base_path)
     except Exception as e:
         print(e)
         assert(False)
@@ -310,6 +310,8 @@ def gui():
     ui.imgui_text_separator("Robot")
     changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
     if changed:
+        tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
+    if imgui.button('Reload tool'):
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
     changed, tsketch.itiba.safe_mode = ui.imgui_color_checkbox("Safe mode", tsketch.itiba.safe_mode)
 
