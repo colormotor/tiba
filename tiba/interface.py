@@ -365,7 +365,7 @@ class TibaInterface:
 
         if not os.path.isdir(base_path):
             base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), base_path)
-            print('base path', base_path)
+            print('base path:', base_path)
         self.base_path = base_path
         pad_path = os.path.join(base_path, pad_path)
         scripts_file = os.path.join(base_path, scripts_file)
@@ -484,7 +484,7 @@ class TibaInterface:
         self.tools = utils.load_json(self.tools_path)
         print("Reloaded tools")
         print(self.tools)
-        
+
     def print_available_tools(self):
         self.reload_tools()
         print("Available tools:")
@@ -738,9 +738,10 @@ class TibaInterface:
         #Kp = np.array([600, 600, 600, 600, 250, 20, 50]) #*0.5
         #Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
         Kv = 1.0*2.0*np.sqrt(Kp) #0.5*np.sqrt(2.0*Kp)
+        print('Kv', Kv)
         #Kv = 0.5*np.sqrt(2.0*Kp)
         ctrl.set_stiffness(Kp)
-        ctrl.set_damping(Kv)
+        #ctrl.set_damping(Kv)
         panda = self.panda
         dq_thresh = 0.001
         dq0 = np.zeros(7)
