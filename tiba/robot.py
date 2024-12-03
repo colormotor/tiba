@@ -40,7 +40,7 @@ def xacro_to_urdf(xacro_file, urdf_file, tld=None, mappings={}):
     out.close()
 
 
-tools = {
+tools_old = {
     'Default': {
         'tip_dist_mm': 45.0,
         'tip_height_mm': 11.5

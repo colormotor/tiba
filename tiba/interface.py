@@ -357,6 +357,7 @@ class TibaInterface:
                  pad_path='drawing_pad.json',
                  scripts_file='motions/motions.yaml',
                  positions_path='key_positions.json',
+                 tools_path='tools.json',
                  plot_path='trajectory.png',
                  handeye_config_path='panda_eye_hand_calib_eye_on_hand.yaml',
                  base_path='./../robots/tiba/settings'
@@ -370,6 +371,7 @@ class TibaInterface:
         scripts_file = os.path.join(base_path, scripts_file)
         handeye_config_path = os.path.join(base_path, handeye_config_path)
         positions_path = os.path.join(base_path, positions_path)
+        tools_path = os.path.join(base_path, tools_path)
 
         self.editor = PositionEditor(positions_path)
         self.pad = drawing_pad.DrawingPad(pad_path)
@@ -384,7 +386,7 @@ class TibaInterface:
         self.robot.q = self.robot.home
         self.debug_q = None
         self.grasped = False
-
+        self.tools_path = tools_path
         self.plot_path = plot_path
         self.panda = panda
         self.gripper = gripper
@@ -393,6 +395,7 @@ class TibaInterface:
         self.motions = []
         #self.Qs = []
         #self.dQs = []
+        self.reload_tools()
 
         self.cup_pos = np.array([0.1176777, -0.40658198, 0.10431843])
 
@@ -477,10 +480,15 @@ class TibaInterface:
     #     # self.ros_thread_running = True
     #     # self.ros_thread.start()
 
-    
+    def reload_tools(self):
+        self.tools = utils.load_json(self.tools_path)
+        print("Reloaded tools")
+        print(self.tools)
+        
     def print_available_tools(self):
+        self.reload_tools()
         print("Available tools:")
-        print(robot.tools.keys())
+        print(self.tools.keys())
 
     def print_available_positions(self):
         print("Available key positions:")
@@ -610,6 +618,11 @@ class TibaInterface:
         return sum([m.dQs for m in self.motions], [])
 
     def set_tool(self, tool_dict):
+        self.reload_tools()
+        # Accept key as input
+        if type(tool_dict) == str:
+            tool_dict = self.tools[tool_dict]
+
         self.clear()
         # Setting the tool recreates the robot (and URDF)
         self.robot = robot.TibaRobot(**tool_dict)
