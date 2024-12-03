@@ -737,11 +737,12 @@ class TibaInterface:
         # Kp = np.array([600, 600, 600, 600, 250, 50, 50]) #*0.5
         #Kp = np.array([600, 600, 600, 600, 250, 20, 50]) #*0.5
         #Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
-        Kv = 1.0*2.0*np.sqrt(Kp) #0.5*np.sqrt(2.0*Kp)
-        print('Kv', Kv)
+        #Kv = 1.0*2.0*np.sqrt(Kp) #0.5*np.sqrt(2.0*Kp)
+        Kv = 1.1*2.0*np.sqrt(Kp)
+        #print('Kv', Kv)
         #Kv = 0.5*np.sqrt(2.0*Kp)
         ctrl.set_stiffness(Kp)
-        #ctrl.set_damping(Kv)
+        ctrl.set_damping(Kv)
         panda = self.panda
         dq_thresh = 0.001
         dq0 = np.zeros(7)
@@ -1021,7 +1022,7 @@ class TibaInterface:
         script = self.scripts[key]
         args = script['args'] if 'args' in script else {}
 
-        self.plan_script(os.path.join(self.base_path, script['file']),
+        self.plan_script(script['file'],
                          append_to_configuration=append_to_configuration,
                          **args)
 
@@ -1037,6 +1038,8 @@ class TibaInterface:
         # Local functions
         import numpy as np
 
+        path = os.path.join(self.base_path, path)
+        
         # Local state to incrementally build trajectory
         state = lambda: None
         if append_to_configuration is not None:
