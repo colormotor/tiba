@@ -880,6 +880,7 @@ class TibaInterface:
         if self.panda is not None:
             print("Actually moving the robot")
             self.panda.move_to_joint_position(np.array(q))
+            print("Done moving")
         else:
             self.robot.q = q
             if state.has_ros:
