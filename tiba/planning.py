@@ -311,7 +311,7 @@ class TrajectoryPlanner:
                     q = self.itiba.Qs[-1]
                 else:
                     q = robot.q
-            Qs, dQs = self.itiba.compute_task_trajectories(chunk, q=q)
+            Qs, dQs = self.itiba.compute_task_trajectories(chunk, q=q, stiff_orn=False)
             self.itiba.trajectory_status = robot.check_joint_trajectory(Qs, dQs)
             if not self.itiba.trajectory_status:
                 log("Error computing chunk trajectory")

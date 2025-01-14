@@ -361,6 +361,7 @@ class TibaInterface:
                  plot_path='trajectory.png',
                  handeye_config_path='panda_eye_hand_calib_eye_on_hand.yaml',
                  base_path='./../robots/tiba/settings'
+                 drawing_orientation_stiffness=0.7,
                  ):
 
         if not os.path.isdir(base_path):
@@ -373,6 +374,7 @@ class TibaInterface:
         positions_path = os.path.join(base_path, positions_path)
         tools_path = os.path.join(base_path, tools_path)
 
+        self.drawing_orientation_stiffness = drawing_orientation_stiffness
         self.editor = PositionEditor(positions_path)
         self.pad = drawing_pad.DrawingPad(pad_path)
         self.pad.load()
@@ -969,7 +971,7 @@ class TibaInterface:
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
         self.plan_task_trajectories(trajectories, rest)
 
-    def compute_task_trajectories(self, trajectories, rest=0.0, q=None, tip_frame='tiba_pen_tcp'):
+    def compute_task_trajectories(self, trajectories, rest=0.0, q=None, stiff_orn=False, tip_frame='tiba_pen_tcp'):
         ''' Plan trajectories for the robot given in task space as
         a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
@@ -979,13 +981,21 @@ class TibaInterface:
         if q is None:
             q = self.robot.q
 
+        precisions = np.ones(7)
+        if not stiff_orn:
+            precisions[3:] *= self.drawing_orientation_stiffness
         planner = ilqr.iLQRPlannerVelocity(self.robot.urdf_file,
                                            q,
                                            subsample=int(cfg.dt/cfg.robot_dt),
                                            tip_frame=tip_frame
                                            )
         #
-        Qs, dQs, linked_trajectories = planner.plan(trajectories, rest=rest, limits=robot.panda_limits, get_trajectories=True, r=cfg.ilqr_r)
+        Qs, dQs, linked_trajectories = planner.plan(trajectories,
+                                                    rest=rest,
+                                                    limits=robot.panda_limits,
+                                                    weights=precisions,
+                                                    get_trajectories=True,
+                                                    r=cfg.ilqr_r)
 
         self.trajectory_status = self.robot.check_cartesian_trajectories(linked_trajectories)
         if not self.trajectory_status:
