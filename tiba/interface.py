@@ -360,7 +360,7 @@ class TibaInterface:
                  tools_path='tools.json',
                  plot_path='trajectory.png',
                  handeye_config_path='panda_eye_hand_calib_eye_on_hand.yaml',
-                 base_path='./../robots/tiba/settings'
+                 base_path='./../robots/tiba/settings',
                  drawing_orientation_stiffness=0.7,
                  ):
 
