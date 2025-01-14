@@ -8,8 +8,6 @@ import numpy as np
 def radians( x ):
     return np.pi/180*x
 
-show_clear()
-
 # For gripping
 def protruberance(w, h, length):
     tri = Plane.XY*Polyline([-w*0.5, 0],
@@ -95,7 +93,7 @@ def make_body(has_slant=True):
 
 part = make_body()
 part.export_stl('holder.stl')
-part.color = Color(1, 0.5, 1.0, 1.0)
+part.color = [1, 0.5, 1.0, 1.0]
 #import_stl('./panda_realsense_D4xx.stl') - Box(5,10,2)
 # part = Box(5, 10, 2) - Hole(radius=2.6, depth=2)
 # Cylinder()
@@ -118,7 +116,7 @@ base -= Pos(h*0.5, -w*0.45, -thickness*2) * Rot(0, 90, 0) * Hole(5/2, boxh*4)
 bz = 10
 base -= Pos(h*0.5, 0, thickness/2 + bz/2)*Rot(0, angle, 0)*Box(30, 60, bz)
 #base -= Pos(0, -w*0.32, 30) * Hole(5, boxh*4)
-base.color = Color(0, 0.8, 1.0, 1.0) #"aliceblue")
+base.color = [0, 0.8, 1.0, 1.0] #"aliceblue")
 base.export_stl('base.stl')
 base = Pos(0, 0, 0)*base
 
