@@ -740,14 +740,14 @@ class TibaInterface:
         #Kp = np.array([600, 600, 600, 600, 250, 20, 50]) #*0.5
         #Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
 
-        #Kv = 1.0*2.0*np.sqrt(Kp) #0.5*np.sqrt(2.0*Kp)
-        #Kv = 1.1*2.0*np.sqrt(Kp)
+        Kv = 1.0*2.0*np.sqrt(Kp) 
         #print('Kv', Kv)
         # Seems to be more stable
-        Kv = 0.5*np.sqrt(2.0*Kp)
+        # Kv = 0.5*np.sqrt(2.0*Kp)
+        Kv[-1] = 5.0
         
-        ctrl.set_stiffness(Kp)
-        ctrl.set_damping(Kv)
+        #ctrl.set_stiffness(Kp)
+        #ctrl.set_damping(Kv)
         panda = self.panda
         dq_thresh = 0.001
         dq0 = np.zeros(7)

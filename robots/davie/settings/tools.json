@@ -33,16 +33,16 @@
       "max_radius_mm": 3.0
     },
     "Labor-brush-0": {
-      "tip_dist_mm": 84.0,
-      "tip_height_mm": 2.0,
+      "tip_dist_mm": 83.0,
+      "tip_height_mm": 0.0,
       "offset_mm": 5.0,
       "range_mm": 5.0,
       "min_radius_mm": 7.5,
       "max_radius_mm": 13.0
     },
     "Labor-brush-1": {
-      "tip_dist_mm": 72.0,
-      "tip_height_mm": 2.0,
+      "tip_dist_mm": 70.0,
+      "tip_height_mm": 3.0,
       "offset_mm": 5.0,
       "range_mm": 10.0,
       "min_radius_mm": 3.0,
