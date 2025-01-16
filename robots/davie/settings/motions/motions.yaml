@@ -9,42 +9,42 @@ Dip-0:
     file: "./motions/dip.py"
     args:
         dip_pos: [0.3735126926077895, -0.29910782829973387, 0.07435136922352839]
-        dip_radius_mm: 12.0
+        dip_radius_mm: 10.0
         dip_depth_mm: 35.0
     desc: "Dip brush in container 0"
 Dip-1:
     file: "./motions/dip.py"
     args:
         dip_pos: [0.30789116964541513, -0.30008100925655684, 0.07407728490698093]
-        dip_radius_mm: 12.0
+        dip_radius_mm: 10.0
         dip_depth_mm: 35.0
     desc: "Dip brush in container 1"
 Dip-2:
     file: "./motions/dip.py"
     args:
         dip_pos: [0.24229462650160802, -0.2980534177007819, 0.07385254670557224]
-        dip_radius_mm: 12.0
+        dip_radius_mm: 10.0
         dip_depth_mm: 35.0
     desc: "Dip brush in container 2"
 Dip-3:
     file: "./motions/dip.py"
     args:
         dip_pos: [0.3731486683094777, -0.36438306779333635, 0.0740262779116346]
-        dip_radius_mm: 12.0
+        dip_radius_mm: 10.0
         dip_depth_mm: 35.0
     desc: "Dip brush in container 3"
 Dip-4:
     file: "./motions/dip.py"
     args:
         dip_pos: [0.3064207212323247, -0.36322624991964797, 0.07447250611391286]
-        dip_radius_mm: 12.0
+        dip_radius_mm: 10.0
         dip_depth_mm: 35.0
     desc: "Dip brush in container 4"
 Dip-5:
     file: "./motions/dip.py"
     args:
         dip_pos: [0.24181648489834223, -0.3628564453572522, 0.07409308623724821]
-        dip_radius_mm: 12.0
+        dip_radius_mm: 10.0
         dip_depth_mm: 35.0
     desc: "Dip brush in container 5"
 Pick-0:

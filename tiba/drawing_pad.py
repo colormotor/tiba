@@ -155,7 +155,7 @@ class DrawingPad:
             return S[0]
         return S
 
-    def fit_trajectory(self, P, padding=100):
+    def fit_trajectory(self, P, padding=0):
         P = self.fit_to_box(P, padding) # fit_to_box_and_augment(P, self.box, padding)
         return self.fit_to_frame(P)
         #return fit_to_frame_box(P, self.box, self.frame, padding, offset=self.offset)
