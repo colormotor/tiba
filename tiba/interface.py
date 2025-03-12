@@ -728,7 +728,8 @@ class TibaInterface:
 
         self.robot.q = self.panda.get_robot().read_once().q # panda.q
         self.grasped = self.gripper.read_once().is_grasped
-
+        # print('Grasped:', self.grasped)
+        
     def _exec_joint_motion(self, motion):
         from panda_py import controllers
 
@@ -745,15 +746,18 @@ class TibaInterface:
         #Kp = np.array([600, 600, 600, 600, 250, 50, 50]) #*0.5
         #Kp = np.array([600, 600, 600, 600, 250, 20, 50]) #*0.5
         #Kp = np.array([1000.0, 1000.0, 1000.0, 1000.0, 500.0, 300.0, 100.0]) #*0.8
-
-        Kv = 1.0*2.0*np.sqrt(Kp) 
+        
+        Kv = 1.0*2.0*np.sqrt(Kp)
+        Kv[-1] = 10.0
+        Kv[-2] = 20.0
+        Kv[-3] = 20.0
         #print('Kv', Kv)
         # Seems to be more stable
         # Kv = 0.5*np.sqrt(2.0*Kp)
         Kv[-1] = 5.0
         
-        #ctrl.set_stiffness(Kp)
-        #ctrl.set_damping(Kv)
+        ctrl.set_stiffness(Kp)
+        ctrl.set_damping(Kv)
         panda = self.panda
         dq_thresh = 0.001
         dq0 = np.zeros(7)
@@ -903,6 +907,7 @@ class TibaInterface:
         if self.gripper is None:
             print('No gripper!')
             return
+        print('Grasping')
         self.gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04) # Might want to increase pressure current 10 N
 
     def ungrasp(self):

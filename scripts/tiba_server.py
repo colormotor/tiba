@@ -144,8 +144,13 @@ def jtraj_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
     Qs = [p.positions for p in data.points]
     dQs = [p.velocities for p in data.points]
-    itiba.read_states()
-
+    try:
+        itiba.read_states()
+    except RuntimeError as e:
+        print(e)
+        print("Error, perhaps you are in programming mode?")
+        respond_done(False)
+        return
     # if has_robot:
     #     print('Reading robot joint configuration')
     #     robot.q = panda.get_robot().read_once().q # panda.q
@@ -154,11 +159,16 @@ def jtraj_callback(data):
 
     print('Planning')
     itiba.plan_joint_trajectory(Qs, dQs, plot=False)
-
+    status = True
     if has_robot:
         print('Executing')
         state.executing = True
-        itiba.execute(force_drawing=False)
+        try:
+            itiba.execute(force_drawing=False)
+        except RuntimeError as e:
+            print(e)
+            print("Error, perhaps you are in programming mode?")
+            status = False
         state.executing = False
         print('Execution done')
     else:
@@ -166,14 +176,19 @@ def jtraj_callback(data):
         itiba.simulate()
         print('Simulation done')
 
-    send_joint_state()
-    respond_done()
+    if status:
+        send_joint_state()
+    respond_done(status)
 
-def respond_done():
-    print("Respondig done")
-    itiba.read_states()
+def respond_done(status=True):
+    print("Responding done")
+    if status:
+        itiba.read_states()
     p = JointState()
-    p.name = 'Done'
+    if not status:
+        p.name = 'Error'
+    else:
+        p.name = 'Done'
     p.position = itiba.robot.q
     qdonepub.publish(p)
     
@@ -182,11 +197,18 @@ def respond_done():
 def jpos_callback(data):
     q = data.position
     print("Received jpos", q)
+    status = True
+    
     state.executing = True
-    itiba.goto_joint_position(q)
+    try:
+        itiba.goto_joint_position(q)
+    except RuntimeError as e:
+        print(e)
+        status = False
     state.executing = False
-    send_joint_state()
-    respond_done()
+    if status:
+        send_joint_state()
+    respond_done(status)
 
 def send_joint_state(verbose=False, name='q'):
     itiba.read_states()
@@ -243,6 +265,7 @@ def main():
     print("Publishing")
     respub.publish("Server started")
 
+    respond_done()
     send_joint_state()
 
     thread = threading.Thread(target=joint_pos_sender_thread)
