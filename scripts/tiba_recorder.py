@@ -37,7 +37,7 @@ reload(ui)
 
 # Add the --robot argument
 parser = argparse.ArgumentParser()
-parser.add_argument('--robot', type=str, default='davie', help='Name of the robot (default: tiba)')
+parser.add_argument('--robot', type=str, default='tiba', help='Name of the robot (default: tiba)')
 # Parse the arguments
 args = parser.parse_args()
 base_path = './../robots/' + args.robot + '/settings'
@@ -118,7 +118,8 @@ def on_event(event):
 
 if has_robot:
     hostname = '172.16.0.2'
-    desk = panda_py.Desk(hostname, 'admin', 'adminadmin') #'colormotor', 'Rapidograph22!')
+    #desk = panda_py.Desk(hostname, 'admin', 'adminadmin') #'colormotor', 'Rapidograph22!')
+    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
     print("Created desk")
     if not desk.has_control():
         print("Forcing control")
