@@ -8,6 +8,7 @@ class Config:
         self._default_cartesian_speed = 200/1000.0  #(np.pi/5)
         self._default_joint_speed = geom.radians(30.0)
         self.speed_factor = 1.0
+        self.joint_speed_factor = 1.0
         self.acceleration_time = 0.4
         self.joint_acceleration_time = 1.0
         self.default_grasp_mm = 34.0
@@ -24,7 +25,7 @@ class Config:
 
     @property
     def joint_speed(self):
-        return self._default_joint_speed*self.speed_factor
+        return self._default_joint_speed*self.joint_speed_factor #*self.speed_factor
 
     @property
     def angular_velocity(self):

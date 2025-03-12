@@ -35,8 +35,8 @@ from . import matplotlyb as ply
 
 
 from importlib import reload
-reload(ilqr)
-reload(drawing_pad)
+# reload(ilqr)
+# reload(drawing_pad)
 
 cfg = config.cfg
 
@@ -204,6 +204,11 @@ class WaitForDone:
             print_same_line(iter_chars[i%len(iter_chars)])
             time.sleep(0.05)
             i+=1
+        resp = self.itiba.response
+        if type(resp) != str:
+            resp = ''.join(resp)
+        if resp.lower() == 'error':
+            raise ValueError
         print('Done')
 
 def ros_camera_info_to_cv(cam_info):
@@ -410,7 +415,7 @@ class TibaInterface:
         self.reload_scripts()
 
         self.server_busy = False
-
+        self.response = 'Done'
 
         self.recorded_Qs = []
         self.recorded_dQs = []
@@ -581,6 +586,7 @@ class TibaInterface:
         self.robot.q = np.array(data.position)
         self.debug_q = np.array(data.position)
         self.server_busy = False
+        self.response = data.name
 
     def state_callback(self, data):
         self.robot.q = np.array(data.position)
@@ -826,52 +832,53 @@ class TibaInterface:
 
     def execute(self, delay=1.0, force_drawing=False):
         ''' Execute the current joint motion'''
-        
-        if self.panda is not None:
-            self.delay(delay)
+        try:
+            if self.panda is not None:
+                self.delay(delay)
 
-            for motion in self.motions:
-                if motion.grasp is not None:
-                    if motion.grasp == False:
-                        self.ungrasp()
-                    elif type(motion.grasp) == bool:
-                        self.grasp()
+                for motion in self.motions:
+                    if motion.grasp is not None:
+                        if motion.grasp == False:
+                            self.ungrasp()
+                        elif type(motion.grasp) == bool:
+                            self.grasp()
+                        else:
+                            self.grasp(motion.grasp)
+                        time.sleep(0.1) #1.0)
+
+                    #Q = self.Qs
+                    #dQ = self.dQs
+                    if motion.is_drawing or force_drawing:
+                        self._exec_drawing_motion(motion)
                     else:
-                        self.grasp(motion.grasp)
-                    time.sleep(0.1) #1.0)
+                        self._exec_joint_motion(motion)
+                return np.array(self.panda.q)
+            elif self.has_ros():
+                for motion in self.motions:
+                    if motion.grasp is not None:
+                        if motion.grasp == False:
+                            with self.wait():
+                                self.send_msg('exec:ungrasp')
+                        elif type(motion.grasp) == bool:
+                            with self.wait():
+                                self.send_msg('exec:grasp')
+                            #self.grasp()
+                        else:
+                            print("Received grasping with parameters, not implemented yet")
+                            with self.wait():
+                                self.send_msg('exec:grasp')
+                            #self.grasp(motion.grasp)
+                        #time.sleep(0.3) #1.0)
 
-                #Q = self.Qs
-                #dQ = self.dQs
-                if motion.is_drawing or force_drawing:
-                    self._exec_drawing_motion(motion)
-                else:
-                    self._exec_joint_motion(motion)
-            return np.array(self.panda.q)
-        elif self.has_ros():
-            for motion in self.motions:
-                if motion.grasp is not None:
-                    if motion.grasp == False:
+                    if len(motion.Qs):
                         with self.wait():
-                            self.send_msg('exec:ungrasp')
-                    elif type(motion.grasp) == bool:
-                        with self.wait():
-                            self.send_msg('exec:grasp')
-                        #self.grasp()
-                    else:
-                        print("Received grasping with parameters, not implemented yet")
-                        with self.wait():
-                            self.send_msg('exec:grasp')
-                        #self.grasp(motion.grasp)
-                    #time.sleep(0.3) #1.0)
-
-                if len(motion.Qs):
-                    with self.wait():
-                        self.send_joint_trajectory(motion.Qs, motion.dQs)
-        else:
-            print("No panda or ros, can't execute, simulating")
-            self.simulate()
-        print('Finished motion')
-
+                            self.send_joint_trajectory(motion.Qs, motion.dQs)
+            else:
+                print("No panda or ros, can't execute, simulating")
+                self.simulate()
+            print('Finished motion')
+        except ValueError:
+            print("Could not finish motion")
 
     def goto_joint_position(self, q):
         if type(q) == str:

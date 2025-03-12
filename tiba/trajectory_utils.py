@@ -27,10 +27,10 @@ from scipy.spatial.transform import Slerp
 from collections import defaultdict
 from math import hypot
 import trajectory_smoothing
-reload(trajectory_smoothing)
+ # reload(trajectory_smoothing)
 from . import trapezoidal, todorov, lqt
-reload(trapezoidal)
-reload(todorov)
+# reload(trapezoidal)
+# reload(todorov)
 
 
 from .fitCurves.fitCurves import fitCurve
@@ -679,8 +679,8 @@ def resample_bezier(Cp, max_speed, accel_time, get_t=False):
     #print('max accel', max_accel)
     div_s = max_speed/smax
     div_a = np.sqrt(max_accel/amax)
-    div = min(div_s, div_a)
-
+    div = div_s #min(div_s, div_a)
+    print('Div factor', div)
     x = np.arange(t0, t1, dt*div)
     # Compute trajectory
     Y = np.vstack([bp(x) for bp in bps]).T

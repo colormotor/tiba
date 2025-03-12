@@ -40,7 +40,7 @@ import roboticstoolbox as rtb
 from spatialmath.base import trnorm
 from tqdm import tqdm, trange
 
-reload(ply)
+# reload(ply)
 
 # Braccio joint limits
 # q_min_braccio = [0.0, 0.262, 0.0, 0.0, 0.0]

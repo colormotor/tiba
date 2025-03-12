@@ -23,7 +23,8 @@ import numpy as np
 import numbers
 import matplotlib
 from matplotlib.patches import Path, PathPatch
-
+from PIL import Image as PILImage
+from io import BytesIO
 
 from . import trajectory_utils as tu
 
@@ -32,6 +33,13 @@ pio.renderers.default = 'browser'
 
 glob = lambda: None
 glob.fig = None
+
+def figure_image():
+    buf = BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    image = PILImage.open(buf)
+    return image
 
 def is_number(x):
     return isinstance(x, numbers.Number)
@@ -123,6 +131,8 @@ class Figure:
             show_plotly(self)
         elif impl == 'plt':
             show_plt(self)
+        elif impl == 'image':
+            return show_plt(self, get_image=True)
         else:
             print("Unknown implementation")
 
@@ -320,7 +330,7 @@ def title(title):
     glob.fig.title(title)
 
 def show(impl='plotly'):
-    glob.fig.show(impl=impl)
+    return glob.fig.show(impl=impl)
 
 
 ## Matploltlib-like API
@@ -341,7 +351,7 @@ def plt_fill(S, color, **kwargs):
 
 
 
-def show_plt(fig):
+def show_plt(fig, get_image=False):
     '''
     Matplotlib implementation for figure and plots
     '''
@@ -464,7 +474,11 @@ def show_plt(fig):
                     plt.axis('equal')
                 if ax.flip_y:
                     plt.gca().invert_yaxis()
-    plt.show()
+    if get_image:
+        im = figure_image()
+        return im
+    else:
+        plt.show()
 
 
 def show_plotly(fig):

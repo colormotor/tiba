@@ -8,6 +8,4 @@ from . import trajectory_utils
 from . import tiba_sketch
 from . import config as config
 
-reload(config)
-reload(ilqr)
 cfg = config.cfg

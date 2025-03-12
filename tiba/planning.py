@@ -7,7 +7,6 @@ from .interface import Motion
 from easydict import EasyDict as edict
 from PIL import Image
 import numpy as np
-reload(tu)
 
 import  pdb
 
@@ -210,6 +209,8 @@ class TrajectoryPlanner:
         max_speed = cfg.cartesian_speed
         accel_time = cfg.acceleration_time
         trajectory_includes_penup = False
+        print("Max speed is ", max_speed)
+        print("Accel time is", accel_time)
 
         # Select planner from parameters
         if params.planner == 'Trapezoidal':
@@ -301,7 +302,10 @@ class TrajectoryPlanner:
             else:
                 q = robot.q
             if i != 0 or predip:
+                speed_factor = cfg.speed_factor
+                cfg.speed_factor = 1.0
                 self.itiba.plan_script(dip_command, append_to_configuration=q)
+                cfg.speed_factor = speed_factor
                 if not self.itiba.trajectory_status:
                     log("Error computing dip trajectory")
                     break
@@ -336,7 +340,7 @@ class TrajectoryPlanner:
         if not self.itiba.trajectory_status or self.itiba.safe_mode:
             self.itiba.plot_trajectory_stats()
 
-    def plot_plan_image(self, backend='plt', show=False, figsize=(7,7), color=None, alpha=0.8):
+    def plot_plan_image(self, backend='plt', show=False, figsize=(7,7), color=None, alpha=0.8, image_size=None):
         self.itiba.update_handeye()
         handeye = self.itiba.handeye
 
@@ -413,7 +417,7 @@ class TrajectoryPlanner:
                         ply.text('%d'%i, projected_points[0][:2], color='k', size=7)
         if show:
             ply.setup_2d(flip_y=False)
-            ply.show(backend)
+            return ply.show(backend)
 
     def get_plan_image(self):
         from py5canvas import canvas
@@ -630,8 +634,8 @@ def plan_thick_resample_bezier(samples,
     samples = [np.hstack([P[:,:2], radius_to_z(params, P[:,2]).reshape(-1,1)])
                  for P in samples]
     chains_3d = samples
-
-    if params.resample_topp:
+    print("Resampling bezier")
+    if False: #params.resample_topp:
         trajectories,_,_ = tu.plan_polylines_time_optimal(chains_3d, cfg.cartesian_speed, cfg.acceleration_time)
     else:
         trajectories = [tu.resample_bezier(chain, max_speed, accel_time) for chain in chains_3d]
