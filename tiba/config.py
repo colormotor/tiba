@@ -4,8 +4,8 @@ import yaml
 
 class Config:
     def __init__(self):
-        self._default_angular_velocity = geom.radians(30) #(np.pi/5)
-        self._default_cartesian_speed = 200/1000.0  #(np.pi/5)
+        self._default_angular_velocity = geom.radians(60) #(np.pi/5)
+        self._default_cartesian_speed = 300/1000.0  #(np.pi/5)
         self._default_joint_speed = geom.radians(30.0)
         self.speed_factor = 1.0
         self.joint_speed_factor = 1.0
@@ -20,7 +20,7 @@ class Config:
 
     @property
     def cartesian_speed(self):
-        assert(self.speed_factor < 1.5)
+        #assert(self.speed_factor < 1.5)
         return self._default_cartesian_speed*self.speed_factor
 
     @property

@@ -61,7 +61,11 @@ def to_pose(pose):
         return pose.norm()
     if type(pose) == np.ndarray and len(pose.shape) == 2:
         return SE3(pose).norm()
-    pose = SE3(*pose[:3])*(UnitQuaternion(pose[3:])).SE3()
+    try:
+        pose = SE3(*pose[:3])*(UnitQuaternion(pose[3:])).SE3()
+    except ValueError:
+        pose = SE3(*pose[:3])*(UnitQuaternion()).SE3()
+
     return pose.norm()
 
 def to_frame(pose):
@@ -296,11 +300,11 @@ def trapezoidal_approach(x0, x1,
         res = approach
         #print('diffs', to_pos_orn(x0) - res[0], to_pos_orn(x1) - res[-1])
         #res = [np.array(keypoints[0])] + res + [np.array(keypoints[-1])]
-    return approach
+    return np.array(approach)
 
     # approach = [pose0.interp(pose1, t) for t in ts]
     # return pose_traj_to_posorn(approach)
-def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None, accel_time=None, tol=0.0):
+def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None, accel_time=None, tol=0.0): #5.0/1000.0):
     #assert(False)
     if max_speed is None:
         max_speed = cfg.cartesian_speed
@@ -310,6 +314,11 @@ def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None
         accel_time = cfg.acceleration_time
 
     from trajectory_smoothing import TrajectorySmoother
+
+    if len(keypoints[0])==3:
+        only_pos = True
+    else:
+        only_pos = False
 
     # Convert to relative axis angle representation
     # interpolation will occur along specified angles
@@ -341,7 +350,7 @@ def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None
         dof, max_velocity, max_acceleration, tol
     )
 
-    
+
     try: 
         result = smoother.smooth_interpolate(np.array(keypoints_angle), interpolation_dt=cfg.dt, traj_dt=0.001)
     except MemoryError as e:
@@ -361,6 +370,8 @@ def plan_poses_time_optimal(keypoints, max_speed=None, max_angular_velocity=None
         pass
         #print('diffs', keypoints[0] - res[0], keypoints[-1] - res[-1])
         #res = [np.array(keypoints[0])] + res + [np.array(keypoints[-1])]
+    if only_pos:
+        return np.array(res)[:,:3]
     return np.array(res)
 
 def approach(a, b, *args, **kwargs):
@@ -399,7 +410,7 @@ def plan_bezier_chains_time_optimal(chains, max_speed, accel_time, subd=5, angle
     return plan_polylines_time_optimal(samples, max_speed, accel_time, tol)
 
 
-def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0):
+def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0, ds=1.0 / 2000):
     from trajectory_smoothing import TrajectorySmoother
     dof = len(polylines[0][0])
 
@@ -427,7 +438,7 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
         )
 
         POrig = np.array(P)
-        ds = 1.0 / 2000
+        #ds = 1.0 / 2000
         for i in range(nattempt):
             P = np.array(P)
             result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
@@ -439,7 +450,7 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0)
                 glob.P = np.array(P)
                 P = geom.uniform_sample(Q, ds)
                 ds = ds*2
-
+                print(len(P), 'points')
                 # A = geom.degrees(geom.turning_angles(Q))
                 # L = geom.chord_lengths(Q)
                 # print('Length', len(Q))
@@ -679,7 +690,7 @@ def resample_bezier(Cp, max_speed, accel_time, get_t=False):
     #print('max accel', max_accel)
     div_s = max_speed/smax
     div_a = np.sqrt(max_accel/amax)
-    div = div_s #min(div_s, div_a)
+    div = min(div_s, div_a)
     print('Div factor', div)
     x = np.arange(t0, t1, dt*div)
     # Compute trajectory
@@ -817,7 +828,9 @@ def lifting_motion(a, b, height, max_speed=None, accel_time=None):
     d = b-a
     up = [0, 0, height]
     if geom.distance(a, b) < height:
-        P = np.array([a,  a+d*(1/3)+up, b-d*(1/3)+up, b])
+        dd = geom.normalize(d)
+        #P = np.array([a,  a+d*(1/3)+up, b-d*(1/3)+up, b])
+        P = np.array([a,  (a + b)/2 + up, b])
     else:
         dd = geom.normalize(d)
         P = np.array([a, a+dd*height*0.5 + up, (a+b)/2 + up, b-dd*height*0.5+up, b])
@@ -1197,13 +1210,19 @@ def bspline(n, pts, closed=False, alpha=1, degree=3, smooth_k=0, w=None, der=0, 
     dim = pts.shape[1]
     u = np.linspace(0, duration, pts.shape[0])
     degree = min(degree, pts.shape[0]-1)
+    bc_type = None
     if clamped:
         bc_type=([(1, np.zeros(dim))], [(1, np.zeros(dim))])
+        # bc_type = (
+        #     [(1, [0.0] * dim), (2, [0.0] * dim)],  # Left endpoint
+        #     [(1, [0.0] * dim), (2, [0.0] * dim)]   # Right endpoint
+        # )
     else:
         pass
         # Natural
     #bc_type=([(2, 0.0)], [(2, 0.0)])
-    spl = make_interp_spline(u, pts, k=degree) #, bc_type=bc_type)
+    #bc_type=([(1, 0.0)], [(1, 0.0)])
+    spl = make_interp_spline(u, pts, k=degree, bc_type=bc_type)
     #tck, _ = splprep(pts.T, u=u, k=degree, per=closed, s=smooth_k, w=w)
 
     t = np.linspace(0, duration, n)

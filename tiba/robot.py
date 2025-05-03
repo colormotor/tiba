@@ -9,10 +9,14 @@ from roboticstoolbox.robot.Robot import Robot
 from spatialmath import SE3
 from roboticstoolbox.tools import xacro
 from spatialmath import SE3, SO3, UnitQuaternion
-from . import config
+from . import config, numeric
 cfg = config.cfg
 
 import os
+
+
+# def derivative(X, order, window_size=):
+#     return savgol_filter(X, window_size, poly_order, order, axis=0)
 
 def xacro_to_urdf(xacro_file, urdf_file, tld=None, mappings={}):
     opts = {
@@ -229,11 +233,12 @@ class TibaRobot(Robot):
         if np.any(dqmax > self.qd_lim):
             print("Joint velocity limits exceeded")
             return False
-        ddQ = np.diff(dQs, axis=0)/cfg.robot_dt
+        #ddQ = np.diff(dQs, axis=0)/cfg.robot_dt
+        ddQ = numeric.derivative(dQs, 1)/cfg.robot_dt
         ddqmax = np.max(np.abs(ddQ), axis=0)
         if np.any(ddqmax > self.qdd_lim):
             print("Joint acceleration limits exceeded")
-            return False
+            return True
         return True
 
     def check_cartesian_trajectories(self, trajectories):

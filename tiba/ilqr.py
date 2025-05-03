@@ -29,7 +29,7 @@ from PyLQR.utils import primitives, PythonCallbackMessage
 
 from scipy.interpolate import BPoly
 
-from . import utils, geom, config
+from . import utils, geom, config, numeric
 from . import trajectory_utils as tu
 from .config import cfg, log, log_error
 from . import draw
@@ -91,6 +91,7 @@ def subsample_polynomial(derivs, subsample=10):
     return list(X), list(dX)
 
 dtype = np.float64
+post_spline = True
 class iLQRPlannerVelocity:
     def __init__(self, urdf_path, q0,
                  base_frame='tiba_link0',
@@ -102,7 +103,7 @@ class iLQRPlannerVelocity:
         self.subsample = subsample
 
     def plan(self, trajectories,
-             num_iter=20,
+             num_iter=40,
              r=1e-6,
              weights=np.ones(7),
              rest = 0.1,
@@ -127,14 +128,20 @@ class iLQRPlannerVelocity:
         cartesian_approaches = True
 
         rest = 0.0
+        print("Planning %d trajectories"%len(trajectories))
+        traj_types = []
         for i, traj in enumerate(trajectories):
             if len(traj) < 2:
                 continue
             if cartesian_approaches:
+                print("adding cartesian approach")
+
                 approach = tu.trapezoidal_approach(x0, traj[0])
                 if len(approach) > 1:
+                    traj_types.append('approach')
                     linked_trajectories.append(tu.rest_inout(approach, rest))
 
+            print(traj_types.append('traj'))
             linked_trajectories.append(tu.rest_inout(traj, rest))
             x0 = traj[-1]
 
@@ -200,28 +207,36 @@ class iLQRPlannerVelocity:
 
                 acc = np.diff(np.array(dQ_batch), axis=0)/cfg.dt
                 if np.any(np.abs(acc) > 4):
-                    log_error('High acceleration inside trajectory')
+                    log_error('High acceleration inside trajectory', tindex, traj_types[tindex])
+
                     # print(acc)
                     #pdb.set_trace()
                 log('Max accel local:', np.max(np.abs(acc)))
 
-                n = len(Q_batch)
-                Q_batch, dQ_batch = tu.bspline((n-1)*self.subsample+1, Q_batch, der=1, duration=(n-1)*cfg.dt)
-                Q_batch = list(Q_batch)
-                dQ_batch = list(dQ_batch)
+                if not post_spline:
+                    n = len(Q_batch)
+                    QD = np.hstack([Q_batch, np.vstack([np.zeros(7), dQ_batch])])
+                    Q_batch, dQ_batch = tu.bspline((n-1)*self.subsample+1, Q_batch, der=1, duration=(n-1)*cfg.dt, clamped=True) #, smooth_k=1000)
+                    # QD = tu.bspline((n-1)*self.subsample+1, QD, der=1, duration=(n-1)*cfg.dt, clamped=True)[0]
+                    # QD = np.array(QD)
+                    # Q_batch = QD[:,:7]
+                    # dQ_batch = QD[:,7:]
+                    Q_batch = list(Q_batch)
+                    dQ_batch = list(dQ_batch)
 
-                rep = 50
-                dQ_approach = [dq0 + (dQ_batch[0] - dq0)*t for t in np.linspace(0, 1, rep)]
-                Q_approach = [q0 + (Q_batch[0] - q0)*t for t in np.linspace(0, 1, rep)]
+                    rep = 50
+                    dQ_approach = [dq0 + (dQ_batch[0] - dq0)*t for t in np.linspace(0, 1, rep)]
+                    Q_approach = [q0 + (Q_batch[0] - q0)*t for t in np.linspace(0, 1, rep)]
 
-                # print('lens', len(dQ_batch), len(Q_batch))
-                dQ_batch = dQ_approach + dQ_batch
-                Q_batch = Q_approach + Q_batch # One extra sample for positions
+                    # print('lens', len(dQ_batch), len(Q_batch))
+                    dQ_batch = dQ_approach + dQ_batch
+                    Q_batch = Q_approach + Q_batch # One extra sample for positions
 
 
-                dQ_batch = dQ_batch + [dQ_batch[-1] + (np.zeros(7) - dQ_batch[-1])*t for t in np.linspace(0, 1, rep)]
-                Q_batch = Q_batch + [np.array(Q_batch[-1])]*rep #
-
+                    dQ_batch = dQ_batch + [dQ_batch[-1] + (np.zeros(7) - dQ_batch[-1])*t for t in np.linspace(0, 1, rep)]
+                    Q_batch = Q_batch + [np.array(Q_batch[-1])]*rep #
+                else:
+                    dQ_batch = np.vstack([np.zeros(7), dQ_batch])
 
                 # print("After subsample")
                 # acc = np.diff(np.array(dQ_batch), axis=0)/cfg.robot_dt
@@ -256,7 +271,23 @@ class iLQRPlannerVelocity:
                 raise(e)
             config.state.progress = tindex+1
 
+        if not post_spline:
+            Qs = sum(Qs, [])
+            dQs = sum(dQs, [])
+        else:
+            Qs = np.vstack(Qs)
+            dQs = np.vstack(dQs)
 
+
+            n = len(Qs)
+            QsdQs = np.hstack([Qs, dQs])
+            #Qs, dQs = tu.bspline((n-1)*self.subsample+1, Qs, der=1, duration=(n-1)*cfg.dt, degree=3, clamped=True)
+            QsdQs = tu.bspline((n-1)*self.subsample+1, QsdQs, der=1, duration=(n-1)*cfg.dt, degree=3, clamped=True, smooth_k=10)[0]
+            Qs = QsdQs[:,:7]
+            dQs = QsdQs[:,7:]
+            Qs = list(Qs)
+            dQs = list(dQs)
+        #
         # dq0 = self.dq0
         # Qs_joined = []
         # dQs_joined = []
@@ -284,8 +315,8 @@ class iLQRPlannerVelocity:
         #     dQs_joined.append(dQ)
         #     q0 = Q[-1]
 
-        Qs = sum(Qs, [])
-        dQs = sum(dQs, [])
+
+
         #Qs = sum(Qs, [])
         #dQs = sum(dQs, [])
         # if self.subsample > 1:
@@ -509,7 +540,7 @@ def plot_trajectory_stats(robot, Qs, dQs, trajectories=[], figsize=(13, 13), dpi
     ply.rectangle([0, -limit], [t[-1], limit], color='k', alpha=0.1, fill=True)
 
     ply.subplot(2, 1, title='Joint acceleration (rad/s^2)')
-    acc = np.diff(dQs, axis=0)/cfg.robot_dt
+    acc = numeric.derivative(dQs)/cfg.robot_dt #np.diff(dQs, axis=0)/cfg.robot_dt
     for i in range(7):
         t = np.linspace(0, len(acc), len(acc))*cfg.robot_dt
         ply.plot(t, acc[:,i]) #, ['r', 'g', 'b'][i], alpha=0.7)

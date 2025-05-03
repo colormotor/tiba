@@ -755,7 +755,9 @@ class TibaInterface:
         # Seems to be more stable
         # Kv = 0.5*np.sqrt(2.0*Kp)
         Kv[-1] = 5.0
-        
+
+        print('Kp', Kp)
+        print('Kv', Kv)
         ctrl.set_stiffness(Kp)
         ctrl.set_damping(Kv)
         panda = self.panda

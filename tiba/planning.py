@@ -124,6 +124,8 @@ class TrajectoryPlanner:
             traj_callback = plan_simplify_test
         elif params.planner == 'Thick bezier':
             traj_callback = plan_thick_resample_bezier
+        elif params.planner == 'Pass':
+            traj_callback = plan_pass
         elif params.planner == 'Thick':
             traj_callback = plan_thick_resample
         elif params.planner == 'Thick BSpline':
@@ -184,6 +186,8 @@ class TrajectoryPlanner:
             traj_callback = plan_simplify_test
         elif params.planner == 'Thick bezier':
             traj_callback = plan_thick_resample_bezier
+        elif params.planner == 'Pass':
+            traj_callback = plan_pass
         elif params.planner == 'Thick':
             traj_callback = plan_thick_resample
         elif params.planner == 'Thick BSpline':
@@ -203,11 +207,13 @@ class TrajectoryPlanner:
     def compute_and_plan(self):
         self.compute_and_plan_with_dips(distance=np.inf, predip=False)
 
-    def compute_and_plan_with_dips(self, distance=1.0, predip=False, dip_command='Dip-0'):
+    def compute_and_plan_with_dips(self, distance=1.0, predip=False, dip_command='Dip-0', pen_accel_time=None):
         params = self.params
 
         max_speed = cfg.cartesian_speed
         accel_time = cfg.acceleration_time
+        if pen_accel_time is None:
+            pen_accel_time = accel_time
         trajectory_includes_penup = False
         print("Max speed is ", max_speed)
         print("Accel time is", accel_time)
@@ -225,6 +231,8 @@ class TrajectoryPlanner:
             traj_callback = plan_simplify_test
         elif params.planner == 'Thick bezier':
             traj_callback = plan_thick_resample_bezier
+        elif params.planner == 'Pass':
+            traj_callback = plan_pass
         elif params.planner == 'Thick':
             traj_callback = plan_thick_resample
         elif params.planner == 'Thick BSpline':
@@ -234,7 +242,9 @@ class TrajectoryPlanner:
             raise ValueError('No trajectory callback')
 
         log("Planning draft with %d paths", len(self.draft))
-        draft = self.itiba.pad.fit_to_box(self.draft, src_rect=self.src_rect, padding=self.padding_mm, penup_mm=0.0)
+        draft, mat = self.itiba.pad.fit_to_box(self.draft, src_rect=self.src_rect, padding=self.padding_mm, penup_mm=0.0, get_mat=True)
+        s_factor = np.sqrt(abs(mat[0,0] * mat[1,1] - mat[0,1]*mat[1,0])) #np.linalg.det(mat[:2,:2]))
+        print("Scale factor: ", s_factor)
         log("Resulting fitted draft", len(draft))
         trajectories = plan_polylines(traj_callback, draft, max_speed, accel_time,
                                                         self.penup_mm/1000,
@@ -258,9 +268,9 @@ class TrajectoryPlanner:
         #chunks = [(paths, [False for _ in paths]) for paths in chunks]
         #pdb.set_trace()
         # Add penups within chunks
-        chunks = [insert_penups(paths, self.penup_mm/1000, accel_time) for paths in chunks if paths]
+        chunks = [insert_penups(paths, self.penup_mm/1000, pen_accel_time) for paths in chunks if paths]
         # Add approaches
-        chunks = [append_penups(paths, penups, self.penup_mm/1000, accel_time) for paths, penups in chunks]
+        chunks = [append_penups(paths, penups, self.penup_mm/1000, pen_accel_time) for paths, penups in chunks]
         # Add indices for visualization
         chunk_indices = [[i for _ in chunk[0]] for i, chunk in enumerate(chunks)]
 
@@ -641,11 +651,21 @@ def plan_thick_resample_bezier(samples,
         trajectories = [tu.resample_bezier(chain, max_speed, accel_time) for chain in chains_3d]
     return trajectories, [P[:,:2] for P in samples]
 
+def plan_pass(samples,
+                max_speed,
+                accel_time,
+                penup_distance,
+                params):
+    trajectories = [np.hstack([P[:,:2], radius_to_z(params, P[:,2]).reshape(-1,1)])
+                 for P in samples]
+    return trajectories, samples
+
+
 def append_penups(paths, penup_flags, penup_distance_m, accel_time):
     start = paths[0][0] + np.array([0, 0, penup_distance_m])
     end = paths[-1][-1] + np.array([0, 0, penup_distance_m])
-    arrival = tu.approach(start, paths[0][0])
-    departure = tu.approach(paths[-1][-1], end)
+    arrival = np.array(tu.rest_inout(tu.approach(start, paths[0][0]), 0.25))
+    departure = np.array(tu.rest_inout(tu.approach(paths[-1][-1], end), 0.25))
     return [arrival[:,:3]] + paths + [departure[:,:3]], [True] + penup_flags + [True]
 
 def insert_penups(paths, penup_distance, accel_time):
@@ -655,12 +675,15 @@ def insert_penups(paths, penup_distance, accel_time):
         for i in range(len(paths)-1):
             P1 = paths[i]
             P2 = paths[i+1]
-            if geom.distance(P1[-1], P2[0]) > 2e-3:
+            dist = geom.distance(P1[-1], P2[0])
+            if dist > 1e-3:
                 #pdb.set_trace()
                 trajectories.append(tu.lifting_motion(P1[-1], P2[0], penup_distance, accel_time=accel_time))
                 penup_flags.append(True)
                 #penup_distance.append(True)
                 #distances_down.append(0.0)
+            #else:
+
             trajectories.append(P2)
             penup_flags.append(False)
 
@@ -684,7 +707,17 @@ def plan_polylines(planning_callback,
                                             max_speed=max_speed,
                                             accel_time=accel_time,
                                             params=params)
+    print('####################################')
+    print('Planned trajectories with durations:')
+    max_speed = 0
+    for P in paths:
+        print(len(P)*cfg.dt, 'seconds')
+        D = np.diff(P, axis=0)/cfg.dt
+        max_speed = max(max_speed, np.max(np.linalg.norm(D, axis=1)))
+    print('Max speed:', max_speed)
+    print('####################################')
     paths = [P for P in paths if len(P) > 1]
+
     return paths
 
 def plan_polylines_and_penups(planning_callback,
@@ -717,6 +750,16 @@ def plan_polylines_and_penups(planning_callback,
                                               max_speed=max_speed,
                                               accel_time=accel_time,
                                               params=params)
+        print('####################################')
+        print('Planned trajectories with durations:')
+        max_speed = 0
+        for P in paths:
+            print(len(P)*cfg.dt, 'seconds')
+            D = np.diff(P, axis=0)/cfg.dt
+            max_speed = max(max_speed, np.max(np.linalg.norm(D, axis=1)))
+        print('Max speed:', max_speed)
+        print('####################################')
+
         paths = [P for P in paths if len(P) > 1]
 
         log('lens', [len(P) for P in paths])
@@ -745,6 +788,15 @@ def plan_polylines_and_penups(planning_callback,
                                                      max_speed=max_speed,
                                                      accel_time=accel_time,
                                                      params=params)
+        print('####################################')
+        print('Planned trajectories with durations:')
+        max_speed = 0
+        for P in trajectories:
+            print(len(P)*cfg.dt, 'seconds')
+            D = np.diff(P, axis=0)/cfg.dt
+            max_speed = max(max_speed, np.max(np.linalg.norm(D, axis=1)))
+        print('Max speed:', max_speed)
+        print('####################################')
         #distances_down = [geom.chord_length(traj) for traj in trajectories]
         penup_flags = [False for _ in trajectories]
     velocities = [np.diff(P, axis=0) / cfg.dt for P in trajectories]

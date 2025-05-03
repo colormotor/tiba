@@ -22,3 +22,15 @@ def weighted_average(v, w):
     v = np.array(v)
     w = np.array(w)
     return np.sum(w*v) / np.sum(w)
+
+
+from scipy.ndimage import gaussian_filter1d
+from scipy.signal import savgol_filter
+
+def derivative(X, order=1):
+    window_size = 15
+    poly_order = 3
+    return savgol_filter(X, window_size, poly_order, order, axis=0)
+
+def derivative(X, order=1, sigma=20):
+    return gaussian_filter1d(X, sigma, order=order, axis=0)

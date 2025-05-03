@@ -51,6 +51,7 @@ def opt_nlopt(method):
 
 #function [trj, psg] = min_jerk_todorov(pos, dur, vel, acc, psg)
 def min_jerk_todorov( pos, dur, vel=None, acc=None, psg=None, maxiter=5000, get_vel_acc=False, opt_method='NELDER_MEAD' ):
+    import nlopt
     N = pos.shape[0]
     D = pos.shape[1]
 
