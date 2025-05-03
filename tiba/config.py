@@ -6,11 +6,11 @@ class Config:
     def __init__(self):
         self._default_angular_velocity = geom.radians(60) #(np.pi/5)
         self._default_cartesian_speed = 300/1000.0  #(np.pi/5)
-        self._default_joint_speed = geom.radians(30.0)
+        self._default_joint_speed = geom.radians(60.0)
         self.speed_factor = 1.0
         self.joint_speed_factor = 1.0
-        self.acceleration_time = 0.4
-        self.joint_acceleration_time = 1.0
+        self.acceleration_time = 0.3
+        self.joint_acceleration_time = 0.7
         self.default_grasp_mm = 34.0
         self.verbose = False
         self.ilqr_r = 1e-6

@@ -26,7 +26,7 @@ import os, socket, argparse
 
 # Add the --robot argument
 parser = argparse.ArgumentParser()
-parser.add_argument('--robot', type=str, default='davie', help='Name of the robot (default: tiba)')
+parser.add_argument('--robot', type=str, default='tiba', help='Name of the robot (default: tiba)')
 # Parse the arguments
 args = parser.parse_args()
 base_path = './../robots/' + args.robot + '/settings'
@@ -56,8 +56,8 @@ if has_robot:
     # panda = panda_py.Panda(hostname)
     # gripper = libfranka.Gripper(hostname)
     hostname = '172.16.0.2'
-    #desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
-    desk = panda_py.Desk(hostname, 'admin', 'adminadmin')
+    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    #desk = panda_py.Desk(hostname, 'admin', 'adminadmin')
 
     print("Created desk")
     if not desk.has_control():
