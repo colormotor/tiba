@@ -58,5 +58,49 @@
     },
     "Squeezer": {
       "is_squeezer": true
+    },
+
+    "Labor-brush-ipai-0_0": {
+      "tip_dist_mm": 86.0,
+      "tip_height_mm": 0.0,
+      "offset_mm": 5.0,
+      "range_mm": 1.0,
+      "min_radius_mm": 15.0,
+      "max_radius_mm": 16.0
+    },
+
+    "Labor-brush-ipai-1_0": {
+      "tip_dist_mm": 83.0,
+      "tip_height_mm": 0.0,
+      "offset_mm": 5.0,
+      "range_mm": 8.0,
+      "min_radius_mm": 1.0,
+      "max_radius_mm": 7.0
+    },
+
+    "Labor-brush-ipai-2_0": {
+      "tip_dist_mm": 83.0,
+      "tip_height_mm": 0.0,
+      "offset_mm": 5.0,
+      "range_mm": 5.0,
+      "min_radius_mm": 7.5,
+      "max_radius_mm": 13.0
+    },
+    "Labor-brush-ipai-3_0": {
+      "tip_dist_mm": 83.0,
+      "tip_height_mm": 0.0,
+      "offset_mm": 5.0,
+      "range_mm": 7.0,
+      "min_radius_mm": 1.0,
+      "max_radius_mm": 5.0
+    },
+  "Labor-brush-ipai-3_1": {
+      "tip_dist_mm": 83.0,
+      "tip_height_mm": 2.5,
+      "offset_mm": 5.0,
+      "range_mm": 6.0,
+      "min_radius_mm": 1.0,
+      "max_radius_mm": 4.0
     }
+
   }
