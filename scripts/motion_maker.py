@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+import os
+import socketserver
+
+# OpenGL / context
+os.environ["GL_CONTEXT"] = "egl"
+
+# HARD DISABLE OSC SERVER (py5canvas workaround)
+class _NoOSCServer(socketserver.TCPServer):
+    def serve_forever(self, *args, **kwargs):
+        return
+
+socketserver.TCPServer = _NoOSCServer
+
 from importlib import reload
 
 import threading
@@ -27,14 +40,19 @@ reload(spatial)
 
 np.set_printoptions(suppress=True)
 
-panda_loader = importlib.find_loader('panda_py')
-if panda_loader is not None:
-    import panda_py
-    from panda_py import libfranka
-    from panda_py import controllers
-    has_robot = True
-else:
-    has_robot = False
+has_robot = False
+panda = None
+gripper = None
+desk = None
+
+# panda_loader = importlib.find_loader('panda_py')
+# if panda_loader is not None:
+#     import panda_py
+#     from panda_py import libfranka
+#     from panda_py import controllers
+#     has_robot = True
+# else:
+#     has_robot = False
 
 params = {'Seed': (5, {'min': 0, 'max': 100}),
           'path': ('abr.svg', {'hide': True}),
@@ -98,16 +116,29 @@ state.programming = True # Assume robot starts in programming mode?
 def setup():
     # Load parameters here for standalone
     global params
-    tsketch.add_parameters(params)
-    params = sketch.parameters(params)
 
-    #sketch.set_gui_callback(gui)
-    create_canvas(1024, 768, 350) #, 300)
+
+    sketch.set_gui_callback(gui)
+    # create_canvas(1024, 768, 350) #, 300)
     set_color_scale(1.0)
 
     try:
         #tsketch.init(sketch)
         tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_motion_maker')
+
+        # Ensure params is a dict
+        if params is None:
+            params = {}
+
+        # Add tsketch parameters to existing params dict
+        params_dict = {}
+        tsketch.add_parameters(params_dict)
+        params.update(params_dict)
+        tsketch.mark_gui_ready()
+
+        # Skip tool setting for now - focus on getting GUI running
+        # tool_name = tsketch.get_tool_name(params['Config']['tool'][0])
+        # tsketch.set_tool(tool_name)
         
         # if rosloader is not None:
         #     print("Initializing ROS")
@@ -121,9 +152,14 @@ def setup():
         #         tsketch.itiba.has_ros = False
     except Exception as e:
         print(e)
+        import traceback
+        traceback.print_exc()
         raise(e)
         assert(False)
-    load(params.path) #params.svg_path)
+    # Load from params dict if path exists
+    if 'path' in params:
+        load(params['path'][0] if isinstance(params['path'], tuple) else params['path'])
+
 
 # def load_svg():
 #     draft = svg.load_svg_polylines('Untitled.svg') #bezier_chains('Untitled.svg')
@@ -207,50 +243,126 @@ def exit():
 
 
 def gui():
+    global params
+
+    # Guard gegen uninitialisierte GUI
+    if tsketch.itiba is None:
+        imgui.text("Initializing Interface...")
+        return
+
     if has_robot:
         changed, state.programming = imgui.checkbox("Programming mode", state.programming)
         if changed:
             tsketch.itiba.set_programming_mode(desk, state.programming)
 
+    # --- Alte, problematische GUI (auskommentiert) ---
+
+    # tsketch.itiba.motion_gui(imgui)
+    #
+    # if imgui.button('Test threads'):
+    #     def thread_func1():
+    #         print('Thread 1 started')
+    #         n = 10
+    #         config.state.progress_max = n
+    #         config.state.progress = 0
+    #         for i in range(n):
+    #             time.sleep(0.1)
+    #             config.state.progress = i + 1
+    #         print('Thread 1 done')
+    #
+    #     def thread_func2():
+    #         print('Thread 2 started')
+    #         n = 15
+    #         config.state.progress_max = n
+    #         config.state.progress = 0
+    #         for i in range(n):
+    #             time.sleep(0.1)
+    #             config.state.progress = i + 1
+    #         print('Thread 2 done')
+    #
+    #     t1 = threading.Thread(target=thread_func1, name="Thread 1")
+    #     t2 = threading.Thread(target=thread_func2, name="Thread 2")
+    #     threads.append(t1)
+    #     threads.append(t2)
+    #
+    # if imgui.button('Load Paths...'):
+    #     path = sketch.open_file_dialog(['json', 'svg'], title='Open SVG or Json (thick) file...')
+    #     if path:
+    #         load(path)
+    #         params.path = path
+    #
+    # changed, params.bezier_split_angle = imgui.slider_float(
+    #     "Angle split", params.bezier_split_angle, 0, 180
+    # )
+    # if changed:
+    #     load(params.path)
+    #
+    # changed, params.config.tool = imgui.combo(
+    #     "Tool", params.config.tool, tsketch.get_tool_names()
+    # )
+    # if changed:
+    #     tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
+    #
+    # tsketch.gui()
+
+    # # --- Neue, stabile GUI-Variante ---
     tsketch.itiba.motion_gui(imgui)
-    
-    if imgui.button('Test threads'):
-        def thread_func1():
-            print('Thread 1 started')
-            n = 10
-            config.state.progress_max = n
-            config.state.progress = 0
-            for i in range(n):
-                time.sleep(0.1)
-                config.state.progress = i+1
 
-            print('Thread 1 done')
-        def thread_func2():
-            print('Thread 2 started')
-            n = 15
-            config.state.progress_max = n
-            config.state.progress = 0
-            for i in range(n):
-                time.sleep(0.1)
-                config.state.progress = i+1
-
-            print('Thread 2 done')
-        t1 = threading.Thread(target=thread_func1, name="Thread 1")
-        t2 = threading.Thread(target=thread_func2, name="Thread 2")
-        threads.append(t1)
-        threads.append(t2)
     if imgui.button('Load Paths...'):
         path = sketch.open_file_dialog(['json', 'svg'], title='Open SVG or Json (thick) file...')
         if path:
             load(path)
-            params.path = path
-    #imgui.same_line()
-    changed, params.bezier_split_angle = imgui.slider_float("Angle split", params.bezier_split_angle, 0, 180)
+            # Falls params ein Dictionary ist:
+            if isinstance(params, dict):
+                params['path'] = (path, {'hide': True})
+            else:
+                params.path = path
+
+    # Nutze tsketch.params (das SimpleNamespace Objekt) für die internen Werte
+    tibaparams = tsketch.params if tsketch.params is not None else params
+
+    if isinstance(tibaparams, dict):
+        # Falls es ein Dict ist (von motion_maker), nutzen wir Keys
+        if 'bezier_split_angle' not in tibaparams:
+            tibaparams['bezier_split_angle'] = 46.0
+
+        changed, new_angle = imgui.slider_float(
+            "Angle split", tibaparams['bezier_split_angle'], 0, 180
+        )
+        if changed:
+            tibaparams['bezier_split_angle'] = new_angle
+            if 'path' in tibaparams:
+                load(tibaparams['path'][0] if isinstance(tibaparams['path'], tuple) else tibaparams['path'])
+    else:
+        # Falls es ein SimpleNamespace ist (von tiba_sketch)
+        if not hasattr(tibaparams, "bezier_split_angle"):
+            tibaparams.bezier_split_angle = 46.0
+        changed, tibaparams.bezier_split_angle = imgui.slider_float(
+            "Angle split", tibaparams.bezier_split_angle, 0, 180
+        )
+        if changed and hasattr(params, 'path'):
+            load(params.path)
+
+    # Tool-Auswahl
+    tool_names = tsketch.get_tool_names()
+
+    # Robuster Zugriff auf das aktuelle Tool
+    current_tool_idx = 0
+    if isinstance(tibaparams, dict) and 'Config' in tibaparams:
+        current_tool_idx = tibaparams['Config']['tool'][0]
+    elif hasattr(tibaparams, 'config'):
+        current_tool_idx = tibaparams.config.tool
+
+    changed, new_tool = imgui.combo("Tool", current_tool_idx, tool_names)
     if changed:
-        load(params.path)
-    changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
-    if changed:
-        tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
+        if isinstance(tibaparams, dict) and 'Config' in tibaparams:
+            tibaparams['Config']['tool'] = (new_tool, tibaparams['Config']['tool'][1])
+        elif hasattr(tibaparams, 'config'):
+            tibaparams.config.tool = new_tool
+        tsketch.set_tool(tsketch.get_tool_by_index(new_tool))
+
+    # WICHTIG: Die Haupt-GUI von TibaSketch aufrufen
+    # Diese Funktion setzt intern _gui_ready auf True, wenn sie durchläuft
     tsketch.gui()
 
 def gui_window():
@@ -263,18 +375,16 @@ def draw():
         tsketch.itiba.read_states()
 
     if len(threads):
-        if threads[0].ident is None:
+        current = threads[0]
+        if current.ident is None:
             imgui.open_popup("Progress")
-            config.state.progress_text = threads[0].name
-            threads[0].start()
-        elif not threads[0].is_alive():
-            threads[0].join()
+            config.state.progress_text = current.name
+            current.start()
+        elif not current.is_alive():
+            current.join()
             threads.pop(0)
             print('Finished thread, %d left', len(threads))
-            if threads:
-                print("Starting new thread")
-                config.state.progress_text = threads[0].name
-                threads[0].start()
+
 
     imgui.set_next_window_size(200, 70)
     if imgui.begin_popup_modal("Progress").opened:
@@ -286,9 +396,28 @@ def draw():
         imgui.end_popup()
 
     background(0)
-    np.random.seed(params.seed)
 
-    sketch.set_gui_theme(params.gui_hue)
+    # robustes Seed-Handling
+    seed = 5
+    if isinstance(params, dict) and 'Seed' in params:
+        val = params['Seed']
+        seed = val[0] if isinstance(val, tuple) else val
+    np.random.seed(seed)
+
+    # robustes GUI-Theme-Handling
+    gui_hue = 0.12
+    if isinstance(params, dict) and 'GUI hue' in params:
+        val = params['GUI  hue']
+        gui_hue = val[0] if isinstance(val, tuple) else val
+    sketch.set_gui_theme(gui_hue)
+
+    # Robuste Prüfung vor tsketch.update()
+    if tsketch.params is None:
+        return
+
+    if not hasattr(tsketch.params, 'config') or tsketch.params.config is None:
+        return
+
     tsketch.update()
 
     stroke(1.0, 0.2)
@@ -341,7 +470,8 @@ def draw():
 
 
 def draw_gl():
-    tsketch.draw_gl()
+    # tsketch.draw_gl(
+    pass
 
 
 def mouse_pressed(button, modifiers):

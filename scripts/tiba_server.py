@@ -8,7 +8,8 @@ from sensor_msgs.msg import JointState
 import numpy as np
 import importlib, time, threading
 
-panda_loader = importlib.find_loader('panda_py')
+# panda_loader = importlib.find_loader('panda_py')
+panda_loader = None
 if panda_loader is not None:
     import panda_py
     from panda_py import libfranka
@@ -16,6 +17,9 @@ if panda_loader is not None:
     has_robot = True
 else:
     has_robot = False
+    panda_py = None
+    libfranka = None
+    controllers = None
 
 from tiba.interface import FrankaButton, TibaInterface
 from tiba.robot import TibaRobot
@@ -90,7 +94,8 @@ def on_event(event):
             print('Ungrasp')
             itiba.ungrasp()
 
-desk.listen(on_event)
+if has_robot and desk is not None:
+    desk.listen(on_event)
 
 state = lambda: None
 state.running = True

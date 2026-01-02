@@ -354,6 +354,12 @@ class TibaSketch:
         self.arcball = geom.ArcBall()
         self.thread_funcs = []
         self.itiba = None
+        self.sketch = None
+        self._gui_ready = False
+
+    def mark_gui_ready(self):
+        """Mark that GUI is ready to draw"""
+        self._gui_ready = True
         
     def init(self, sketch,
              callback=None,
@@ -394,8 +400,8 @@ class TibaSketch:
         self.max_trajectory_points = 200
 
         # Setup robot
-        tool_name = self.get_tool_name(self.params.config.tool) #get_tool_by_index(self.params.config.tool)
-        self.set_tool(tool_name)
+        # tool_name = self.get_tool_name(self.params.config.tool) #get_tool_by_index(self.params.config.tool)
+        # self.set_tool(tool_name)
 
         # For launching interface scripts
         self.cur_script = -1
@@ -494,6 +500,9 @@ class TibaSketch:
 
     @property
     def params(self):
+
+        if self.sketch is None or self.sketch.params is None:
+            return None
         return self.sketch.params.params
 
     def set_drawing_data(self, data):
@@ -709,6 +718,9 @@ class TibaSketch:
         return selected_script
 
     def gui(self):
+        # Guard gegen uninitialisierte Sketch
+        if not self._gui_ready or self.params is None:
+            return
         params = self.params
         if imgui.button('Launch Swift'):
             self.itiba.launch_simulator()
@@ -1063,6 +1075,8 @@ class TibaSketch:
 
     def mouse_pressed(self, button, modifiers):
         params = self.params
+        if params is None or not hasattr(params, 'tsm'):
+            return
         xyz = [params.tsm.rotx,
                params.tsm.roty,
                params.tsm.rotz]
@@ -1072,6 +1086,8 @@ class TibaSketch:
 
     def mouse_dragged(self, button, modifiers):
         params = self.params
+        if params is None or not hasattr(params, 'tsm'):
+            return
         inc = 0.1
         if modifiers & 2: # ctrl (zoom)
             params.tsm.dist += self.sketch.mouse_delta[1]*inc*0.5
