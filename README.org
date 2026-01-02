@@ -86,6 +86,74 @@ pip install git+https://github.com/colormotor/py5canvas.git
 #+end_example
 
 ** Server installation (for Franka robot)
+*** Tiba server in Docker (ROS master)
+
+Instead of running the ROS master and Tiba server directly on the control
+laptop, you can run them inside a Docker container.
+
+Assuming the repository structure contains a =Docker/Dockerfile= based on
+=osrf/ros:noetic-desktop-full=, build the image from the repository root with:
+
+#+begin_example
+cd /path/to/tiba
+docker build -f Docker/Dockerfile -t tiba-ros-master .
+#+end_example
+
+This copies the local =tiba/= folder into the container at
+=/root/catkin_ws/src/tiba= and builds the workspace.
+
+To start a ROS master inside Docker:
+
+#+begin_example
+docker run --rm -it \
+  --name tiba-roscore \
+  -p 11311:11311 \
+  tiba-ros-master roscore
+#+end_example
+
+On the client laptop (running the GUI, e.g. =scripts/motion_maker.py=) set the
+ROS environment to point to the Docker master:
+
+#+begin_example
+export ROS_MASTER_URI=http://<CONTAINER_IP>:11311
+export ROS_IP=<HOST_IP>
+conda activate ros_env_2    # or the environment used for the GUI
+python scripts/motion_maker.py
+#+end_example
+
+Replace =<CONTAINER_IP>= with the IP address of the Docker container (obtained
+via =docker inspect=) and =<HOST_IP>= with the IP address of the client laptop
+reachable from the container.
+
+After the image is built, you still need to install =ilqr_planner= inside the
+container (as for the local setup):
+
+#+begin_example
+docker exec -it tiba-roscore /bin/bash
+
+cd /root/catkin_ws/src
+git clone https://github.com/colormotor/ilqr_planner.git
+cd ilqr_planner
+git submodule update --init --recursive
+./build.sh
+#+end_example
+
+To actually interface with the robot from other machines, start the Tiba server
+inside the container after the ROS master is running:
+
+#+begin_example
+docker exec -it tiba-roscore /bin/bash
+
+# ROS environment is already sourced via .bashrc
+cd /root/catkin_ws/src/tiba
+python scripts/tiba_server.py
+#+end_example
+
+The client laptop can then connect via ROS to the Docker-based Tiba server
+(using the =ROS_MASTER_URI= and =ROS_IP= settings described above).
+
+*** Tiba server on secondary laptop
+
 First install [[https://github.com/frankaemika/libfranka][libfranka]] for the FR3 (modified version of [[https://frankaemika.github.io/docs/installation_linux.html][these instructions]]. First clone
 #+begin_example
 git clone --recursive https://github.com/frankaemika/libfranka
