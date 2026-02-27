@@ -351,6 +351,29 @@ class TibaRobot(Robot):
         frame = frame @ np.linalg.inv(hand_to_pen)
         return frame
 
+    def ikine_pen_tcp(self, pose, q0=None):
+        """
+        Inverse Kinematics for Pen-TCP.
+        pose: SE3 or (x,y,z,q0,q1,q2,q3).
+        """
+        if isinstance(pose, np.ndarray) and pose.shape == (7,):
+            x, y, z, q0q, q1q, q2q, q3q = pose
+            T = SE3(x, y, z) * SE3.UnitQuaternion(q0q, q1q, q2q, q3q)
+        elif isinstance(pose, (list, tuple)) and len(pose) == 7:
+            x, y, z, q0q, q1q, q2q, q3q = pose
+            T = SE3(x, y, z) * SE3.UnitQuaternion(q0q, q1q, q2q, q3q)
+        else:
+            T = pose
+
+        if q0 is None:
+            q0 = self.q
+
+        sol = self.ikine_LM(T, q0=q0, end='tiba_pen_tcp')
+        if not sol.success:
+            raise RuntimeError(f"ikine_pen_tcp failed: {sol.reason}")
+        return np.array(sol.q)
+
+
     def hand_frame_to_pen_tcp(self, frame, q=None):
         if q is None:
             q = self.q

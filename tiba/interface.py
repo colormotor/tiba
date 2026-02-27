@@ -32,6 +32,7 @@ from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
 from . import utils, geom, ui
 from . import matplotlyb as ply
+from .drawing_pad import DrawingPadCalibrator
 
 
 from importlib import reload
@@ -385,15 +386,36 @@ class TibaInterface:
         self.pad.load()
         self.pad.update()
 
-        self.safe_mode = True
+        self.safe_mode = False
         self.trajectory_status = True
+        self.selected_tool = None
 
         self.robot = robot.TibaRobot()
         self.collision_robot = robot.TibaRobot()
+        self.pad_calib = DrawingPadCalibrator(self.base_path, self.robot)
         self.robot.q = self.robot.home
         self.debug_q = None
         self.grasped = False
         self.tools_path = tools_path
+        self.tool_rack_path = os.path.join(base_path, "tool_rack.json")
+        self.tool_rack = {
+            "p1": None,        # pose of tool 1 (4x4, list of lists)
+            "p2": None,        # pose of tool 2 (4x4, list of lists)
+            "spacing": None,   # distance between neighboring tools [m]
+            "direction": None, # unit vector from tool 1 to tool 2 (3,)
+            "count": 3,        # number of tools on the rack
+        }
+        self.tool_rack_selected = 0
+
+        # Try to load existing calibration
+        try:
+            data = utils.load_json(self.tool_rack_path)
+            self.tool_rack.update(data)
+            print("[ToolRack] Loaded calibration from", self.tool_rack_path)
+        except FileNotFoundError:
+            print("[ToolRack] No saved tool rack calibration found")
+
+        self.tool_rack_status = ""
         self.plot_path = plot_path
         self.panda = panda
         self.gripper = gripper
@@ -431,22 +453,27 @@ class TibaInterface:
                     rospy_cur = jros
             else:
                 rospy_cur = rospy
+                print("Started ROS")
 
             try:
-                if init_node:
-                    # This will be initialized in a client setting
+                if init_node and not rospy.core.is_initialized():
                     print("Initializing node", init_node)
                     rospy.init_node(init_node, anonymous=True, log_level=rospy.ERROR)
-                    rospy_cur.Subscriber('/tiba/q', JointState, self.state_callback)
-                    rospy_cur.Subscriber('/tiba/qdone', JointState, self.qdone_callback)
-                    rospy_cur.Subscriber('/tiba/executed_traj', JointTrajectory, self.executed_traj_callback)
-                    # Response from server. We use the joint state message to see if a motion is done,
-                    # (with name "Done") so we also update joint states with it.
-                    rospy_cur.Subscriber('/tiba/response', String, self.response_callback)
+                    print("Node initialized, rospy name:", rospy.get_name())
+                else:
+                    print("ROS already initialized, skipping init_node")
+
+                rospy_cur.Subscriber('/tiba/q', JointState, self.state_callback)
+                rospy_cur.Subscriber('/tiba/qdone', JointState, self.qdone_callback)
+                rospy_cur.Subscriber('/tiba/executed_traj', JointTrajectory, self.executed_traj_callback)
+                rospy_cur.Subscriber('/tiba/response', String, self.response_callback)
+
                 print("Creating subscribers and publisher")
-                self.msg_pub = rospy_cur.Publisher('/tiba/msg', String, queue_size=10)
+                self.msg_pub  = rospy_cur.Publisher('/tiba/msg', String, queue_size=10)
                 self.jtraj_pub = rospy_cur.Publisher('/tiba/jtraj', JointTrajectory, queue_size=10)
-                self.jpos_pub = rospy_cur.Publisher('/tiba/jpos', JointState, queue_size=10)
+                self.jpos_pub  = rospy_cur.Publisher('/tiba/jpos', JointState, queue_size=10)
+
+                rospy.sleep(1)
                 self.send_msg('start: Tiba sketch connecting')
                 # rospy.Subscriber('/tiba/response', String, self.response_callback)
                 # rospy.Subscriber('/tiba/q', JointState, self.state_callback)
@@ -456,6 +483,7 @@ class TibaInterface:
                 self.handeye = TibaHandeye(handeye_config_path) #jupyter=jupyter)
             except rospy.exceptions.ROSException as e:
                 print("Ros issue, disabling")
+                print("  ROSException:", e)
                 state.has_ros = False
                 self.handeye = None
         else:
@@ -517,10 +545,17 @@ class TibaInterface:
         return state.has_ros
 
     def send_msg(self, data):
-        if not self.has_ros():
-            return
-        print("Sending msg", data)
-        self.msg_pub.publish(data)
+        print("send_msg called, has_ros =", self.has_ros())
+        print("self.msg_pub:", getattr(self, "msg_pub", None))
+        try:
+            if not self.has_ros():
+                print("send_msg: has_ros False, abort")
+                return
+            print("Sending msg", data)
+            self.msg_pub.publish(data)
+            rospy.sleep(0.05)
+        except Exception as e:
+            print("send_msg ERROR:", e)
 
     def clear_aruco(self):
         self.update_handeye()
@@ -532,6 +567,7 @@ class TibaInterface:
             self.handeye.update(self)
 
     def send_joint_trajectory(self, Qs=None, dQs=None):
+        print("Sending trajectory")
         if Qs is None:
             Qs = self.Qs
         if dQs is None:
@@ -719,6 +755,391 @@ class TibaInterface:
 
     def motion_gui(self, imgui):
         return self.editor.gui(imgui, self)
+
+    def pad_calibration_gui(self, imgui):
+        """
+        Guided drawing pad calibration.
+        The user should move the TCP to each corner in this order:
+        1) bottom left
+        2) bottom right
+        3) top right
+        The 4th (top left) corner is computed automatically in DrawingPadCalibrator.save().
+        """
+        if self.pad_calib is None:
+            imgui.text("Pad calibration not available.")
+            return
+
+        corner_names = ["bottom left", "bottom right", "top right"]
+        num_points = len(self.pad_calib.points)
+
+        imgui.separator()
+        imgui.text("Drawing Pad Calibration")
+        imgui.separator()
+
+        # Instruction which corner to set next
+        if num_points < len(corner_names):
+            next_name = corner_names[num_points]
+            imgui.text_wrapped(
+                (f"Step {num_points+1}/3: Go to {next_name} corner, press 'Add corner'.")
+            )
+        else:
+            imgui.text_wrapped(
+                "All 3 corners set. The 4th (top left) will be computed automatically on save."
+            )
+
+        imgui.text(f"Recorded corners: {num_points} / 3")
+
+        if imgui.button("Add current corner"):
+            try:
+                idx = self.pad_calib.add_current_corner()
+                imgui.text(f"Added corner #{idx}")
+            except Exception as e:
+                imgui.text(f"Error adding corner: {e}")
+
+        imgui.same_line()
+        if imgui.button("Reset calibration"):
+            self.pad_calib.reset()
+
+        if imgui.button("Save pad calibration"):
+            try:
+                path = self.pad_calib.save()
+                imgui.text(f"Saved pad to: {path}")
+            except Exception as e:
+                imgui.text(f"Error saving pad: {e}")
+
+
+    def start_pad_calibration(self):
+        """
+        Start calibration of the drawing pad.
+
+        After calling this, the user should move the robot to the three
+        pad corners in the following order and trigger 'save_pad_corner'
+        for each:
+
+            1) bottom left
+            2) bottom right
+            3) top right
+        """
+        self.pad_calib.reset()
+        print("[TibaInterface] Pad calibration started")
+        print(" -> Move the pen to the BOTTOM LEFT corner and send 'exec:calib_pad_corner'")
+
+    def save_pad_corner(self):
+        """
+        Read the current pen TCP position and append it as a new corner.
+
+        Returns:
+            count (int): number of recorded corners after this call.
+        Also prints guidance for the next step.
+        """
+        count = self.pad_calib.add_current_corner()
+
+        if count == 1:
+            print("[TibaInterface] Saved corner 1 (bottom left)")
+            print(" -> Move to the BOTTOM RIGHT corner and send 'exec:calib_pad_corner'")
+        elif count == 2:
+            print("[TibaInterface] Saved corner 2 (bottom right)")
+            print(" -> Move to the TOP RIGHT corner and send 'exec:calib_pad_corner'")
+        elif count == 3:
+            print("[TibaInterface] Saved corner 3 (top right)")
+            print(" -> Send 'exec:calib_pad_finish' to compute the 4th corner and save the pad")
+        else:
+            print(f"[TibaInterface] Saved additional corner #{count}")
+
+        return count
+
+    def finish_pad_calibration(self):
+        """
+        Finalize drawing pad calibration.
+
+        Expects at least three recorded corners, computes the fourth,
+        and writes robots/<robot>/settings/drawing_pad.json.
+        """
+        if not self.pad_calib.is_complete():
+            raise RuntimeError(
+                "Not enough corners recorded for pad calibration (need 3)"
+            )
+
+        path = self.pad_calib.save()
+        print(f"[TibaInterface] Pad calibration finished, file: {path}")
+        return path
+
+
+    def _current_tcp_pose(self):
+        """Return current pen TCP pose as 4x4 matrix in base frame."""
+        pose = self.robot.pen_tcp_pose(self.robot.q)
+        return np.array(pose)
+
+    def _save_tool_rack(self):
+        """Save current tool rack calibration to JSON."""
+        print("[DEBUG] Calling _save_tool_rack, tool_rack keys:", self.tool_rack.keys())
+        utils.save_json(self.tool_rack, self.tool_rack_path)
+        print("[ToolRack] Saved calibration to", self.tool_rack_path)
+
+    def tool_rack_set_tool1(self):
+        """Teach pose of tool 1 from current TCP."""
+        self.tool_rack["p1"] = self._current_tcp_pose().tolist()
+        self._save_tool_rack()
+        print("[ToolRack] Set tool 1 pose")
+
+    def tool_rack_set_tool2(self):
+        """Teach pose of tool 2 from current TCP and derive spacing + direction."""
+        if self.tool_rack["p1"] is None:
+            raise RuntimeError("Tool 1 pose must be set before tool 2")
+
+        p1 = np.array(self.tool_rack["p1"])
+        p2 = self._current_tcp_pose()
+        print(f"[ToolRack] p2={p2}")
+        self.tool_rack["p2"] = p2.tolist()
+
+        x1 = p1[:3, 3]
+        x2 = p2[:3, 3]
+        diff = x2 - x1
+        dist = float(np.linalg.norm(diff))
+        if dist <= 1e-6:
+            raise RuntimeError("Tool 1 and 2 are at the same position")
+
+        direction = [0, -1, 0]
+        print(direction)
+
+        self.tool_rack["spacing"] = dist
+        self.tool_rack["direction"] = direction
+        self._save_tool_rack()
+
+        print(f"[ToolRack] spacing={dist:.4f} m, dir={direction}")
+
+    def tool_rack_is_calibrated(self):
+        return (
+                self.tool_rack["p1"] is not None
+                and self.tool_rack["spacing"] is not None
+                and self.tool_rack["direction"] is not None
+        )
+
+
+    def take_tool(self, index):
+        if self.selected_tool is not None:
+            print('A tool is already selected')
+            print("Returning tool", self.selected_tool)
+            self.store_tool(self.selected_tool)
+            time.sleep(10)
+
+        print("robot.q =", self.robot.q)
+        # 1) Retrieve the approach and reach pose from the rack
+        T_approach, T_tool = self._tool_rack_get_approach_pose(index)
+
+        # 2) IK on Pen-TCP
+        q_approach = self.robot.ikine_pen_tcp(T_approach)
+        q_tool     = self.robot.ikine_pen_tcp(T_tool)
+
+        if q_approach is None or q_tool is None:
+            raise RuntimeError("IK failed")
+
+        print("T_approach Z=%.3f, T_tool Z=%.3f" % (T_approach.t[2], T_tool.t[2]))
+
+        # 3) Trajectory: current → approach → tool → approach
+        Qs, dQs = [], []
+
+        # Current → Approach (fast)
+        Q1, dQ1 = tu.joint_approach(self.robot.q, q_approach)
+        Qs += list(Q1); dQs += list(dQ1)
+
+        # Approach → Tool (VERY SLOW for Grip)
+        Q2, dQ2 = tu.joint_approach(q_approach, q_tool, geom.radians(5.0))
+        Qs += list(Q2)
+        dQs += list(dQ2)
+
+        # Publish Trajectory (until Tool)
+        self.send_joint_trajectory(Qs, dQs)
+        print("Trajectory: current→approach→tool (slow grip phase)")
+        time.sleep(10.0)
+
+        # 4) GRASP at the Tool Point (after reaching!)
+        print("Executing grasp at tool position...")
+        self.send_msg("exec:grasp")
+        time.sleep(2.0)
+
+        # 5) Retreat: Tool → Approach (medium fast)
+        Q3, dQ3 = tu.joint_approach(q_tool, q_approach)
+        self.send_joint_trajectory(list(Q3), list(dQ3))
+        print("Retract: tool→approach")
+        time.sleep(3.0)
+
+        print("Moving to neutral position (gripper closed)...")
+        self.send_msg("exec:home")
+
+        self.selected_tool = index
+        self.send_msg(f"took_tool_{index}")
+
+
+    def store_tool(self, index):
+        if self.selected_tool is None:
+            print('No tool selected')
+            return
+
+        print("robot.q =", self.robot.q)
+        # 1) Retrieve the approach and reach pose from the rack
+        T_approach, T_tool = self._tool_rack_get_approach_pose(index)
+        offset = np.array([0, 0, 0.02])
+        T_drop = SE3(offset) * T_tool
+
+        # 2) IK on Pen-TCP
+        q_approach = self.robot.ikine_pen_tcp(T_approach)
+        q_drop     = self.robot.ikine_pen_tcp(T_drop)
+
+
+        if q_approach is None or q_drop is None:
+            raise RuntimeError("IK failed")
+
+        print("T_approach Z=%.3f, T_tool Z=%.3f" % (T_approach.t[2], T_tool.t[2]))
+
+        # 3) Trajectory: current → approach → tool → approach
+        Qs, dQs = [], []
+
+        # Current → Approach (fast)
+        Q1, dQ1 = tu.joint_approach(self.robot.q, q_approach)
+        Qs += list(Q1); dQs += list(dQ1)
+
+        # Approach → Tool (VERY SLOW for Grip)
+        Q2, dQ2 = tu.joint_approach(q_approach, q_drop, geom.radians(3.0))
+        Qs += list(Q2)
+        dQs += list(dQ2)
+
+        # Publish Trajectory (until Tool)
+        self.send_joint_trajectory(Qs, dQs)
+        print("Trajectory: current→approach→tool (slow grip phase)")
+        time.sleep(12.0)
+
+        # 4) UNGRASP at the Tool Point (after reaching!)
+        print("Executing grasp at tool position...")
+        self.send_msg("exec:ungrasp")
+        time.sleep(2.0)
+
+        # 5) Retreat: Tool → Approach (medium fast)
+        Q3, dQ3 = tu.joint_approach(q_drop, q_approach)
+        self.send_joint_trajectory(list(Q3), list(dQ3))
+        print("Retract: tool→approach")
+        time.sleep(3.0)
+
+        print("Moving to neutral position (gripper closed)...")
+        self.send_msg("exec:home")
+        self.selected_tool = None
+
+        self.send_msg(f"stored_tool_{index}")
+
+
+    def _tool_rack_get_pose(self, index):
+        """SE3-Pose of the Pen-TCP in slot `index`."""
+        if self.tool_rack["p1"] is None or self.tool_rack["direction"] is None:
+            raise RuntimeError("Tool rack not calibrated")
+
+        T0 = SE3(np.array(self.tool_rack["p1"]))
+        direction = np.array(self.tool_rack["direction"])
+        direction = direction / np.linalg.norm(direction)
+
+        print("T0.t =", T0.t)
+        print("direction =", direction, "spacing =", self.tool_rack["spacing"])
+        offset = index * self.tool_rack["spacing"] * direction
+        print(f"index={index}, offset={offset}")
+        T_tool = T0 * SE3(offset[0], offset[1], offset[2])
+        print("T_tool.t =", T_tool.t)
+        return T_tool
+
+    def _tool_rack_get_approach_pose(self, index, dist=0.2):
+        T_tool = self._tool_rack_get_pose(index)
+        offset = np.array([0, 0, dist])
+        T_approach = SE3(offset) * T_tool
+        return T_approach, T_tool
+
+
+    def tool_rack_gui(self, imgui):
+        imgui.separator()
+        imgui.text("Tool rack calibration")
+        imgui.separator()
+
+        imgui.text_wrapped(
+            "Step 1: Move the pen TCP to the center of tool 1 in the rack and press 'Set tool 1'."
+        )
+        if imgui.button("Set tool 1"):
+            try:
+                self.tool_rack_set_tool1()
+            except Exception as e:
+                imgui.text(f"Error: {e}")
+
+        imgui.text_wrapped(
+            "Step 2: Move the pen TCP to the center of tool 2 and press 'Set tool 2'. "
+            "Spacing and direction will be computed automatically."
+        )
+        if imgui.button("Set tool 2"):
+            try:
+                self.tool_rack_set_tool2()
+            except Exception as e:
+                imgui.text(f"Error: {e}")
+
+        if self.tool_rack_is_calibrated():
+            imgui.text(
+                f"Calibrated: spacing={self.tool_rack['spacing']:.3f} m, "
+                f"dir={self.tool_rack['direction']}"
+            )
+        else:
+            imgui.text("Calibrated: no")
+
+        # Number of tools in the rack
+        changed, count = imgui.input_int("Tool count", int(self.tool_rack["count"]))
+        if changed and count > 0:
+            self.tool_rack["count"] = int(count)
+            self._save_tool_rack()
+
+        # Tool index selection (same style as Tool count)
+        changed, idx = imgui.input_int("Tool index", int(self.tool_rack_selected))
+        if changed:
+            # clamp to valid range
+            max_idx = int(self.tool_rack["count"]) - 1
+            self.tool_rack_selected = max(0, min(idx, max_idx))
+
+        imgui.same_line()
+        if imgui.button("-"):
+            if self.tool_rack_selected > 0:
+                self.tool_rack_selected -= 1
+
+        imgui.same_line()
+        if imgui.button("+"):
+            max_idx = int(self.tool_rack["count"]) - 1
+            if self.tool_rack_selected < max_idx:
+                self.tool_rack_selected += 1
+
+
+        if imgui.button("Take selected tool"):
+            try:
+                print("Taking tool", self.tool_rack_selected)
+                self.take_tool(self.tool_rack_selected)
+                self.tool_rack_status = f"Took tool {self.tool_rack_selected}."
+            except Exception as e:
+                self.tool_rack_status = f"Error taking tool {self.tool_rack_selected}: {e}"
+
+
+        imgui.separator()
+
+        # Store tool in rack
+        imgui.text("Store tool in rack")
+        if imgui.button("Store tool##store"):
+            self.selected_tool = self.tool_rack_selected
+            if self.selected_tool is None:
+                self.tool_rack_status = "No tool selected."
+            else:
+                try:
+                    print("Storing tool", self.selected_tool)
+                    self.store_tool(self.selected_tool)
+                    self.tool_rack_status = f"Stored tool."
+                except Exception as e:
+                    self.tool_rack_status = f"Error storing tool {self.selected_tool}: {e}"
+
+        if imgui.button("Clear tool##rack"):
+            self.selected_tool = None
+            self.tool_rack_status = "Cleared tool."
+
+
+        if self.tool_rack_status:
+            imgui.text_wrapped(self.tool_rack_status)
 
     def read_states(self):
         if self.panda is None:

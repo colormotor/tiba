@@ -5,12 +5,7 @@ import socketserver
 # OpenGL / context
 os.environ["GL_CONTEXT"] = "egl"
 
-# HARD DISABLE OSC SERVER (py5canvas workaround)
-class _NoOSCServer(socketserver.TCPServer):
-    def serve_forever(self, *args, **kwargs):
-        return
 
-socketserver.TCPServer = _NoOSCServer
 
 from importlib import reload
 
@@ -36,6 +31,8 @@ from tiba.tiba_sketch import TibaSketch
 from tiba.robot import TibaRobot
 from tiba.fitCurves.fitCurves import fitCurve
 from tiba import spatial, bezier, utils, svg, geom, config
+from tiba.drawing_pad import DrawingPadCalibrator
+
 reload(spatial)
 
 np.set_printoptions(suppress=True)
@@ -44,6 +41,8 @@ has_robot = False
 panda = None
 gripper = None
 desk = None
+pad_calibrator = None
+tsketch = None
 
 # panda_loader = importlib.find_loader('panda_py')
 # if panda_loader is not None:
@@ -83,13 +82,14 @@ def random_q():
 rosloader = importlib.find_loader('rospy')
 if rosloader is not None:
     import rospy
+    print("rospy.is_initialized():", rospy.core.is_initialized())
     from sensor_msgs.msg import JointState
     from std_msgs.msg import String
 
 
 if has_robot:
     hostname = '172.16.0.2'
-    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    desk = panda_py.Desk(hostname, 'admin', 'adminadmin!')
     print("Created desk")
     if not desk.has_control():
         print("Forcing control")
@@ -106,7 +106,6 @@ else:
 flags = ['drawing']
 if has_robot:
     flags.append('no_server')
-tsketch = TibaSketch(flags=flags)
 threads = []
 
 state = lambda: None
@@ -116,15 +115,23 @@ state.programming = True # Assume robot starts in programming mode?
 def setup():
     # Load parameters here for standalone
     global params
+    global tsketch
 
 
     sketch.set_gui_callback(gui)
     # create_canvas(1024, 768, 350) #, 300)
     set_color_scale(1.0)
 
+    tsketch = TibaSketch(flags=["drawing"])
+    print("Created TibaSketch")
+    tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_motion_maker')
+    print("Initialized TibaSketch")
+    print("Interface object:", tsketch.itiba)
+    print("itiba.has_ros():", tsketch.itiba.has_ros())
+    print("itiba.msg_pub:", getattr(tsketch.itiba, "msg_pub", None))
+
     try:
         #tsketch.init(sketch)
-        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_motion_maker')
 
         # Ensure params is a dict
         if params is None:
@@ -136,10 +143,25 @@ def setup():
         params.update(params_dict)
         tsketch.mark_gui_ready()
 
+        # --- Drawing Pad Calibrator setup (if robot available) ---
+        global pad_calibrator
+        try:
+            # Base path for drawing_pad.json (adapt if your settings path is different)
+            base_path = os.path.join(tsketch.itiba.base_path, "drawing_pad") \
+                if hasattr(tsketch.itiba, "base_path") \
+                else os.path.join("./../robots/tiba/settings")
+            # Robot object used to read Pen-TCP frame
+            robot_for_calib = getattr(tsketch.itiba, "robot", None)
+            pad_calibrator = DrawingPadCalibrator(base_path=base_path, robot=robot_for_calib)
+            print(f"[Calib] Initialized DrawingPadCalibrator at {base_path}")
+        except Exception as e:
+            print("[Calib] Could not initialize DrawingPadCalibrator:", e)
+            pad_calibrator = None
+
         # Skip tool setting for now - focus on getting GUI running
         # tool_name = tsketch.get_tool_name(params['Config']['tool'][0])
         # tsketch.set_tool(tool_name)
-        
+
         # if rosloader is not None:
         #     print("Initializing ROS")
         #     try:
@@ -154,8 +176,8 @@ def setup():
         print(e)
         import traceback
         traceback.print_exc()
-        raise(e)
-        assert(False)
+        #raise(e)
+        #assert(False)
     # Load from params dict if path exists
     if 'path' in params:
         load(params['path'][0] if isinstance(params['path'], tuple) else params['path'])
@@ -245,11 +267,25 @@ def exit():
 def gui():
     global params
 
-    # Guard gegen uninitialisierte GUI
-    if tsketch.itiba is None:
+    # Guard against uninitialized GUI
+    if tsketch is None or tsketch.itiba is None:
         imgui.text("Initializing Interface...")
         return
 
+    itiba = tsketch.itiba
+
+    if imgui.button("Send test message to server"):
+        print("Button clicked, itiba:", itiba)
+
+        if not getattr(itiba, "has_ros", False):
+            print("❌ ROS not connected")
+        elif getattr(itiba, "msg_pub", None) is None:
+            print("❌ Publisher missing")
+        else:
+            print("✅ Sending message...")
+            itiba.send_msg("HELLO FROM MOTION_MAKER GUI")
+
+    # Programming mode only when robot active
     if has_robot:
         changed, state.programming = imgui.checkbox("Programming mode", state.programming)
         if changed:
@@ -360,6 +396,12 @@ def gui():
         elif hasattr(tibaparams, 'config'):
             tibaparams.config.tool = new_tool
         tsketch.set_tool(tsketch.get_tool_by_index(new_tool))
+
+    if hasattr(tsketch.itiba, "pad_calibration_gui"):
+        tsketch.itiba.pad_calibration_gui(imgui)
+
+    if tsketch.itiba is not None and hasattr(tsketch.itiba, "tool_rack_gui"):
+        tsketch.itiba.tool_rack_gui(imgui)
 
     # WICHTIG: Die Haupt-GUI von TibaSketch aufrufen
     # Diese Funktion setzt intern _gui_ready auf True, wenn sie durchläuft

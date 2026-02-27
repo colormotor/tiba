@@ -8,8 +8,8 @@ from sensor_msgs.msg import JointState
 import numpy as np
 import importlib, time, threading
 
-# panda_loader = importlib.find_loader('panda_py')
-panda_loader = None
+panda_loader = importlib.find_loader('panda_py')
+# panda_loader = None
 if panda_loader is not None:
     import panda_py
     from panda_py import libfranka
@@ -34,6 +34,15 @@ parser.add_argument('--robot', type=str, default='tiba', help='Name of the robot
 # Parse the arguments
 args = parser.parse_args()
 base_path = './../robots/' + args.robot + '/settings'
+HOME_Q = np.array([
+    0.0,
+    -0.785398,   # -pi/4
+    0.0,
+    -2.356194,   # -3*pi/4
+    0.0,
+    1.570796,    #  pi/2
+    0.785398     #  pi/4
+])
 
 
 def get_ip():
@@ -60,14 +69,19 @@ if has_robot:
     # panda = panda_py.Panda(hostname)
     # gripper = libfranka.Gripper(hostname)
     hostname = '172.16.0.2'
-    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
-    #desk = panda_py.Desk(hostname, 'admin', 'adminadmin')
+    #hostname = '192.168.0.1'
+    #desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    desk = panda_py.Desk(hostname, 'admin', 'adminadmin')
 
     print("Created desk")
     if not desk.has_control():
         print("Forcing control")
         desk.take_control(True)
+    desk.unlock()
+    print("Unlocked joints")
     desk.activate_fci()
+    print("Activated FCI")
+    print("Start")
     panda = panda_py.Panda(hostname)
     gripper = libfranka.Gripper(hostname)
 else:
@@ -125,6 +139,40 @@ def msg_callback(data):
         elif cmd == 'execution':
             print('Setting execution mode')
             itiba.set_programming_mode(desk, False)
+        elif cmd == 'calib_pad_start':
+            try:
+                itiba.start_pad_calibration()
+                respond_done(True)
+            except RuntimeError as e:
+                print(e)
+                respond_done(False)
+        elif cmd == 'calib_pad_corner':
+            try:
+                count = itiba.save_pad_corner()
+                print(f"[Server] Saved pad corner #{count}")
+                respond_done(True)
+            except RuntimeError as e:
+                print(e)
+                respond_done(False)
+        elif cmd == 'calib_pad_finish':
+            try:
+                itiba.finish_pad_calibration()
+                respond_done(True)
+            except RuntimeError as e:
+                print(e)
+                respond_done(False)
+        elif cmd == 'home':
+            print('Homing')
+            state.executing = True
+            try:
+                itiba.goto_joint_position(HOME_Q)
+                respond_done(True)
+            except RuntimeError as e:
+                print('Error while homing:', e)
+                respond_done(False)
+            finally:
+                state.executing = False
+
 
         # if itiba.editor.set_cur_motion(cmd):
         #     print('Reading states')
@@ -146,44 +194,46 @@ def msg_callback(data):
     #respub.publish("Received message")
 
 def jtraj_callback(data):
-    rospy.loginfo(rospy.get_caller_id() + "Joint trajectory with %d points"%(len(data.points)))
-    Qs = [p.positions for p in data.points]
+    print("SERVER jtrajcallback triggered, points =", len(data.points))
+    rospy.loginfo(rospy.get_caller_id() + " Joint trajectory with %d points", len(data.points))
+
+    Qs  = [p.positions  for p in data.points]
     dQs = [p.velocities for p in data.points]
+
     try:
+        print("SERVER: calling itiba.read_states()")
         itiba.read_states()
     except RuntimeError as e:
-        print(e)
+        print("SERVER: error in read_states:", e)
         print("Error, perhaps you are in programming mode?")
         respond_done(False)
         return
-    # if has_robot:
-    #     print('Reading robot joint configuration')
-    #     robot.q = panda.get_robot().read_once().q # panda.q
-    # else:
-    #     robot.q = robot.qr
 
-    print('Planning')
+    print("SERVER: Planning joint trajectory")
     itiba.plan_joint_trajectory(Qs, dQs, plot=False)
     status = True
+
     if has_robot:
-        print('Executing')
+        print("SERVER: Executing on real robot")
         state.executing = True
         try:
-            itiba.execute(force_drawing=False)
+            itiba.execute()
         except RuntimeError as e:
-            print(e)
+            print("SERVER: error in execute:", e)
             print("Error, perhaps you are in programming mode?")
             status = False
-        state.executing = False
-        print('Execution done')
+        finally:
+            state.executing = False
+            print("SERVER: Execution done")
     else:
-        print('Simulating')
+        print("SERVER: Simulating only")
         itiba.simulate()
-        print('Simulation done')
+        print("SERVER: Simulation done")
 
     if status:
         send_joint_state()
     respond_done(status)
+
 
 def respond_done(status=True):
     print("Responding done")
@@ -234,8 +284,12 @@ def joint_pos_sender_thread():
     time.sleep(0.5);
     while state.running:
         #respub.publish("YO")
+        time.sleep(0.1)
         if not state.executing:
-            send_joint_state(False)
+            try:
+                send_joint_state(False)
+            except RuntimeError as e:
+                print("SERVER: read_states error in joint_pos_sender_thread:", e)
         time.sleep(0.1)
     print('Joint thread ended')
 

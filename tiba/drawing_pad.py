@@ -21,6 +21,7 @@ from spatialmath import SE3, SO3, UnitQuaternion
 from spatialmath.base import trnorm
 import matplotlib.pyplot as plt
 import pdb
+import json
 
 from .config import cfg
 from . import trajectory_utils as tu
@@ -281,3 +282,77 @@ def fit_to_frame(P, frame, offset=0):
     ''' Fit a polyline to a box projected to XY plane defined by a given frame'''
     frame = get_offset_frame(frame, offset)
     return geom.affine_transform(frame, P)
+
+class DrawingPadCalibrator:
+    """
+    Interactive Calibration of the Drawing Pad:
+    The user moves the Pen-TCP to the corners, this class collects the points
+    and writes them to robots/<robot>/settings/drawing_pad.json.
+
+    Order of corners:
+      1) bottom left
+      2) bottom right
+      3) top right
+      4) top left (will be calculated)
+    """
+
+    def __init__(self, base_path, robot):
+        """
+        base_path: e.g., '../robots/tiba/settings'
+        robot: TibaRobot instance (for pen_tcp_frame())
+        """
+        self.base_path = base_path
+        self.robot = robot
+        self.points = []  # Liste von [x, y, z]
+        self.pad_file = os.path.join(base_path, "drawing_pad.json")
+
+    def reset(self):
+        self.points = []
+        print("[DrawingPadCalibrator] Reset calibration points")
+
+    def add_current_corner(self):
+        """
+        Reads current Pen-TCP position and stores it as a corner.
+        Expects the user to have already moved the robot to the corner.
+        """
+        frame = self.robot.pen_tcp_frame()  # 4x4-Frame im base-Frame
+        p = np.array(frame[:3, 3], dtype=float)  # x,y,z
+        self.points.append(p.tolist())
+        idx = len(self.points)
+        print(f"[DrawingPadCalibrator] Added corner #{idx}: {p}")
+        return idx
+
+    def is_complete(self, required=3):
+        return len(self.points) >= required
+
+    def save(self):
+        """
+        If there are 3 corners, the 4th corner is assumed as a rectangle:
+        A = bottom left, B = bottom right, C = top right
+        D = A + (C - B) = top left
+        """
+        if len(self.points) < 3:
+            raise RuntimeError(
+                f"Need at least 3 corners, have {len(self.points)}"
+            )
+
+        pts = [np.array(p, dtype=float) for p in self.points]
+
+        if len(pts) == 3:
+            A = pts[0]  # bottom left
+            B = pts[1]  # bottom right
+            C = pts[2]  # top right
+            D = A + (C - B)  # top left
+            pts.append(D)
+            print("[DrawingPadCalibrator] Computed 4th corner from 3 points")
+
+        data = {
+            "points": [p.tolist() for p in pts]
+        }
+
+        os.makedirs(self.base_path, exist_ok=True)
+        with open(self.pad_file, "w") as f:
+            json.dump(data, f, indent=4)
+
+        print(f"[DrawingPadCalibrator] Saved pad to {self.pad_file}")
+        return self.pad_file

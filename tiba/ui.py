@@ -17,11 +17,12 @@ def imgui_info_text(text):
     imgui.pop_style_color()
 
 def imgui_text_separator(text):
-    imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
-    imgui.text(text)
-    imgui.same_line()
+    if not imgui.get_current_context():
+        return
     imgui.separator()
-    imgui.pop_style_color()
+    imgui.text(text)
+    imgui.separator()
+
 
 def imgui_color_button(text, color=defaults.highlight):
     if len(color) == 3:
