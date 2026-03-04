@@ -836,7 +836,7 @@ class TibaInterface:
         print('Stopping Cartesian impedance controller')
         self.panda.stop_controller()
 
-    def execute(self, delay=1.0, force_drawing=False):
+    def execute(self, delay=0.2, force_drawing=False):
         ''' Execute the current joint motion'''
         try:
             if self.panda is not None:
@@ -877,8 +877,10 @@ class TibaInterface:
                         #time.sleep(0.3) #1.0)
 
                     if len(motion.Qs):
+                        self.send_msg('exec:trajectory')
                         with self.wait():
                             self.send_joint_trajectory(motion.Qs, motion.dQs)
+                        self.send_msg('exec:trajectory_done')
             else:
                 print("No panda or ros, can't execute, simulating")
                 self.simulate()

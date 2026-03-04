@@ -30,6 +30,8 @@ from . import trajectory_utils as tu
 
 import plotly.io as pio
 pio.renderers.default = 'browser'
+pio.templates.default = "seaborn"
+pio.templates.default = "ggplot2"
 
 glob = lambda: None
 glob.fig = None

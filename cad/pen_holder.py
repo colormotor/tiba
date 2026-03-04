@@ -5,6 +5,9 @@ from build123d import *
 from ocp_vscode import *
 import numpy as np
 #%%
+#########################################################
+## Utils and parts
+
 def radians( x ):
     return np.pi/180*x
 
@@ -49,8 +52,15 @@ angle = 15  #12
 hole_length = thickness*5
 screw_length = thickness*0.8
 
+def make_protuberances(w, pw=4, ph=1.8, vsize=18, hsize=50 ):
+    part = Part()
+    part += Pos(0, w/2, 0)*Rot(0, 90, 0)*protruberance(pw, ph, hsize) # Pos(0, w/2, 0)*Box(h, 20, 5)
+    part += Pos(0, -w/2, 0)*Rot(0, 90, 180)*protruberance(pw, ph, hsize) # Pos(0, w/2, 0)*Box(h, 20, 5)
+    part += Pos(0, w/2, 0)*protruberance(pw, ph, vsize) # Pos(0, w/2, 0)*Box(h, 20, 5)
+    part += Pos(0, -w/2, 0)*Rot(0,0,180)*protruberance(pw, ph, vsize) # Pos(0, w/2, 0)*Box(h, 20, 5)
+    return part
 
-def make_body(has_slant=True):
+def make_body(has_slant=True, has_holes=True, w=35, h=50, prot_ang=0):
     # Main body
     
     part = Box(h, w, thickness) 
@@ -58,13 +68,9 @@ def make_body(has_slant=True):
     # Protruberances
     pw = 4
     ph = 1.8
-    part += Pos(0, w/2, 0)*Rot(0, 90, 0)*protruberance(pw, ph, 50) # Pos(0, w/2, 0)*Box(h, 20, 5)
-    part += Pos(0, -w/2, 0)*Rot(0, 90, 180)*protruberance(pw, ph, 50) # Pos(0, w/2, 0)*Box(h, 20, 5)
-    part += Pos(0, w/2, 0)*protruberance(pw, ph, thickness) # Pos(0, w/2, 0)*Box(h, 20, 5)
-    part += Pos(0, -w/2, 0)*Rot(0,0,180)*protruberance(pw, ph, thickness) # Pos(0, w/2, 0)*Box(h, 20, 5)
+    part += make_protuberances(w, pw, ph, thickness)
 
     # Slant
-    
     if angle > 0 and has_slant:
         part += Pos(0, 0, thickness*0.5)*slant(w*0.7, h, angle)
 
@@ -86,21 +92,43 @@ def make_body(has_slant=True):
         part -= transform_hole(-31.8/2, screw_length)*Box(6, 10.1, hole_length) #(3/2, thickness*3)
         part -= transform_hole(31.8/2, screw_length)*Box(6, 10.1, hole_length) #(3/2, thickness*3)
 
-    
-    part = cone_slot(part, w*0.32)
-    part = cone_slot(part, -w*0.32)
+    if has_holes:
+        part = cone_slot(part, w*0.32)
+        part = cone_slot(part, -w*0.32)
     return part
 
 part = make_body()
-part.export_stl('holder.stl')
+#part.export_stl('holder.stl')
 part.color = [1, 0.5, 1.0, 1.0]
 #import_stl('./panda_realsense_D4xx.stl') - Box(5,10,2)
 # part = Box(5, 10, 2) - Hole(radius=2.6, depth=2)
 # Cylinder()
-show_all()
-
+show(part)
 
 #%%
+#########################################################
+## Airbrush holder
+#  21x44x30mm
+
+part = Part()
+athick = 21
+aw = 30
+al = 44
+
+part += Box(al, aw, athick) 
+pw = 4
+ph = 1.8
+prot = Rot(0, 30, 0)*make_protuberances(aw, pw, ph, athick*2, 70)
+prot = prot&Box(al, aw*2, athick)
+part += prot
+
+show(part)
+
+#%%
+#%%
+#########################################################
+## Base
+
 base = Part()
 base = cone_slot(base, w*0.32, base=True)
 base = cone_slot(base, -w*0.32, base=True)
@@ -144,13 +172,13 @@ measurer -= Pos(flath/2 + h/2 + padding*2, 0, flatt/2 - thickness/2)*Box(flath, 
 measurer -= Box(h, w, thickness) 
 
 measurer.export_stl('measurer.stl')
-measurer.color = Color(1, 0, 1, 1)
+#measurer.color = Color(1, 0, 1, 1)
 measurer = Pos(0, 0, -20)*measurer
 #measurer.color = Color('red') #'aliceblue') #[1.0, 0.0, 0.0, 1.0]) #"red")
 
 
-show_all()
-
+#show_all()
+show(measurer)
 #%%
 # Probe 
 probe = Part()
@@ -161,9 +189,23 @@ probe +=  Pos(probe_length, 0, 0)*Rot(0, 90, 0)* Cylinder(4, probe_length)
 probe += Pos(probe_length+probe_length*0.5+probe_tip_length*0.5, 0, 0)*Rot(0, 90, 0)*Cone(4, 1, probe_tip_length)
 probe += make_body(False)
 probe.color = Color(0, 0.5, 1.0, 1.0)
-base.export_stl('probe.stl')
+#base.export_stl('probe.stl')
 probe = Pos(0, -50, 0)*probe
 show_all()
+#%%
+# Airbrush holder test
+part = Part()
+probe_tip_length = 10
+probe_length = 50 #*0.8
+
+#probe +=  Pos(probe_length, 0, 0)*Rot(0, 90, 0)* Cylinder(4, probe_length)
+#probe += Pos(probe_length+probe_length*0.5+probe_tip_length*0.5, 0, 0)*Rot(0, 90, 0)*Cone(4, 1, probe_tip_length)
+part += make_body(False, False)
+
+#base.export_stl('probe.stl')
+#probe = Pos(0, -50, 0)*probe
+#show_clear()
+show(part)
 #%%
 # Measureing widget
 widget = Part()

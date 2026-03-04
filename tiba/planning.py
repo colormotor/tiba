@@ -130,7 +130,10 @@ class TrajectoryPlanner:
             traj_callback = plan_thick_resample
         elif params.planner == 'Thick BSpline':
             traj_callback = plan_thick_resample_bspline
-
+        elif params.planner == 'Calligraph':
+            traj_callback = plan_thick_resample_bspline_calligraph
+        else:
+            raise ValueError('Unknown planner' + params.planner)
         if traj_callback is None:
             raise ValueError('No trajectory callback')
 
@@ -192,6 +195,8 @@ class TrajectoryPlanner:
             traj_callback = plan_thick_resample
         elif params.planner == 'Thick BSpline':
             traj_callback = plan_thick_resample_bspline
+        elif params.planner == 'Calligraph':
+            traj_callback = plan_thick_resample_bspline_calligraph
 
         if traj_callback is None:
             raise ValueError('No trajectory callback')
@@ -237,6 +242,10 @@ class TrajectoryPlanner:
             traj_callback = plan_thick_resample
         elif params.planner == 'Thick BSpline':
             traj_callback = plan_thick_resample_bspline
+        elif params.planner == 'Calligraph':
+            traj_callback = plan_thick_resample_bspline_calligraph
+        else:
+            raise ValueError('Unknown planner ' + params.planner)
 
         if traj_callback is None:
             raise ValueError('No trajectory callback')
@@ -635,6 +644,23 @@ def plan_thick_resample_bspline(samples,
         trajectories = [tu.resample_bspline(P, params.bspline_degree, max_speed, accel_time) for P in Cps_3d]
     return trajectories, [P[:,:2] for P in samples]
 
+def plan_thick_resample_bspline_calligraph(samples,
+                                max_speed,
+                                accel_time,
+                                penup_distance,
+                                params):
+    from calligraph import bspline
+    samples = [np.hstack([P[:,:2], radius_to_z(params, P[:,2]).reshape(-1,1)])
+                 for P in samples]
+    Cps_3d = samples
+
+    if params.resample_topp:
+        trajectories,_,_ = tu.plan_polylines_time_optimal([bspline.bspline_samples(P, len(P)*7, params.bspline_degree+1)
+                                                           for P in Cps_3d],
+                                                           cfg.cartesian_speed, cfg.acceleration_time)
+    else:
+        trajectories = [bspline.resample_bspline(P, cfg.dt, params.bspline_degree, max_speed*0.5, None) for P in Cps_3d]
+    return trajectories, [P[:,:2] for P in samples]
 
 def plan_thick_resample_bezier(samples,
                         max_speed,
@@ -713,7 +739,11 @@ def plan_polylines(planning_callback,
     for P in paths:
         print(len(P)*cfg.dt, 'seconds')
         D = np.diff(P, axis=0)/cfg.dt
-        max_speed = max(max_speed, np.max(np.linalg.norm(D, axis=1)))
+        try:
+            max_speed = max(max_speed, np.max(np.linalg.norm(D, axis=1)))
+        except ValueError as e:
+            print(e)
+            breakpoint()
     print('Max speed:', max_speed)
     print('####################################')
     paths = [P for P in paths if len(P) > 1]

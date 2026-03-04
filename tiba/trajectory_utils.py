@@ -441,6 +441,9 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0,
         #ds = 1.0 / 2000
         for i in range(nattempt):
             P = np.array(P)
+            if len(P) < 2:
+                print("Degenerate trajectory, not planning")
+                break
             result = smoother.smooth_interpolate(P, interpolation_dt=cfg.dt, traj_dt=0.001)
             if not result.success:
                 print('Smoothing failed in trajectory smoothing, attempt %d of %d'%(i+1, nattempt))
@@ -451,6 +454,7 @@ def plan_polylines_time_optimal(polylines, max_speed, accel_time, tol=10/1000.0,
                 P = geom.uniform_sample(Q, ds)
                 ds = ds*2
                 print(len(P), 'points')
+
                 # A = geom.degrees(geom.turning_angles(Q))
                 # L = geom.chord_lengths(Q)
                 # print('Length', len(Q))

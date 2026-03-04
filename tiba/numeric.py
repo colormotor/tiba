@@ -34,3 +34,23 @@ def derivative(X, order=1):
 
 def derivative(X, order=1, sigma=20):
     return gaussian_filter1d(X, sigma, order=order, axis=0)
+
+def roll_pad(arr, shift, axis, pad=0):
+    result = np.ones_like(arr)*pad
+    if axis == 0:  # vertical shift
+        if shift > 0:
+            result[shift:] = arr[:-shift]
+        elif shift < 0:
+            result[:shift] = arr[-shift:]
+        else:
+            result[:] = arr
+    elif axis == 1:  # horizontal shift
+        if shift > 0:
+            result[:, shift:] = arr[:, :-shift]
+        elif shift < 0:
+            result[:, :shift] = arr[:, -shift:]
+        else:
+            result[:] = arr
+    else:
+        raise ValueError("Axis must be 0 (rows) or 1 (columns).")
+    return result
