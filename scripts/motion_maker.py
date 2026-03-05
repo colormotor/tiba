@@ -403,6 +403,9 @@ def gui():
     if tsketch.itiba is not None and hasattr(tsketch.itiba, "tool_rack_gui"):
         tsketch.itiba.tool_rack_gui(imgui)
 
+    if tsketch.itiba is not None and hasattr(tsketch.itiba, "color_palette_gui"):
+        tsketch.itiba.color_palette_gui(imgui)
+
     # WICHTIG: Die Haupt-GUI von TibaSketch aufrufen
     # Diese Funktion setzt intern _gui_ready auf True, wenn sie durchläuft
     tsketch.gui()

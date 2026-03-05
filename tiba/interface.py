@@ -15,6 +15,7 @@ Uses PandaPy (https://github.com/JeanElsner/panda-py) as a layer on top of libfr
 import importlib
 
 import numpy as np
+import runpy
 import os, sys, time, copy
 import traceback
 import yaml
@@ -402,8 +403,20 @@ class TibaInterface:
             "p1": None,        # pose of tool 1 (4x4, list of lists)
             "p2": None,        # pose of tool 2 (4x4, list of lists)
             "spacing": None,   # distance between neighboring tools [m]
-            "direction": None, # unit vector from tool 1 to tool 2 (3,)
+            "direction": None, # unit vector from tool 1 to tool 2
             "count": 3,        # number of tools on the rack
+        }
+        self.color_palette_path = os.path.join(base_path, "color_palette.json")
+        self.color_palette = {
+            "p00": None,                # pose of tool 00 (4x4, list of lists)
+            "p01": None,                # pose of tool 01 (4x4, list of lists)
+            "p10": None,                # pose of tool 10 (4x4, list of lists)
+            "spacing_in_rows": None,    # distance between colors in a row [m]
+            "spacing_in_cols": None,    # distance between colors in a column [m]
+            "direction_rows": None,     # unit vector from tool 00 to tool 01
+            "direction_cols": None,     # unit vector from tool 00 to tool 10
+            "count_rows": 3,            # number of colors in a row
+            "count_cols": 2,            # number of colors in a column
         }
         self.tool_rack_selected = 0
 
@@ -415,7 +428,21 @@ class TibaInterface:
         except FileNotFoundError:
             print("[ToolRack] No saved tool rack calibration found")
 
+        try:
+            data = utils.load_json(self.color_palette_path)
+            self.color_palette.update(data)
+            print("[ColorPalette] Loaded calibration from", self.color_palette_path)
+        except FileNotFoundError:
+            print("[ColorPalette] No saved color palette calibration found")
+
         self.tool_rack_status = ""
+        self.color_palette_step = 0  # 0=idle, 1=00, 2=01, 3=rows, 4=10, 5=cols
+        self.color_palette_status = ""
+        self.color_row = 0
+        self.color_col = 0
+        self.color_script = "motions/simple_dip.py"
+        self.color_status = ""
+
         self.plot_path = plot_path
         self.panda = panda
         self.gripper = gripper
@@ -595,6 +622,7 @@ class TibaInterface:
             #p.time_from_start = Duration(0, int(1e+9*cfg.robot_dt*i))
             jtraj.points.append(p)
         self.jtraj_pub.publish(jtraj)
+        print("Trajectory sent")
         rospy.loginfo("Sent joint trajectory")
 
     def wait(self):
@@ -1141,6 +1169,285 @@ class TibaInterface:
         if self.tool_rack_status:
             imgui.text_wrapped(self.tool_rack_status)
 
+    def _save_color_palette(self):
+        """Save current color palette calibration to JSON."""
+        utils.save_json(self.color_palette, self.color_palette_path)
+        print("[ToolRack] Saved calibration to", self.color_palette_path)
+
+    def color_palette_set_color_00(self):
+        """Teach pose of color 00 from current TCP."""
+        self.color_palette["p00"] = self._current_tcp_pose().tolist()
+        self._save_color_palette()
+        print("[ColorPalette] Set color 00 pose")
+
+    def color_palette_set_color_01(self):
+        """Teach pose of color 01 from current TCP and derive spacing + direction."""
+        if self.color_palette["p00"] is None:
+            raise RuntimeError("Color 00 pose must be set before color 01")
+
+        p00 = np.array(self.color_palette["p00"])
+        p01 = self._current_tcp_pose()
+        self.color_palette["p01"] = p01.tolist()
+
+        diff = p01[:3, 3] - p00[:3, 3]
+        dist = float(np.linalg.norm(diff))
+        if dist <= 1e-6:
+            raise RuntimeError("Color 00 and 01 are at the same position")
+
+        direction = [-1, 0, 0]
+
+        self.color_palette["spacing_in_rows"] = dist
+        self.color_palette["direction_rows"] = direction
+        self._save_color_palette()
+
+        print(f"[ColorPalette] spacing={dist:.4f} m, dir={direction}")
+
+    def color_palette_set_color_10(self):
+        """Teach pose of color 10 from current TCP and derive spacing + direction."""
+        if self.color_palette["p00"] is None:
+            raise RuntimeError("Color 00 pose must be set before color 10")
+
+        p00 = np.array(self.color_palette["p00"])
+        p10 = self._current_tcp_pose()
+        self.color_palette["p10"] = p10.tolist()
+
+        diff = p10[:3, 3] - p00[:3, 3]
+        dist = float(np.linalg.norm(diff))
+        if dist <= 1e-6:
+            raise RuntimeError("Color 00 and 01 are at the same position")
+
+        direction = [0, -1, 0]
+
+        self.color_palette["spacing_in_cols"] = dist
+        self.color_palette["direction_cols"] = direction
+        self._save_color_palette()
+
+        print(f"[ColorPalette] spacing={dist:.4f} m, dir={direction}")
+
+    def color_palette_is_calibrated(self):
+        return (
+            self.color_palette["p00"] is not None
+            and self.color_palette["spacing_in_rows"] is not None
+            and self.color_palette["direction_rows"] is not None
+            and self.color_palette["spacing_in_cols"] is not None
+            and self.color_palette["direction_cols"] is not None
+        )
+
+    def get_color(self, row, col, script_path, **script_args):
+
+        print("robot.q =", self.robot.q)
+        # 1) Retrieve the approach and reach pose from the rack
+        T_approach, T_tool = self._color_palette_get_approach_pose(row, col)
+
+        # 2) IK on Pen-TCP
+        q_approach = self.robot.ikine_pen_tcp(T_approach)
+        q_tool     = self.robot.ikine_pen_tcp(T_tool)
+
+        if q_approach is None or q_tool is None:
+            raise RuntimeError("IK failed")
+
+        print("T_approach Z=%.3f, T_tool Z=%.3f" % (T_approach.t[2], T_tool.t[2]))
+
+        # 3) Trajectory: current → approach → tool → approach
+        Qs, dQs = [], []
+
+        # Current → Approach (fast)
+        Q1, dQ1 = tu.joint_approach(self.robot.q, q_approach)
+        Qs += list(Q1); dQs += list(dQ1)
+        self.send_joint_trajectory(Qs, dQs)
+        print("Trajectory: current→approach")
+        time.sleep(5)
+        script_args["T_tool"] = T_tool
+        script_args["T_approach"] = T_approach
+
+        self.plan_and_execute_script(script_path, **script_args)
+        time.sleep(5)
+
+    def _color_palette_get_pose(self, row, col):
+        """SE3-Pose of the Pen-TCP at color cell (row, col)."""
+        if not self.color_palette_is_calibrated():
+            raise RuntimeError("Color palette not calibrated")
+
+        T00 = SE3(np.array(self.color_palette["p00"]))
+
+        dir_rows = np.array(self.color_palette["direction_rows"])
+        dir_rows = dir_rows / np.linalg.norm(dir_rows)
+
+        dir_cols = np.array(self.color_palette["direction_cols"])
+        dir_cols = dir_cols / np.linalg.norm(dir_cols)
+
+        spacing_rows = float(self.color_palette["spacing_in_rows"])
+        spacing_cols = float(self.color_palette["spacing_in_cols"])
+
+        # offset = col * row-spacing + row * col-spacing
+        offset = row * spacing_rows * dir_rows + col * spacing_cols * dir_cols
+
+        print("T00.t =", T00.t)
+        print(
+            "dir_rows =", dir_rows, "spacing_rows =", spacing_rows,
+            "| dir_cols =", dir_cols, "spacing_cols =", spacing_cols
+        )
+        print(f"row={row}, col={col}, offset={offset}")
+        T_color = SE3(offset[0], offset[1], 0.0) * T00
+        print("T_color.t =", T_color.t)
+        return T_color
+
+    def _color_palette_get_approach_pose(self, row, col, dist=0.2):
+        """Return (T_approach, T_color) for color cell (row, col)."""
+        T_color = self._color_palette_get_pose(row, col)
+        offset = np.array([0, 0, dist])
+        T_approach = SE3(offset) * T_color
+        return T_approach, T_color
+
+
+    def color_palette_gui(self, imgui):
+        imgui.separator()
+        imgui.text("Color palette calibration")
+        imgui.separator()
+
+        # Start-Button
+        if self.color_palette_step == 0:
+            if imgui.button("Calibrate color palette"):
+                self.color_palette_step = 1
+                self.color_palette_status = (
+                    "Move TCP to color 00 (row 0, col 0) and press 'Set color 00'."
+                )
+
+        # Schritt 1: p00
+        if self.color_palette_step == 1:
+            imgui.text_wrapped("Step 1: Move TCP to color 00 (row 0, col 0).")
+            if imgui.button("Set color 00"):
+                try:
+                    self.color_palette_set_color_00()
+                    self.color_palette_step = 2
+                    self.color_palette_status = (
+                        "Color 00 stored. Move TCP to color 01 (row 0, col 1) and press 'Set color 01'."
+                    )
+                except Exception as e:
+                    self.color_palette_status = f"Error setting color 00: {e}"
+
+        # Schritt 2: p01
+        if self.color_palette_step == 2:
+            imgui.text_wrapped("Step 2: Move TCP to color 01 (row 0, col 1).")
+            if imgui.button("Set color 01"):
+                try:
+                    self.color_palette_set_color_01()
+                    self.color_palette_step = 3
+                    self.color_palette_status = (
+                        "Color 01 stored. Enter number of colors in one row."
+                    )
+                except Exception as e:
+                    self.color_palette_status = f"Error setting color 01: {e}"
+
+        # Schritt 3: count_rows
+        if self.color_palette_step == 3:
+            imgui.text_wrapped("Step 3: Enter number of colors in one row.")
+            changed, rows = imgui.input_int(
+                "Colors in one row", int(self.color_palette.get("count_rows", 3))
+            )
+            if changed and rows > 0:
+                self.color_palette["count_rows"] = int(rows)
+                self._save_color_palette()
+            if imgui.button("Confirm rows"):
+                self.color_palette_step = 4
+                self.color_palette_status = (
+                    "Rows stored. Move TCP to color 10 (row 1, col 0) and press 'Set color 10'."
+                )
+
+        # Schritt 4: p10
+        if self.color_palette_step == 4:
+            imgui.text_wrapped("Step 4: Move TCP to color 10 (row 1, col 0).")
+            if imgui.button("Set color 10"):
+                try:
+                    self.color_palette_set_color_10()
+                    self.color_palette_step = 5
+                    self.color_palette_status = (
+                        "Color 10 stored. Enter number of rows (colors in column)."
+                    )
+                except Exception as e:
+                    self.color_palette_status = f"Error setting color 10: {e}"
+
+        # Schritt 5: count_cols
+        if self.color_palette_step == 5:
+            imgui.text_wrapped("Step 5: Enter number of rows (colors per column).")
+            changed, cols = imgui.input_int(
+                "Colors in one column", int(self.color_palette.get("count_cols, ", 2))
+            )
+            if changed and cols > 0:
+                self.color_palette["count_cols"] = int(cols)
+                self._save_color_palette()
+            if imgui.button("Finish calibration"):
+                self._save_color_palette()
+                self.color_palette_step = 0
+                self.color_palette_status = "Color palette calibration finished."
+
+        # Status / Info
+        if self.color_palette_status:
+            imgui.text_wrapped(self.color_palette_status)
+
+        if self.color_palette_is_calibrated():
+            imgui.text(
+                f"Calibrated: rows={self.color_palette.get('count_rows', '?')}, "
+                f"cols={self.color_palette.get('count_cols', '?')}, "
+                f"spacing_rows={self.color_palette.get('spacing_in_rows', 0):.3f} m, "
+                f"spacing_cols={self.color_palette.get('spacing_in_cols', 0):.3f} m"
+            )
+        else:
+            imgui.text("Calibrated: no")
+
+        if imgui.button("Reset color palette calibration"):
+            self.color_palette = {
+                "p00": None,
+                "p01": None,
+                "p10": None,
+                "spacing_in_rows": None,
+                "direction_rows": None,
+                "spacing_in_cols": None,
+                "direction_cols": None,
+                "count_rows": 3,
+                "count_cols": 2,
+            }
+            self.color_palette_step = 0
+            self._save_color_palette()
+            self.color_palette_status = "Color palette calibration reset."
+
+        # Row / Col Auswahl
+        changed, col = imgui.input_int("Col##color", int(self.color_col))
+        if changed and col >= 0:
+            self.color_col = col
+
+        changed, row = imgui.input_int("Row##color", int(self.color_row))
+        if changed and row >= 0:
+            self.color_row = row
+
+        # Script-Pfad
+        changed, script = imgui.input_text(
+            "Script path##color",
+            self.color_script,
+            256,
+        )
+        if changed:
+            self.color_script = script
+
+
+        # Button: get_color aufrufen
+        if imgui.button("Get color"):
+            try:
+                self.get_color(
+                    self.color_row,
+                    self.color_col,
+                    self.color_script,
+                )
+                self.color_status = (
+                    f"get_color(row={self.color_row}, col={self.color_col}, "
+                    f"script='{self.color_script}' executed."
+                )
+            except Exception as e:
+                self.color_status = f"Error in get_color: {e}"
+
+        if self.color_status:
+            imgui.text_wrapped(self.color_status)
+
     def read_states(self):
         if self.panda is None:
             # self.robot.q = self.robot.qr
@@ -1456,6 +1763,7 @@ class TibaInterface:
             print("Cannot execute grip motion")
             return
         self.plan_script(path, **kwargs)
+        print(self.trajectory_status)
         if self.trajectory_status:
             self.execute()
 
