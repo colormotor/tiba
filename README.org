@@ -12,6 +12,15 @@ Network communication is implemented through ROS (noetic), which needs to be int
 The robot is controlled with the Franka Emika API through the Python [[https://github.com/JeanElsner/panda-py][Panda-py]] API. This greatly simplifies and speeds up interaction with the robot. We use a custom controller (written in C++) for drawing so we will rely on a fork of the API located [[https://github.com/colormotor/panda-py][here]].
 
 ** On all platforms
+*** Automatic Installation of Client 
+Change tiba-path in [[tiba_client_setup.sh]]. \\
+Run [[tiba_client_setup.sh]]:
+#+begin_example
+chmod +x tiba_server_setup.sh
+./tiba_server_setup.sh
+#+end_example
+
+*** Manual Installation
 The dependency installation procedure depends on the [[https://docs.conda.io/en/latest/][conda package mananger]]. One ideal way to install conda is to use the reduced [[https://github.com/conda-forge/miniforge][miniforge]] installer. To speed up installation, it is recommended to install mamba alongside conda (since "vanilla" conda is written in Python and can be extremely slow). To install mamba use:
 #+begin_example
 conda install conda-forge::mamba
@@ -86,73 +95,6 @@ pip install git+https://github.com/colormotor/py5canvas.git
 #+end_example
 
 ** Server installation (for Franka robot)
-*** Tiba server in Docker (ROS master)
-
-Instead of running the ROS master and Tiba server directly on the control
-laptop, you can run them inside a Docker container.
-
-Assuming the repository structure contains a =Docker/Dockerfile= based on
-=osrf/ros:noetic-desktop-full=, build the image from the repository root with:
-
-#+begin_example
-cd /path/to/tiba
-docker build -f Docker/Dockerfile -t tiba-ros-master .
-#+end_example
-
-This copies the local =tiba/= folder into the container at
-=/root/catkin_ws/src/tiba= and builds the workspace.
-
-To start a ROS master inside Docker:
-
-#+begin_example
-docker run --rm -it \
-  --name tiba-roscore \
-  -p 11311:11311 \
-  tiba-ros-master roscore
-#+end_example
-
-On the client laptop (running the GUI, e.g. =scripts/motion_maker.py=) set the
-ROS environment to point to the Docker master:
-
-#+begin_example
-export ROS_MASTER_URI=http://<CONTAINER_IP>:11311
-export ROS_IP=<HOST_IP>
-conda activate ros_env_2    # or the environment used for the GUI
-python scripts/motion_maker.py
-#+end_example
-
-Replace =<CONTAINER_IP>= with the IP address of the Docker container (obtained
-via =docker inspect=) and =<HOST_IP>= with the IP address of the client laptop
-reachable from the container.
-
-After the image is built, you still need to install =ilqr_planner= inside the
-container (as for the local setup):
-
-#+begin_example
-docker exec -it tiba-roscore /bin/bash
-
-cd /root/catkin_ws/src
-git clone https://github.com/colormotor/ilqr_planner.git
-cd ilqr_planner
-git submodule update --init --recursive
-./build.sh
-#+end_example
-
-To actually interface with the robot from other machines, start the Tiba server
-inside the container after the ROS master is running:
-
-#+begin_example
-docker exec -it tiba-roscore /bin/bash
-
-# ROS environment is already sourced via .bashrc
-cd /root/catkin_ws/src/tiba
-python scripts/tiba_server.py
-#+end_example
-
-The client laptop can then connect via ROS to the Docker-based Tiba server
-(using the =ROS_MASTER_URI= and =ROS_IP= settings described above).
-
-*** Tiba server on secondary laptop
 
 First install [[https://github.com/frankaemika/libfranka][libfranka]] for the FR3 (modified version of [[https://frankaemika.github.io/docs/installation_linux.html][these instructions]]. First clone
 #+begin_example
@@ -284,19 +226,22 @@ TODO
 - Activate FCI
 *** Network setup
 **** Server setup
-The machine currently cannot run the GPU, which makes graphics apps pretty slow.
+The machine currently cannot run the GPU, which makes graphics apps pretty slow. \\
+Change the IPs in [[scripts/rosmaster.sh][rosmaster.sh]]. \\
 In order to allow external communication with the server and connect to the robot open one terminal with
 #+begin_example
 conda activate ros_env
+source rosmaster.sh
 roscore
 #+end_example
 
-Now Open the Franka desk on a browser at this address:
-- https://172.16.0.2/desk
-For using the robot we will need to:
-- unlock the joints (little "unlock" icon)
-- Set the robot to "execution mode"
-- Activate FCI (from the top menu with the IP address)
+Start the server in a second terminal:
+#+begin_example
+source rosmaster.sh
+python3 tiba_server.py
+#+end_example
+
+
 
 **** Client setup
 The client *should not* run ~roscore~ but should have the approriate ROS (https://robostack.github.io) conda environment activated. We will need to tell the client machine who is running ~roscore~ by setting the relevant env variable and this can be done in the current terminal by running (from the ~scripts~ directory):
