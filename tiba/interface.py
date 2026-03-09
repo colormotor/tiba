@@ -1234,7 +1234,10 @@ class TibaInterface:
         )
 
     def get_color(self, row, col, script_path, **script_args):
-
+        """
+        Get the color from the row and column, with the actual color pickup logic residing in external scripts like motion/dip.py
+         to ensure modularity for different color types.
+        """
         print("robot.q =", self.robot.q)
         # 1) Retrieve the approach and reach pose from the rack
         T_approach, T_tool = self._color_palette_get_approach_pose(row, col)
@@ -1313,7 +1316,7 @@ class TibaInterface:
                     "Move TCP to color 00 (row 0, col 0) and press 'Set color 00'."
                 )
 
-        # Schritt 1: p00
+        # Step 1: p00
         if self.color_palette_step == 1:
             imgui.text_wrapped("Step 1: Move TCP to color 00 (row 0, col 0).")
             if imgui.button("Set color 00"):
@@ -1326,7 +1329,7 @@ class TibaInterface:
                 except Exception as e:
                     self.color_palette_status = f"Error setting color 00: {e}"
 
-        # Schritt 2: p01
+        # Step 2: p01
         if self.color_palette_step == 2:
             imgui.text_wrapped("Step 2: Move TCP to color 01 (row 0, col 1).")
             if imgui.button("Set color 01"):
@@ -1339,7 +1342,7 @@ class TibaInterface:
                 except Exception as e:
                     self.color_palette_status = f"Error setting color 01: {e}"
 
-        # Schritt 3: count_rows
+        # Step 3: count_rows
         if self.color_palette_step == 3:
             imgui.text_wrapped("Step 3: Enter number of colors in one row.")
             changed, rows = imgui.input_int(
@@ -1354,7 +1357,7 @@ class TibaInterface:
                     "Rows stored. Move TCP to color 10 (row 1, col 0) and press 'Set color 10'."
                 )
 
-        # Schritt 4: p10
+        # Step 4: p10
         if self.color_palette_step == 4:
             imgui.text_wrapped("Step 4: Move TCP to color 10 (row 1, col 0).")
             if imgui.button("Set color 10"):
@@ -1367,7 +1370,7 @@ class TibaInterface:
                 except Exception as e:
                     self.color_palette_status = f"Error setting color 10: {e}"
 
-        # Schritt 5: count_cols
+        # Step 5: count_cols
         if self.color_palette_step == 5:
             imgui.text_wrapped("Step 5: Enter number of rows (colors per column).")
             changed, cols = imgui.input_int(
@@ -1411,7 +1414,7 @@ class TibaInterface:
             self._save_color_palette()
             self.color_palette_status = "Color palette calibration reset."
 
-        # Row / Col Auswahl
+        # Row / Col Selection
         changed, col = imgui.input_int("Col##color", int(self.color_col))
         if changed and col >= 0:
             self.color_col = col
@@ -1420,7 +1423,7 @@ class TibaInterface:
         if changed and row >= 0:
             self.color_row = row
 
-        # Script-Pfad
+        # Script-Path
         changed, script = imgui.input_text(
             "Script path##color",
             self.color_script,
@@ -1430,7 +1433,7 @@ class TibaInterface:
             self.color_script = script
 
 
-        # Button: get_color aufrufen
+        # Button: call get_color
         if imgui.button("Get color"):
             try:
                 self.get_color(
