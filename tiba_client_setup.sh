@@ -5,7 +5,7 @@ set -e
 sudo apt update
 sudo apt install -y git
 
-# Miniforge installieren (falls noch nicht da)
+# install Miniforge if not existing
 if [ ! -d "$HOME/miniforge3" ]; then
   wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
   chmod +x Miniforge3-Linux-x86_64.sh
@@ -32,7 +32,7 @@ mamba install -y conda-forge::roboticstoolbox-python
 mamba install -y plotly networkx tqdm svgpathtools
 mamba install -y conda-forge::pycairo conda-forge::moderngl
 
-# Python-Pakete
+# Python-Packages
 pip install \
   trajectory_smoothing@git+https://github.com/colormotor/trajectory_smoothing.git \
   pyglet \
@@ -42,10 +42,10 @@ pip install \
   py5canvas==0.5.2 \
   glfw PyOpenGL imgui glcontext
 
-# dein Paket
+# TODO change path to path of tiba
 cd "$HOME/Documents"
 
-# Repo nur clonen, wenn der Ordner noch nicht existiert
+# Only clone repo if not existing yet
 if [ ! -d "tiba" ]; then
   git clone https://github.com/colormotor/tiba.git
 fi
@@ -60,7 +60,7 @@ cd ilqr_planner
 git submodule update --init --recursive
 ./build.sh
 
-# Systemlibs für OpenGL
+# Systemlibs for OpenGL
 sudo apt update
 sudo apt install -y \
   git \
