@@ -202,6 +202,15 @@
     },
 
     "Labor-gold-1_0": {
+      "tip_dist_mm": 83.0,
+      "tip_height_mm": 0.0,
+      "offset_mm": 0.0,
+      "range_mm": 12.0,
+      "min_radius_mm": 1.0,
+      "max_radius_mm": 10.0
+    },
+
+    "No-Labor-gold-1_0": {
       "tip_dist_mm": 69.0,
       "tip_height_mm": 0.0,
       "offset_mm": 0.0,
@@ -214,9 +223,9 @@
       "tip_dist_mm": 82.0,
       "tip_height_mm": -2.0,
       "offset_mm": 0.0,
-      "range_mm": 15.0,
+      "range_mm": 17.0,
       "min_radius_mm": 0.25,
-      "max_radius_mm": 6.0
+      "max_radius_mm": 8.0
     }
 
 
