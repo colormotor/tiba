@@ -23,7 +23,7 @@ Dip-2:
     file: "./motions/dip.py"
     args:
         dip_pos: [0.24229462650160802, -0.2980534177007819, 0.07385254670557224]
-        dip_radius_mm: 10.0
+        dip_radius_mm: 6.0
         dip_depth_mm: 35.0
     desc: "Dip brush in container 2"
 Dip-3:

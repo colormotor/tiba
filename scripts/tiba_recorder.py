@@ -8,7 +8,7 @@ import os
 import numpy as np
 import importlib
 from tiba import lqt
-import imgui
+from slimgui import imgui
 # from tiba import utils, geom, svg
 import roboticstoolbox as rtb
 import tiba
