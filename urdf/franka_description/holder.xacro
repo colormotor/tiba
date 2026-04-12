@@ -4,7 +4,7 @@
   <xacro:macro name="holder" params="connected_to:='' arm_id:='panda' rpy:='0 0 0' xyz:='0 0 0' tip_dist_mm:='52' tip_height_mm:='12.5' angle:='15.0' safety_distance:=0">
     <xacro:property name="theta" value="${(pi / 180.0) * angle}" />
     <xacro:if value="${angle > 0}">
-      <xacro:property name="d0" value="${tip_height_mm/tan(theta)}" />
+      <xacro:property name="d0" value="${(tip_height_mm)/tan(theta)}" />
     </xacro:if>
     <xacro:unless value="${angle > 0}">
       <xacro:property name="d0" value="0.0" />
@@ -13,7 +13,7 @@
     <xacro:property name="d" value="${d0 + tip_dist_mm}" />
     
     <xacro:property name="offset" value="${sin(theta)*d/1000.0}" />
-    <xacro:property name="length" value="${cos(theta)*d/1000.0 - d0/(cos(theta)*1000.0)}" />
+    <xacro:property name="length" value="${cos(theta)*d/1000.0 - (d0/1000)/(cos(theta))}" />
     
     <xacro:unless value="${connected_to == ''}">
       <joint name="${arm_id}_holder_tcp_joint" type="fixed">
@@ -30,19 +30,40 @@
       </visual>
     </link>
     <joint name="${arm_id}_holder_base_joint" type="fixed">
-      <!-- Move origin to one end  -->
+      <!-- Move origin to one end of the pen holder  -->
       <origin rpy="0.0 0.0 0.0" xyz="${50.0/2.0/1000} 0.0 0.0"/>
       <parent link="${arm_id}_holder"/>
       <child link="${arm_id}_holder_base_link"/>
     </joint>
     <link name="${arm_id}_holder_base_link" />
 
+    <joint name="${arm_id}_debug_tcp" type="fixed">
+      <!-- Move origin to one end of the pen holder  -->
+      <origin rpy="0.0 0.0 0.0" xyz="${tip_dist_mm/1000} 0.0 ${tip_height_mm/1000}"/>
+      <parent link="${arm_id}_holder_base_link"/>
+      <child link="${arm_id}_debug_tcp_link"/>
+    </joint>
+    <link name="${arm_id}_debug_tcp_link">
+      <visual>
+        <geometry>
+          <sphere radius="0.006"/>
+        </geometry>
+        <material name="dbg_color">
+            <color rgba="0 1 1 1"/>
+        </material>
+      </visual>
+    </link>
+
+
     <joint name="${arm_id}_pen_joint" type="fixed">
       <!-- Find height based on horizontal distance from end to tip of tool -->
-      <origin rpy="0.0 ${theta + pi/2} 0.0" xyz="0.0 0.0 ${offset}"/>
+      <!-- <origin rpy="0.0 ${theta + pi/2} 0.0" xyz="0.0 0.0 ${-offset}"/> -->
+      <origin rpy="0.0 ${theta + pi/2} 0.0"
+        xyz="${sin(theta)*offset} 0.0 ${cos(theta)*offset}"/>
       <parent link="${arm_id}_holder_base_link"/>
       <child link="${arm_id}_pen"/>
     </joint>
+
     <link name="${arm_id}_pen">
       <visual>
         <geometry>
@@ -53,7 +74,7 @@
     <link name='${arm_id}_pen_tcp'>
       <visual>
         <geometry>
-          <sphere radius="0.02"/>
+          <sphere radius="0.005"/>
         </geometry>
         <material name="tipcolor">
             <color rgba="1 1 1 1"/>

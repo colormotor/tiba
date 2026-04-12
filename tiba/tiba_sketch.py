@@ -18,7 +18,7 @@ from importlib import reload
 import importlib
 
 from tiba import lqt
-import imgui
+from slimgui import imgui
 from . import utils, svg, bezier
 import roboticstoolbox as rtb
 import pdb
@@ -75,17 +75,17 @@ state = lambda: None
 
 # # GUI helpers
 # def imgui_title(text):
-#     imgui.push_style_color(imgui.COLOR_HEADER, 0.3, 0.3, 0.3, 1.0)
+#     imgui.push_style_color(imgui.Col.HEADER, [0.3, 0.3, 0.3, 1.0])
 #     imgui.selectable(text, True)
 #     imgui.pop_style_color()
 
 # def imgui_info_text(text):
-#     imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
+#     imgui.push_style_color(imgui.Col.TEXT, [0.6, 0.6, 0.6, 1.0])
 #     imgui.text(text)
 #     imgui.pop_style_color()
 
 # def imgui_text_separator(text):
-#     imgui.push_style_color(imgui.COLOR_TEXT, 0.6, 0.6, 0.6, 1.0)
+#     imgui.push_style_color(imgui.Col.TEXT, [0.6, 0.6, 0.6, 1.0])
 #     imgui.text(text)
 #     imgui.same_line()
 #     imgui.separator()
@@ -94,7 +94,7 @@ state = lambda: None
 # def imgui_color_button(text, color):
 #     if len(color) == 3:
 #         color = np.concatenate([color, [1.0]])
-#     imgui.push_style_color(imgui.COLOR_BUTTON, *color)
+#     imgui.push_style_color(imgui.Col.BUTTON, color)
 #     res = imgui.button(text)
 #     imgui.pop_style_color()
 #     return res
