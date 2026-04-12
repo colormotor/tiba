@@ -167,7 +167,7 @@ class iLQRPlannerVelocity:
             horizon = len(timesteps)+start
             cmd_penalties = list(r*np.ones(nb_control_vars))
 
-            if False: #limits:
+            if len(limits):
                 sys = PosOrnPlannerSys(self.rbt, keypoints, cmd_penalties, limits[1], limits[0], horizon, 1, cfg.dt)
             else:
                 sys = PosOrnPlannerSys(self.rbt, keypoints, cmd_penalties, horizon, 1, cfg.dt)

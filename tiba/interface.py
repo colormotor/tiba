@@ -367,6 +367,7 @@ class TibaInterface:
                  handeye_config_path='panda_eye_hand_calib_eye_on_hand.yaml',
                  base_path='./../robots/tiba/settings',
                  drawing_orientation_stiffness=0.7,
+                 script_orientation_stiffness=0.7,
                  ):
 
         if not os.path.isdir(base_path):
@@ -380,6 +381,7 @@ class TibaInterface:
         tools_path = os.path.join(base_path, tools_path)
 
         self.drawing_orientation_stiffness = drawing_orientation_stiffness
+        self.script_orientation_stiffness = script_orientation_stiffness
         self.editor = PositionEditor(positions_path)
         self.pad = drawing_pad.DrawingPad(pad_path)
         self.pad.load()
@@ -987,7 +989,7 @@ class TibaInterface:
         trajectories = self.pad.augment_with_pen_orientation(trajectories, self.robot, self.robot.qr)
         self.plan_task_trajectories(trajectories, rest)
 
-    def compute_task_trajectories(self, trajectories, rest=0.0, q=None, stiff_orn=False, tip_frame='tiba_pen_tcp'):
+    def compute_task_trajectories(self, trajectories, rest=0.0, q=None, stiff_orn=False, script_motion=False, tip_frame='tiba_pen_tcp'):
         ''' Plan trajectories for the robot given in task space as
         a sequence of position and quaternion rotation poses [x, y, z, q_0, q_1, q_2, q_3].
         The trajectory is assumed to be sampled at a frequency of (1.0 / cfg.dt) Hz.
@@ -997,9 +999,12 @@ class TibaInterface:
         if q is None:
             q = self.robot.q
 
-        precisions = np.ones(7)
+        precisions = np.ones(6)
         if not stiff_orn:
-            precisions[3:] *= self.drawing_orientation_stiffness
+            if not script_motion:
+                precisions[3:] *= self.drawing_orientation_stiffness
+            else:
+                precisions[3:] *= self.script_orientation_stiffness
         planner = ilqr.iLQRPlannerVelocity(self.robot.urdf_file,
                                            q,
                                            subsample=int(cfg.dt/cfg.robot_dt),
@@ -1008,7 +1013,7 @@ class TibaInterface:
         #
         Qs, dQs, linked_trajectories = planner.plan(trajectories,
                                                     rest=rest,
-                                                    limits=robot.panda_limits,
+                                                    limits=self.robot.limits, #panda_limits,
                                                     weights=precisions,
                                                     get_trajectories=True,
                                                     r=cfg.ilqr_r)
@@ -1126,7 +1131,7 @@ class TibaInterface:
         def tool_align(y):
             dest_pose = tu.align_pose_zy(state.pose, [0, 0, -1], [-1, 0, 0])
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
-            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, script_motion=True)
             if len(Qs):
                 self.motions[-1].Qs += list(Qs)
                 self.motions[-1].dQs += list(dQs)
@@ -1142,7 +1147,7 @@ class TibaInterface:
             dest_pose = tu.align_pose_zy(dest_pose, [0, 0, -1], y)
             #dest_pose = self.robot.hand_frame_to_pen_tcp(dest_pose)
             trajectories = [tu.approach_sequence([state.hand_pose, dest_pose])]
-            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp')
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp', script_motion=True)
             if len(Qs):
                 self.motions[-1].Qs += list(Qs)
                 self.motions[-1].dQs += list(dQs)
@@ -1159,7 +1164,7 @@ class TibaInterface:
             dest_pose[:3, 3] += v
             #print(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
-            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, script_motion=True)
             if len(Qs):
                 self.motions[-1].Qs += list(Qs)
                 self.motions[-1].dQs += list(dQs)
@@ -1172,7 +1177,7 @@ class TibaInterface:
             dest_pose = np.array(state.hand_pose)
             dest_pose[:3, 3] = pos
             trajectories = [tu.approach_sequence([state.hand_pose, dest_pose])]
-            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp')
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, tip_frame='tiba_hand_tcp', script_motion=True)
             if len(Qs):
                 self.motions[-1].Qs += list(Qs)
                 self.motions[-1].dQs += list(dQs)
@@ -1186,7 +1191,7 @@ class TibaInterface:
             dest_pose[:3, 3] = pos
             #print(dest_pose)
             trajectories = [tu.approach_sequence([state.pose, dest_pose])]
-            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, script_motion=True)
             if len(Qs):
                 self.motions[-1].Qs += list(Qs)
                 self.motions[-1].dQs += list(dQs)
@@ -1210,7 +1215,7 @@ class TibaInterface:
                                                                   tol=0.01)
             orn = tu.to_pos_orn(state.pose)[3:]
             trajectories = [[np.concatenate([p, orn]) for p in P] for P in paths]
-            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q)
+            Qs, dQs = self.compute_task_trajectories(trajectories, q=state.q, script_motion=True)
             if len(Qs):
                 self.motions[-1].Qs += list(Qs)
                 self.motions[-1].dQs += list(dQs)

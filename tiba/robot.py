@@ -223,6 +223,10 @@ class TibaRobot(Robot):
 
         self.pressure_range = pressure_range
 
+    @property
+    def limits(self):
+        return [self.q_min, self.q_max]
+
     def check_joint_trajectory(self, Qs, dQs):
         qmin = np.min(Qs, axis=0)
         qmax = np.max(Qs, axis=0)
