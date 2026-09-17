@@ -687,7 +687,7 @@ class TibaSketch:
         selected_script = {}
         if itiba.scripts:
             names = list(itiba.scripts.keys())
-            clicked, self.cur_script = imgui.listbox("Scripts", self.cur_script, names)
+            clicked, self.cur_script = imgui.list_box("Scripts", self.cur_script, names)
             if imgui.button('Reload scripts'):
                 itiba.reload_scripts()
 
@@ -820,8 +820,9 @@ class TibaSketch:
                                 self.itiba.execute()
                             else:
                                 self.itiba.send_joint_trajectory()
-                                #
-                    if imgui.begin_popup_modal('Execute').opened:
+
+                    opened, _ = imgui.begin_popup_modal('Execute')
+                    if opened:
                         imgui.text('Are you sure?')
                         if imgui.button('OK'):
                             if 'no_server' in self.flags:
@@ -858,8 +859,9 @@ class TibaSketch:
                 self.threads[0]()
                 self.threads.pop(0)
 
-        imgui.set_next_window_size(200, 70)
-        if imgui.begin_popup_modal("Progress").opened:
+        imgui.set_next_window_size([200, 70])
+        opened, _ = imgui.begin_popup_modal("Progress")
+        if opened:
             imgui.text(config.state.progress_text)
             imgui.progress_bar(config.state.progress / config.state.progress_max)
 

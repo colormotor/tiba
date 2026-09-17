@@ -276,7 +276,7 @@ def draw():
                 config.state.progress_text = threads[0].name
                 threads[0].start()
 
-    imgui.set_next_window_size(200, 70)
+    imgui.set_next_window_size([200, 70])
     if imgui.begin_popup_modal("Progress").opened:
         imgui.text(config.state.progress_text)
         imgui.progress_bar(config.state.progress / config.state.progress_max)
