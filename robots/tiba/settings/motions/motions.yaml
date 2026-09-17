@@ -5,6 +5,14 @@ Dip-Rim-0:
         clean_radius_mm: 14.0
     desc: "Dip brush in first container"
 
+Dip-rim-0:
+    file: "./motions/dip_rim.py"
+    args:
+        dip_pos: [0.14202855877727674, -0.3960229860499521, 0.10092850005493607]
+        dip_radius_mm: 5.0
+        dip_depth_mm: 35.0
+        clean_radius_mm: 24.0
+    desc: "Dip brush in container 0 with cleaning"
 Dip-0:
     file: "./motions/dip.py"
     args:
@@ -17,15 +25,16 @@ Dip-1:
     args:
         dip_pos: [0.07793848754674991, -0.3958093124503106, 0.10151489683015202]
         dip_radius_mm: 10.0
-        dip_depth_mm: 35.0
+        dip_depth_mm: 43.0
     desc: "Dip brush in container 1"
 Dip-2:
-    file: "./motions/dip.py"
+    file: "./motions/dip_rim.py"
     args:
-        dip_pos: [0.01267480824906245, -0.3960966011026406, 0.10121601162353465]
+        dip_pos: [0.01167480824906245, -0.3960966011026406, 0.10121601162353465]
         dip_radius_mm: 10.0
         dip_depth_mm: 35.0
-    desc: "Dip brush in container 2"
+        clean_radius_mm: 25.0
+    desc: "Dip brush in container 2 with cleaning"
 Dip-3:
     file: "./motions/dip.py"
     args:

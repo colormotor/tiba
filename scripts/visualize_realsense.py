@@ -2,7 +2,7 @@
 import numpy as np
 from sensor_msgs.msg import Image as msg_Image
 import rospy
-import imgui
+from slimgui import imgui
 params = {'Test':(1.0, {'min':0.0, 'max':1.0})}
 params = sketch.parameters(params)
 
