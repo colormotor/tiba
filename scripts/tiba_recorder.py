@@ -9,6 +9,7 @@ import numpy as np
 import importlib
 from tiba import lqt
 from slimgui import imgui
+
 # from tiba import utils, geom, svg
 import roboticstoolbox as rtb
 import tiba
@@ -26,6 +27,7 @@ from tiba import trajectory_utils as tu
 from tiba.tiba_sketch import TibaSketch
 from tiba.robot import TibaRobot
 from tiba import spatial, bezier, utils, svg, geom, config, ui
+
 reload(spatial)
 from tiba.interface import FrankaButton
 
@@ -37,17 +39,20 @@ reload(ui)
 
 # Add the --robot argument
 parser = argparse.ArgumentParser()
-parser.add_argument('--robot', type=str, default='tiba', help='Name of the robot (default: tiba)')
+parser.add_argument(
+    "--robot", type=str, default="tiba", help="Name of the robot (default: tiba)"
+)
 # Parse the arguments
 args = parser.parse_args()
-base_path = './../robots/' + args.robot + '/settings'
+base_path = "./../robots/" + args.robot + "/settings"
 
 
-panda_loader = importlib.find_loader('panda_py')
+panda_loader = importlib.find_loader("panda_py")
 if panda_loader is not None:
     import panda_py
     from panda_py import libfranka
     from panda_py import controllers
+
     has_robot = True
 else:
     print("!!!! Panda py not installed, not connecting to robot")
@@ -57,24 +62,29 @@ np.set_printoptions(suppress=True)
 
 
 def parameters():
-    return {'Seed': (5, {'min': 0, 'max': 100}),
-          'GUI hue': (0.12, {'min':0, 'max': 1.0}),
-          'Gripper mm': (34.0, {'min': 2, 'max': 200}),
-          'Guiding': {
-              'x': (True, {'sameline':0}),
-              'y': (True, {'sameline':1}),
-              'z': (True, {'sameline':1}),
-              'rot': (True, {'sameline':0}),
-              'elbow': (True, {'sameline':1})
-          },
-          }
+    return {
+        "Seed": (5, {"min": 0, "max": 100}),
+        "GUI hue": (0.12, {"min": 0, "max": 1.0}),
+        "Gripper mm": (34.0, {"min": 2, "max": 200}),
+        "Guiding": {
+            "x": (True, {"sameline": 0}),
+            "y": (True, {"sameline": 1}),
+            "z": (True, {"sameline": 1}),
+            "rot": (True, {"sameline": 0}),
+            "elbow": (True, {"sameline": 1}),
+        },
+    }
+
 
 button_color = [1.0, 0.5, 0.0, 1.0]
+
 
 def random_q():
     return list(np.random.uniform(-np.pi, np.pi, 7))
 
-tsketch = TibaSketch(flags=['no_server'])
+
+tsketch = TibaSketch(flags=["no_server"])
+
 
 def on_event(event):
     print(event)
@@ -83,13 +93,13 @@ def on_event(event):
         return
     robot = tsketch.robot
     itiba = tsketch.itiba
-    print('Grasped: ', itiba.grasped)
+    print("Grasped: ", itiba.grasped)
     if circle_button(event):
         if not itiba.grasped:
-            print('Grasp')
+            print("Grasp")
             itiba.grasp(params.gripper_mm)
         else:
-            print('Ungrasp')
+            print("Ungrasp")
             itiba.ungrasp()
     if cross_button(event):
         if state.plane_calibration:
@@ -102,7 +112,7 @@ def on_event(event):
         too_close = False
         for pose in state.handeye_poses:
             d = np.linalg.norm(np.array(q) - pose)
-            print('dist ', d)
+            print("dist ", d)
             if d < 1e-1:
                 print("Pose too close")
                 too_close = True
@@ -110,16 +120,17 @@ def on_event(event):
         if not too_close:
             print("Adding pose ", q)
             state.handeye_poses.append(np.array(q))
-            utils.save_json({'poses': state.handeye_poses}, handeye_poses_path)
+            utils.save_json({"poses": state.handeye_poses}, handeye_poses_path)
         # if itiba.grasped:
         #     tsketch.editor.add_grip_step(params.gripper_mm)
         # else:
         #     tsketch.editor.add_ungrip_step()
 
+
 if has_robot:
-    hostname = '172.16.0.2'
-    #desk = panda_py.Desk(hostname, 'admin', 'adminadmin') #'colormotor', 'Rapidograph22!')
-    desk = panda_py.Desk(hostname, 'colormotor', 'Rapidograph22!')
+    hostname = "172.16.0.2"
+    # desk = panda_py.Desk(hostname, 'admin', 'adminadmin') #'colormotor', 'Rapidograph22!')
+    desk = panda_py.Desk(hostname, "colormotor", "Rapidograph22!")
     print("Created desk")
     if not desk.has_control():
         print("Forcing control")
@@ -133,15 +144,15 @@ else:
     desk = None
     panda = None
 
-#robot = TibaRobot(45, 11.5, 15) # Molotow
-#robot = TibaRobot(60, 0, 0) # Molotow
+# robot = TibaRobot(45, 11.5, 15) # Molotow
+# robot = TibaRobot(60, 0, 0) # Molotow
 # robot = TibaRobot(74, 0, 15) # Small brush
 
 
-handeye_poses_path = '../settings/handeye_poses.json'
+handeye_poses_path = "../settings/handeye_poses.json"
 state = lambda: None
 state.plane_calibration = False
-state.programming = True # Assume robot starts in programming mode?
+state.programming = True  # Assume robot starts in programming mode?
 state.dest_pose = None
 state.move_amount = np.zeros(3)
 state.handeye_poses = []
@@ -150,9 +161,10 @@ state.cam_image = None
 state.cam_info = None
 state.marker = None
 
-circle_button = FrankaButton('circle')
-cross_button = FrankaButton('cross')
-check_button = FrankaButton('check')
+circle_button = FrankaButton("circle")
+cross_button = FrankaButton("cross")
+check_button = FrankaButton("check")
+
 
 def ros_subscribe():
     import rospy
@@ -164,31 +176,44 @@ def ros_subscribe():
     def pose_callback(msg):
         position = msg.pose.position
         orientation = msg.pose.orientation
-        posorn = np.array([position.x, position.y, position.z,
-                           orientation.w, orientation.x, orientation.y, orientation.z])
+        posorn = np.array(
+            [
+                position.x,
+                position.y,
+                position.z,
+                orientation.w,
+                orientation.x,
+                orientation.y,
+                orientation.z,
+            ]
+        )
         state.aruco_pose = np.array(tu.to_pose(posorn))
-        
+
     rospy.Subscriber("/aruco_single/pose", PoseStamped, pose_callback)
     print("Subscribed to aruco marker")
 
     def got_image(data):
-        im = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width, -1)
+        im = np.frombuffer(data.data, dtype=np.uint8).reshape(
+            data.height, data.width, -1
+        )
         state.cam_image = im
-    #print(data.shape)
-    rospy.Subscriber('/camera/color/image_raw', msg_Image, got_image)
+
+    # print(data.shape)
+    rospy.Subscriber("/camera/color/image_raw", msg_Image, got_image)
     print("Subscribed to realsense")
 
-    
     def camera_info_callback(msg):
         state.cam_info = msg
-        
-    rospy.Subscriber('/camera/color/camera_info', CameraInfo, camera_info_callback)
+
+    rospy.Subscriber("/camera/color/camera_info", CameraInfo, camera_info_callback)
     print("Subscribed to camera info")
 
     def marker_callback(msg):
         state.marker = msg
-    rospy.Subscriber('/aruco_single/marker', Marker, marker_callback)
+
+    rospy.Subscriber("/aruco_single/marker", Marker, marker_callback)
     print("Subscribed to marker")
+
 
 def ros_camera_info_to_cv(cam_info):
     # Camera matrix (3x3)
@@ -199,21 +224,30 @@ def ros_camera_info_to_cv(cam_info):
 
     return camera_matrix, distortion_coefficients
 
+
 def check_collision(q, itiba):
     r = itiba.collision_robot
     r.q = q
-    collision_links = [link for link in r.links if link.collision][3:] #[4:-1]
+    collision_links = [link for link in r.links if link.collision][3:]  # [4:-1]
     print([l.name for l in collision_links])
     n = len(collision_links)
     for i in range(n):
         stop = False
-        for j in range(i+2, n):
-            isCollide = collision_links[i].iscollided(shape = collision_links[j].collision[0])
+        for j in range(i + 2, n):
+            isCollide = collision_links[i].iscollided(
+                shape=collision_links[j].collision[0]
+            )
             if isCollide:
                 stop = True
-                print("--COLLISION DETECT:",collision_links[i].name," will collide with ",collision_links[j].name)
+                print(
+                    "--COLLISION DETECT:",
+                    collision_links[i].name,
+                    " will collide with ",
+                    collision_links[j].name,
+                )
                 break
-        if stop: break
+        if stop:
+            break
     return stop
 
 
@@ -223,22 +257,27 @@ def setup():
     tsketch.add_parameters(params)
     params = sketch._prepare_parameters(params)
 
-    #sketch.set_gui_callback(gui)
-    create_canvas(1024, 768, 350) #, 300)
+    # sketch.set_gui_callback(gui)
+    create_canvas(1024, 768, 350)  # , 300)
     set_color_scale(1.0)
 
     try:
-        tsketch.init(sketch, panda=panda, gripper=gripper, init_node='tiba_recorder', base_path=base_path)
+        tsketch.init(
+            sketch,
+            panda=panda,
+            gripper=gripper,
+            init_node="tiba_recorder",
+            base_path=base_path,
+        )
     except Exception as e:
         print(e)
-        assert(False)
+        assert False
 
     if os.path.isfile(handeye_poses_path):
         h = utils.load_json(handeye_poses_path)
-        state.handeye_poses = h['poses']
+        state.handeye_poses = h["poses"]
 
-
-    #ros_subscribe()
+    # ros_subscribe()
     # # Dip pos
     # tsketch.robot.q = [                   -1.2621834561240015,
     #                 -0.5742350572707479,
@@ -270,7 +309,7 @@ def setup():
     # ]
     # Self collision
 
-    #tsketch.robot.q = [-1.639689114087109, -1.7716644918674729, 0.007238895131838701, -3.013367922364223, -0.015000028089361048, 0.9541045565059841, 0.7067115097185542]
+    # tsketch.robot.q = [-1.639689114087109, -1.7716644918674729, 0.007238895131838701, -3.013367922364223, -0.015000028089361048, 0.9541045565059841, 0.7067115097185542]
 
     check_collision(tsketch.robot.q, tsketch.itiba)
 
@@ -287,48 +326,58 @@ def exit():
     tsketch.release()
     print("Done release sketch")
     if has_robot:
-        #desk.release_control()
+        # desk.release_control()
         print("Stopping listen")
         if desk._listening:
             desk.stop_listen()
-    
+
     print("End exit")
+
 
 def gui():
     if has_robot:
-        changed, state.programming = imgui.checkbox("Programming mode", state.programming)
+        changed, state.programming = imgui.checkbox(
+            "Programming mode", state.programming
+        )
         if changed:
             tsketch.itiba.set_programming_mode(desk, state.programming)
 
-    changed, state.plane_calibration = imgui.checkbox("Plane calibration", state.plane_calibration)
+    changed, state.plane_calibration = imgui.checkbox(
+        "Plane calibration", state.plane_calibration
+    )
 
-    if (not state.plane_calibration):
+    if not state.plane_calibration:
         tsketch.itiba.motion_gui(imgui)
     else:
-        if imgui.button('Clear points'):
+        if imgui.button("Clear points"):
             tsketch.itiba.pad.clear()
-    
+
     ui.imgui_text_separator("Robot")
-    changed, params.config.tool = imgui.combo("Tool", params.config.tool, tsketch.get_tool_names())
+    changed, params.config.tool = imgui.combo(
+        "Tool", params.config.tool, tsketch.get_tool_names()
+    )
     if changed:
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
-    if imgui.button('Reload tool'):
+    if imgui.button("Reload tool"):
         tsketch.set_tool(tsketch.get_tool_by_index(params.config.tool))
-    changed, tsketch.itiba.safe_mode = ui.imgui_color_checkbox("Safe mode", tsketch.itiba.safe_mode)
+    changed, tsketch.itiba.safe_mode = ui.imgui_color_checkbox(
+        "Safe mode", tsketch.itiba.safe_mode
+    )
 
     ui.imgui_text_separator("Scripts")
     script = tsketch.script_gui()
     if script:
-        args = script['args'] if 'args' in script else {}
-        tsketch.plan_script(script['file'], **args)
-        if tsketch.itiba.Qs:
-            print('Script plan sizes:', len(tsketch.itiba.Qs), len(tsketch.itiba.dQs))
+        args = script["args"] if "args" in script else {}
+        tsketch.plan_script(script["file"], **args)
+        if tsketch.itiba.motions:
+            Qs, dQs = tsketch.itiba.get_planned_joint_trajectory()
+            print("Script plan sizes:", len(Qs), len(dQs))
             # tsketch.itiba.plot_trajectory_stats()
     ui.imgui_text_separator("Motion")
-    if imgui.button('Align hand for tool'):
-        #tsketch.itiba.set_programming_mode(desk, False)
+    if imgui.button("Align hand for tool"):
+        # tsketch.itiba.set_programming_mode(desk, False)
         robot = tsketch.robot
-        cur_pos = robot.get_pos(None, 'tiba_hand_tcp')
+        cur_pos = robot.get_pos(None, "tiba_hand_tcp")
         # cur_frame = robot.pen_tcp_frame()
         # dest_frame = np.array(cur_frame)
         # dest_frame[:3, 0] = [0, -1, 0]
@@ -337,19 +386,21 @@ def gui():
         # dest_frame = tu.trnorm(dest_frame)
         # print(dest_frame)
 
-        #dest_pos = tu.to_pose(cur_frame)
-        #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
-        #tu.to_pose(cur_pos) #cur_frame #tu.to_pose(
-        dest_pos = tu.align_pos_zy(cur_pos, [0, 0, -1], [0, -1, 0]) # On left (pick pens)
-        #cur_frame = robot.pen_tcp_pose() #robot.hand_frame_to_pen_tcp(tu.to_pose(cur_pos))
-        #dest_frame = robot.hand_frame_to_pen_tcp(tu.to_pose(dest_pos))
+        # dest_pos = tu.to_pose(cur_frame)
+        # dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
+        # tu.to_pose(cur_pos) #cur_frame #tu.to_pose(
+        dest_pos = tu.align_pos_zy(
+            cur_pos, [0, 0, -1], [0, -1, 0]
+        )  # On left (pick pens)
+        # cur_frame = robot.pen_tcp_pose() #robot.hand_frame_to_pen_tcp(tu.to_pose(cur_pos))
+        # dest_frame = robot.hand_frame_to_pen_tcp(tu.to_pose(dest_pos))
 
         trajectories = [tu.approach_sequence([cur_pos, dest_pos])]
-        tsketch.plan_task_trajectories(trajectories, tip_frame='tiba_hand_tcp')
+        tsketch.plan_task_trajectories(trajectories, tip_frame="tiba_hand_tcp")
         # tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
         #
-    if imgui.button('Align pen for dip'):
-        #tsketch.itiba.set_programming_mode(desk, False)
+    if imgui.button("Align pen for dip"):
+        # tsketch.itiba.set_programming_mode(desk, False)
         robot = tsketch.robot
         cur_pos = robot.pen_tcp_pos()
         # cur_frame = robot.pen_tcp_frame()
@@ -359,24 +410,26 @@ def gui():
         # dest_frame[:3, 2] = [0, 0, -1]
         # dest_frame = tu.trnorm(dest_frame)
         # print(dest_frame)
-        #dest_pos = tu.to_pose(cur_frame)
-        #dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
-        dest_pos = tu.align_pos_zy(cur_pos, [0, 0, -1], [-1, 0, 0]) # On left (pick pens)
+        # dest_pos = tu.to_pose(cur_frame)
+        # dest_pos = align_pos_zy(cur_pos, [0, 0, -1], [1, 0, 0]) # On right (dip)
+        dest_pos = tu.align_pos_zy(
+            cur_pos, [0, 0, -1], [-1, 0, 0]
+        )  # On left (pick pens)
 
         trajectories = [tu.approach_sequence([cur_pos, dest_pos])]
         tsketch.plan_task_trajectories(trajectories)
-        tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+        tsketch.itiba.plot_trajectory_stats()  # self.task_trajectories_augmented)
         #
 
-        #tsketch.itiba.set_programming_mode(desk, state.programming)
-    if imgui.button('Align pen to pad'):
-        #tsketch.itiba.set_programming_mode(desk, False)
+        # tsketch.itiba.set_programming_mode(desk, state.programming)
+    if imgui.button("Align pen to pad"):
+        # tsketch.itiba.set_programming_mode(desk, False)
         robot = tsketch.robot
         cur_pose = robot.pen_tcp_pose()
         dest_pose = tsketch.itiba.pad.align_pose_to_pad(cur_pose)
         trajectories = [tu.approach_sequence([cur_pose, dest_pose])]
         tsketch.plan_task_trajectories(trajectories)
-        tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+        tsketch.itiba.plot_trajectory_stats()  # self.task_trajectories_augmented)
         #
 
     # if imgui.button('Try script'):
@@ -388,92 +441,111 @@ def gui():
     dest_position = None
 
     for i in range(3):
-        _, state.move_amount[i] = imgui.slider_float("Move %s mm"%['X', 'Y', 'Z'][i], state.move_amount[i], -300, 300.0)
+        _, state.move_amount[i] = imgui.slider_float(
+            "Move %s mm" % ["X", "Y", "Z"][i], state.move_amount[i], -300, 300.0
+        )
 
     dest_frame = np.array(tsketch.robot.pen_tcp_frame())
-    dest_frame[:3, 3] += state.move_amount/1000.0
-    #print(dest_frame)
+    dest_frame[:3, 3] += state.move_amount / 1000.0
+    # print(dest_frame)
     state.dest_pose = tu.to_pose(dest_frame)
 
     if np.linalg.norm(state.move_amount) > 0:
         dest_frame = np.array(tsketch.robot.pen_tcp_frame())
-        if imgui.button('Make Move'):
+        if imgui.button("Make Move"):
             dest_position = state.dest_pose
             state.move_amount = np.zeros(3)
     if tsketch.itiba.editor.get_cur_position():
-        if ui.imgui_color_button('Cartesian move to position'):
+        if ui.imgui_color_button("Cartesian move to position"):
             q = tsketch.itiba.editor.get_cur_position()
             dest_position = tsketch.robot.pen_tcp_pos(q)
 
-        if ui.imgui_color_button('Joint move to position'):
+        if ui.imgui_color_button("Joint move to position"):
             q = tsketch.itiba.editor.get_cur_position()
             tsketch.plan_joint_approach(q)
-            #tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
+            # tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
 
     if dest_position is not None:
         cur_pos = tsketch.robot.pen_tcp_pos()
         trajectories = [tu.approach_sequence([cur_pos, dest_position])]
         tsketch.plan_task_trajectories(trajectories)
-        
+
         # tsketch.itiba.plot_trajectory_stats() #self.task_trajectories_augmented)
     tsketch.gui()
 
-    if tsketch.itiba.Qs:
+    if tsketch.itiba.motions:
+        Qs, dQs = tsketch.itiba.get_planned_joint_trajectory()
         imgui.separator()
         if not has_robot:
-            if ui.imgui_color_button('Simulate trajectory'):
-                #self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
+            if ui.imgui_color_button("Simulate trajectory"):
+                # self.threads.append(threading.Thread(target=self.itiba.simulate, name='nogui'))
                 tsketch.itiba.simulate()
-                tsketch.robot.q = tsketch.itiba.Qs[-1]
+                tsketch.robot.q = Qs[-1]
         else:
-            if imgui.button('Simulate trajectory'):
+            if imgui.button("Simulate trajectory"):
                 tsketch.itiba.simulate()
                 if not has_robot:
-                    tsketch.robot.q = tsketch.itiba.Qs[-1]
+                    tsketch.robot.q = Qs[-1]
 
             if ui.imgui_color_button("Execute trajectory"):
-                imgui.open_popup('Execute')
+                imgui.open_popup("Execute")
 
-            if imgui.begin_popup_modal('Execute').opened:
-                imgui.text('Are you sure?')
-                if imgui.button('OK'):
+            if imgui.begin_popup_modal("Execute").opened:
+                imgui.text("Are you sure?")
+                if imgui.button("OK"):
                     tsketch.itiba.set_programming_mode(desk, False)
                     tsketch.itiba.execute()
                     # tsketch.itiba.set_programming_mode(desk, state.programming) #
                     imgui.close_current_popup()
                 imgui.same_line()
-                if imgui.button('Cancel'):
+                if imgui.button("Cancel"):
                     imgui.close_current_popup()
                 imgui.end_popup()
-        if imgui.button('Break'):
+        if imgui.button("Break"):
             from PyLQR.sim import KDLRobot
-            q = tsketch.itiba.Qs[-1]
-            rbt = KDLRobot(tsketch.robot.urdf_file, 'tiba_link0', 'tiba_pen_tcp', q, np.zeros(7))
-            hrbt = KDLRobot(tsketch.robot.urdf_file, 'tiba_link0', 'tiba_hand_tcp', q, np.zeros(7))
+
+            q = Qs[-1]
+            rbt = KDLRobot(
+                tsketch.robot.urdf_file, "tiba_link0", "tiba_pen_tcp", q, np.zeros(7)
+            )
+            hrbt = KDLRobot(
+                tsketch.robot.urdf_file, "tiba_link0", "tiba_hand_tcp", q, np.zeros(7)
+            )
             robot = tsketch.robot
-            x0 = tu.to_pos_orn(tu.to_pose(np.concatenate([rbt.get_ee_pos(), rbt.get_ee_orn()])))
-            hx0 = tu.to_pos_orn(tu.to_pose(np.concatenate([hrbt.get_ee_pos(), hrbt.get_ee_orn()])))
+            x0 = tu.to_pos_orn(
+                tu.to_pose(np.concatenate([rbt.get_ee_pos(), rbt.get_ee_orn()]))
+            )
+            hx0 = tu.to_pos_orn(
+                tu.to_pose(np.concatenate([hrbt.get_ee_pos(), hrbt.get_ee_orn()]))
+            )
             pdb.set_trace()
 
-    if 'guiding' in sketch.gui.changed:
-        print('Guiding params')
-        panda.get_robot().set_guiding_mode([params.guiding.x,
-                                            params.guiding.y,
-                                            params.guiding.z,
-                                            params.guiding.rot,
-                                            params.guiding.rot,
-                                            params.guiding.rot], params.guiding.elbow)
+    if "guiding" in sketch.gui.changed:
+        print("Guiding params")
+        panda.get_robot().set_guiding_mode(
+            [
+                params.guiding.x,
+                params.guiding.y,
+                params.guiding.z,
+                params.guiding.rot,
+                params.guiding.rot,
+                params.guiding.rot,
+            ],
+            params.guiding.elbow,
+        )
+
 
 def gui_window():
-    #imgui.button("Where am I")
+    # imgui.button("Where am I")
     # imgui.core.show_demo_window()
     pass
+
 
 def draw():
     if has_robot:
         tsketch.itiba.read_states()
 
-    #print(desk._token.id, desk._get_active_token()) #has_control())
+    # print(desk._token.id, desk._get_active_token()) #has_control())
     background(0)
     np.random.seed(params.seed)
 
@@ -487,12 +559,15 @@ def draw():
 
     fr = tsketch.robot.pen_tcp_frame()
     pose = tsketch.robot.pen_tcp_pose()
-    #print(np.array(pose))
-    #print('Frame is valid:', SE3.isvalid(np.array(pose)))
+    # print(np.array(pose))
+    # print('Frame is valid:', SE3.isvalid(np.array(pose)))
     text_size(15)
     fill(1)
     for i in range(3):
-        text(['x', 'y', 'z'][i] + ': [%.2f %.2f %.2f]'%tuple(fr[:3, i]), [10, 60 + i*20])
+        text(
+            ["x", "y", "z"][i] + ": [%.2f %.2f %.2f]" % tuple(fr[:3, i]),
+            [10, 60 + i * 20],
+        )
 
     # tsketch.itiba.editor.draw_steps(tsketch.v3d, tsketch.robot, [0, height-70], 70, width)
 
@@ -504,16 +579,17 @@ def draw_gl():
 
     if state.dest_pose is not None:
         v3d.frame(np.array(state.dest_pose), alpha=0.9, scale=0.1)
-    
+
     # q = tsketch.robot.q
     # hand_frame = np.array(tsketch.robot.fkine(q, start='tiba_link0', end='tiba_hand'))
     # cam_pose =  hand_frame @ np.array(hand_to_camera)
     # v3d.frame(cam_pose, alpha=0.5, scale=0.1)
 
     # if state.aruco_pose is not None:
-    #     v3d.frame(cam_pose@state.aruco_pose, alpha=1, scale=0.1)        
+    #     v3d.frame(cam_pose@state.aruco_pose, alpha=1, scale=0.1)
     tsketch.end_draw_gl()
-    
+
+
 def mouse_pressed(button, modifiers):
     tsketch.mouse_pressed(button, modifiers)
 
@@ -522,5 +598,5 @@ def mouse_dragged(button, modifiers):
     tsketch.mouse_dragged(button, modifiers)
 
 
-if __name__== '__main__':
+if __name__ == "__main__":
     run()
