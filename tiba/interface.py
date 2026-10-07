@@ -918,11 +918,12 @@ class TibaInterface:
         if self.gripper is None:
             print('No gripper!')
             return
-        print('Grasping')
+        print('Graspingggg', mm/1000, speed, force, epsilon_inner_mm/1000, epsilon_outer_mm/1000 )
         self.gripper.grasp(mm/1000, speed, force,
                            epsilon_inner_mm/1000,
                            epsilon_outer_mm/1000) # Might want to increase pressure current 10 N
-
+        #self.gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04)
+        
     def ungrasp(self):
         ''' Release the gripper'''
         if self.gripper is None:

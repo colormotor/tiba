@@ -60,7 +60,7 @@ def parameters():
     params = {'Seed': (5, {'min': 0, 'max': 100}),
           'GUI hue': (0.12, {'min':0, 'max': 1.0}),
           'Gripper mm': (34.0, {'min': 2, 'max': 200}),
-          'Gripper N': (10.0, 0.001, 10.0),
+          'Gripper N': (10.0, 0.001, 50.0),
           'Gripper inner eps': (40.0, 1.0, 40.0),
           'Gripper outer eps': (40.0, 1.0, 40.0),
           
@@ -94,11 +94,12 @@ def on_event(event):
         if not itiba.grasped:
             print('Grasp')
             itiba.grasp(params.gripper_mm,
-                        speed=0.1,
+                        speed=0.77,
                         force=params.gripper_n,
                         epsilon_inner_mm=params.gripper_inner_eps,
                         epsilon_outer_mm=params.gripper_outer_eps,
                         )
+            #itiba.grasp(params.gripper_mm)
         else:
             print('Ungrasp')
             itiba.ungrasp()
