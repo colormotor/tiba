@@ -343,7 +343,7 @@ class iLQRPlannerAcceleration:
              num_iter=20,
              r=1e-5,
              weights=np.ones(6),
-             rest = 0.1,
+             rest = 0.0,
              limits=[],
              qd_lim=None,
              get_trajectories=False):
@@ -363,7 +363,7 @@ class iLQRPlannerAcceleration:
         config.state.progress = 0
 
         cartesian_approaches = True
-        rest = 0.0
+        # rest = 0.0
         for i, traj in enumerate(trajectories):
             if len(traj) < 2:
                 continue

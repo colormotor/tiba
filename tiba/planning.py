@@ -219,19 +219,19 @@ class TrajectoryPlanner:
         self.trajectories_computed = True
         self.chunk_indices = [0]
 
-    def compute_and_plan_trajectories(self, debug=False):
-        raise ValueError("Deprecated function")
-        self.compute_trajectories(debug)
+    # def compute_and_plan_trajectories(self, q_init=None, debug=False):
+    #     raise ValueError("Deprecated function")
+    #     self.compute_trajectories(debug)
 
-        cur_pos = self.itiba.robot.pen_tcp_pos(self.itiba.robot.q)
-        trajectories = self.itiba.pad.augment_with_pen_orientation(
-            self.trajectories, self.itiba.robot, self.itiba.robot.qr
-        )
-        trajectories += [
-            tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)
-        ]  # [tu.approach(cur_pos, trajectories[-1][-1])]
-        self.itiba.plan_task_trajectories(trajectories)
-        self.task_trajectories_augmented = trajectories
+    #     cur_pos = self.itiba.robot.pen_tcp_pos(self.itiba.robot.q)
+    #     trajectories = self.itiba.pad.augment_with_pen_orientation(
+    #         self.trajectories, self.itiba.robot, self.itiba.robot.qr
+    #     )
+    #     trajectories += [
+    #         tu.trapezoidal_approach(trajectories[-1][-1], cur_pos)
+    #     ]  # [tu.approach(cur_pos, trajectories[-1][-1])]
+    #     self.itiba.plan_task_trajectories(trajectories)
+    #     self.task_trajectories_augmented = trajectories
 
     def plan_cartesian(self):
         params = self.params
@@ -284,7 +284,13 @@ class TrajectoryPlanner:
         self.compute_and_plan_with_dips(distance=np.inf, predip=False)
 
     def compute_and_plan_with_dips(
-        self, distance=1.0, predip=False, dip_command="Dip-0", pen_accel_time=None
+        self,
+        distance=1.0,
+        predip=False,
+        dip_command="Dip-0",
+        pen_accel_time=None,
+        return_to_initial=True,
+        q_init=None,
     ):
         params = self.params
 
@@ -408,14 +414,16 @@ class TrajectoryPlanner:
 
         self.itiba.clear_motions()
         robot = self.itiba.robot
-        initial_q = robot.q
+        if q_init is None:
+            q_init = robot.q
 
         print("Computing chunk trajectories")
+
         for i, chunk in enumerate(chunk_paths):
             if self.itiba.motions:
-                q = self.itiba.Qs[-1]
+                q = self.itiba.get_last_planned_cfg()  # Qs[-1]
             else:
-                q = robot.q
+                q = q_init  # robot.q
             if i != 0 or predip:
                 speed_factor = cfg.speed_factor
                 cfg.speed_factor = 1.0
@@ -427,9 +435,9 @@ class TrajectoryPlanner:
                 else:
                     log("Dip OK")
                 if self.itiba.motions:
-                    q = self.itiba.Qs[-1]
+                    q = self.itiba.get_last_planned_cfg()  # Qs[-1]
                 else:
-                    q = robot.q
+                    q = q_init
             Qs, dQs = self.itiba.compute_task_trajectories(chunk, q=q, stiff_orn=False)
             self.itiba.trajectory_status = robot.check_joint_trajectory(Qs, dQs)
             if not self.itiba.trajectory_status:
@@ -437,13 +445,15 @@ class TrajectoryPlanner:
                 # break
             self.itiba.motions.append(Motion(Qs, dQs))
 
-        if self.itiba.trajectory_status:
-            if self.itiba.motions:
-                q = self.itiba.Qs[-1]
-            else:
-                q = robot.q
+        if self.itiba.trajectory_status and return_to_initial and self.itiba.motions:
+            # if self.itiba.motions:
+            #     q = self.itiba.Qs[-1]
+            # else:
+            #     q = q_init #robot.q
+            q = self.itiba.get_last_planned_cfg()  # Qs[-1]
+
             # Add final approach to original position
-            Qs, dQs = tu.joint_approach(q, initial_q)
+            Qs, dQs = tu.joint_approach(q, q_init)
             self.itiba.trajectory_status = robot.check_joint_trajectory(Qs, dQs)
             if self.itiba.trajectory_status:
                 self.itiba.motions.append(Motion(Qs, dQs))
