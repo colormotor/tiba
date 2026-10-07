@@ -152,7 +152,7 @@ class PositionEditor:
             self.cur_position = -1
 
         ui.imgui_text_separator("Key positions")
-        clicked, self.cur_position = imgui.listbox(
+        clicked, self.cur_position = imgui.list_box(
             "Position Label", self.cur_position, names
         )
         if clicked:
