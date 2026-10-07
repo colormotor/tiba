@@ -62,10 +62,13 @@ np.set_printoptions(suppress=True)
 
 
 def parameters():
-    return {
+    params = {
         "Seed": (5, {"min": 0, "max": 100}),
         "GUI hue": (0.12, {"min": 0, "max": 1.0}),
         "Gripper mm": (34.0, {"min": 2, "max": 200}),
+        "Gripper N": (10.0, 0.001, 10.0),
+        "Gripper inner eps": (40.0, 1.0, 40.0),
+        "Gripper outer eps": (40.0, 1.0, 40.0),
         "Guiding": {
             "x": (True, {"sameline": 0}),
             "y": (True, {"sameline": 1}),
@@ -74,6 +77,8 @@ def parameters():
             "elbow": (True, {"sameline": 1}),
         },
     }
+    tsketch.add_parameters(params)
+    return params
 
 
 button_color = [1.0, 0.5, 0.0, 1.0]
@@ -97,7 +102,13 @@ def on_event(event):
     if circle_button(event):
         if not itiba.grasped:
             print("Grasp")
-            itiba.grasp(params.gripper_mm)
+            itiba.grasp(
+                params.gripper_mm,
+                speed=0.1,
+                force=params.gripper_n,
+                epsilon_inner_mm=params.gripper_inner_eps,
+                epsilon_outer_mm=params.gripper_outer_eps,
+            )
         else:
             print("Ungrasp")
             itiba.ungrasp()
@@ -253,9 +264,9 @@ def check_collision(q, itiba):
 
 def setup():
     # Load parameters here for standalone
-    global params
-    tsketch.add_parameters(params)
-    params = sketch._prepare_parameters(params)
+    # global params
+    # tsketch.add_parameters(params)
+    # params = sketch._prepare_parameters(params)
 
     # sketch.set_gui_callback(gui)
     create_canvas(1024, 768, 350)  # , 300)
@@ -490,7 +501,8 @@ def gui():
             if ui.imgui_color_button("Execute trajectory"):
                 imgui.open_popup("Execute")
 
-            if imgui.begin_popup_modal("Execute").opened:
+            opened, _ = imgui.begin_popup_modal("Execute")
+            if opened:
                 imgui.text("Are you sure?")
                 if imgui.button("OK"):
                     tsketch.itiba.set_programming_mode(desk, False)

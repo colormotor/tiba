@@ -175,8 +175,9 @@ class PositionEditor:
                 itiba.goto_joint_position(q)
                 res = "goto:" + names[self.cur_position]
 
-        imgui.set_next_window_size(300, 200)
-        if imgui.begin_popup_modal("Add position").opened:
+        imgui.set_next_window_size([300, 200])
+        opened, _ = imgui.begin_popup_modal("Add position")
+        if opened:
             imgui.text("Select name")
             changed, self.new_position_name = imgui.input_text(
                 "", self.new_position_name, 512
@@ -724,7 +725,7 @@ class TibaInterface:
     def set_tool(self, tool_dict):
         # Stop sim if running
         self.stop_viser()
-        
+
         self.reload_tools()
         # Accept key as input
         if type(tool_dict) == str:
@@ -1304,14 +1305,21 @@ class TibaInterface:
             if state.has_ros:
                 self.send_joint_pos(q)
 
-    def grasp(self, mm=cfg.default_grasp_mm):
+    def grasp(
+        self,
+        mm=cfg.default_grasp_mm,
+        speed=0.2,
+        force=10.0,
+        epsilon_inner_mm=0.04 * 1000,
+        epsilon_outer_mm=0.04 * 1000,
+    ):
         """Grasp with a width specified in mm"""
         if self.gripper is None:
             print("No gripper!")
             return
         print("Grasping")
         self.gripper.grasp(
-            mm / 1000, 0.2, 10, 0.04, 0.04
+            mm / 1000, speed, force, epsilon_inner_mm / 1000, epsilon_outer_mm / 1000
         )  # Might want to increase pressure current 10 N
 
     def ungrasp(self):
