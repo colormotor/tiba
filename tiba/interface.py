@@ -28,6 +28,9 @@ import swift
 from PIL import Image
 from easydict import EasyDict as edict
 
+import queue
+import multiprocessing
+
 from . import ilqr, config, drawing_pad, robot
 from . import trajectory_utils as tu
 from . import utils, geom, ui
@@ -219,7 +222,7 @@ class WaitForDone:
         i = 0
         while self.itiba.server_busy:
             print_same_line(iter_chars[i % len(iter_chars)])
-            time.sleep(0.05)
+            time.sleep(0.2)  # 05)
             i += 1
         resp = self.itiba.response
         if type(resp) != str:
@@ -441,8 +444,8 @@ class TibaInterface:
         self.safe_mode = True
         self.trajectory_status = True
 
-        self.robot = robot.TibaRobot()
-        self.collision_robot = robot.TibaRobot()
+        self.robot = robot.TibaRobot(pad_pose=self.pad.get_pose_rec())
+        self.collision_robot = robot.TibaRobot(pad_pose=self.pad.get_pose_rec())
         self.robot.q = self.robot.home
         self.debug_q = None
         self.grasped = False
@@ -457,7 +460,22 @@ class TibaInterface:
         self.swift_env = None
         self.viser_server = None
 
-        # For async viser
+        # For exec_proc (ros worker)
+        self._exec_proc = None
+        self._exec_req = None
+        self._exec_resp = None
+        self._exec_job_id = 0
+        self._exec_done_id = 0
+
+        # For simulate_proc
+        self._sim_proc = None
+        self._sim_req = None
+        self._sim_resp = None
+        self._sim_job_id = 0
+        self._sim_done_id = 0
+        self.viser_pts = np.empty((0, 3))
+
+        # # For async viser
         self._viser_proc = None
         self._viser_req = None
         self._viser_resp = None
@@ -490,7 +508,7 @@ class TibaInterface:
             print("#################################################")
             print("STARTING UP ROS, IF THIS HANGS CTRL-C TO CONTINUE")
             if False:  # jupyter:
-                if jrosloader is None:
+                if rosloader is None:
                     print("Could not load jupyter ros")
                     rospy_cur = rospy
                 else:
@@ -585,6 +603,8 @@ class TibaInterface:
         return self.handeye is not None and self.handeye.is_valid()
 
     def shutdown(self):
+        self.stop_exec_proc()
+        self.stop_sim_proc()
         pass
         # if self.has_ros():
         #    rospy.signal_shutdown('Closing Tiba interface')
@@ -724,7 +744,9 @@ class TibaInterface:
 
     def set_tool(self, tool_dict):
         # Stop sim if running
-        self.stop_viser()
+        # self.stop_viser()
+        if self._sim_proc is not None and self._sim_proc.is_alive():
+            self._sim_req.put({"cmd": "urdf", "urdf_file": self.robot.urdf_file})
 
         self.reload_tools()
         # Accept key as input
@@ -733,9 +755,11 @@ class TibaInterface:
 
         self.clear()
         # Setting the tool recreates the robot (and URDF)
-        self.robot = robot.TibaRobot(**tool_dict)
+        self.robot = robot.TibaRobot(**tool_dict, pad_pose=self.pad.get_pose_rec())
         self.robot.q = self.robot.home
-        self.collision_robot = robot.TibaRobot(**tool_dict)
+        self.collision_robot = robot.TibaRobot(
+            **tool_dict, pad_pose=self.pad.get_pose_rec()
+        )
         self.collision_robot.q = self.collision_robot.home
         # Propagate tool paramaters with defaults
         self.tool_info = {
@@ -791,284 +815,454 @@ class TibaInterface:
         except ConnectionError as e:
             print(e)
 
-    ########## VISER ASYNC SETUP BOT CODE
-    def _launch_viser_process(self, host="localhost", port=8080):
-        if self._viser_proc is not None and self._viser_proc.is_alive():
-            return
-        ctx = mp.get_context(
-            "spawn"
-        )  # fork + threads (py5canvas, torch) = deadlock risk
-        self._viser_req = ctx.Queue()
-        self._viser_resp = ctx.Queue()
-        self._viser_proc = ctx.Process(
-            target=_viser_worker,
-            args=(self._viser_req, self._viser_resp, self.robot.urdf_file, host, port),
+    ########## ROS EXEC WORKER PROCESS
+
+    def _ensure_exec_proc(self):
+        """Launch the persistent ros execution worker (once)."""
+        if self._exec_proc is not None and self._exec_proc.is_alive():
+            return True
+        if self._exec_proc is not None:  # reap dead worker
+            self._exec_proc.join(0)
+            self._exec_proc = None
+        # NB spawn (not fork): the main process has an initialized rospy node
+        # and forking it would break the child's transports. The target is a
+        # module level function, so spawn works.
+        ctx = multiprocessing.get_context("spawn")
+        self._exec_req = ctx.Queue()
+        self._exec_resp = ctx.Queue()
+        self._exec_job_id = 0
+        self._exec_done_id = 0
+        self._exec_proc = ctx.Process(
+            target=_ros_exec_worker,
+            args=(self._exec_req, self._exec_resp),
             daemon=True,
         )
-        self._viser_proc.start()
-        tag, msg = self._viser_resp.get()  # blocks until server is up (or fails)
-        if tag == "error":
-            self._viser_proc = None
-            raise RuntimeError("viser worker failed: %s" % msg)
-        import webbrowser
+        self._exec_proc.start()
+        # Wait until the node is up and publishers are connected
+        while True:
+            try:
+                kind, _ = self._exec_resp.get(timeout=0.25)
+                if kind == "ready":
+                    return True
+            except queue.Empty:
+                pass
+            if not self._exec_proc.is_alive():
+                print("ROS exec worker failed to start")
+                self._exec_proc.join(0)
+                self._exec_proc = None
+                return False
 
-        url_host = "127.0.0.1" if host in ("0.0.0.0", "") else host
-        webbrowser.open("http://%s:%d" % (url_host, msg))
-        self._viser_job_id = self._viser_done_id = 0
-
-    def stop_viser(self):
-        if self._viser_proc is not None:
-            self._viser_req.put(None)
-            self._viser_proc.join(timeout=2.0)
-            if self._viser_proc.is_alive():
-                self._viser_proc.terminate()
-            self._viser_proc = None
-
-    def simulate(self, stride=4, speed=1.0, block=False):
-        """Submit current motions to the persistent viser worker. Non-blocking."""
-        motions = [m for m in self.get_motions_safe() if len(m.Qs)]
-        if not motions:
-            print("simulate: nothing to simulate")
+    def execute_proc(self):
+        """Execute the current motions over ros in a separate process.
+        Non-blocking: the job is dispatched to a persistent worker which owns
+        its own rospy node (message serialization + waiting happen there), so
+        this process is free e.g. to compute IK while the robot moves.
+        Poll with poll_exec_proc() / wait_exec_done()."""
+        if self.panda is not None or not self.has_ros():
+            print("execute_proc: only for the ros case, simulating")
+            self.simulate_proc()
             return
+        if not self.poll_exec_proc():
+            print("execute_proc: previous job still running")
+            return
+
         self.status = STATUS_PROCESSING
-        try:
-            self._launch_viser_process()
-        except Exception as e:
-            print(e)
+        motions = self.get_motions_safe()
+        if not motions:
+            print("Execute: no motions")
             self.status = STATUS_IDLE
             return
 
-        Qs_all = np.vstack([m.Qs for m in motions])
-        pts = np.array([self.robot.pen_tcp_pos(q)[:3] for q in Qs_all][::10])
-        d = np.clip(self.pad.dist(pts) / 0.01, 0.0, 1.0)
-        cols = np.stack(
-            [
-                (239 * d).astype(np.uint8),
-                (191 * d).astype(np.uint8),
-                (4 * d).astype(np.uint8),
-            ],
-            axis=1,
-        )
+        # Safety check (as in send_joint_trajectory)
+        Qs, dQs = self.get_planned_joint_trajectory(motions)
+        self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
+        if not self.trajectory_status:
+            print("Joint trajectory exceeds safety limits, plotting")
+            ilqr.plot_trajectory_stats(self.robot, Qs, dQs)
+            self.status = STATUS_IDLE
+            return
 
-        self._viser_job_id += 1
-        self._viser_req.put(
-            {
-                "id": self._viser_job_id,
-                "motions": [np.asarray(m.Qs) for m in motions],
-                "q_init": np.array(self.robot.q),
-                "stride": stride,
-                "speed": speed,
-                "dt": cfg.robot_dt,
-                "pts": pts,
-                "cols": cols,
-            }
+        if not self._ensure_exec_proc():
+            # Fallback: old blocking behavior in this process
+            self._exec_ros_blocking(motions)
+            return
+
+        self._exec_job_id += 1
+        self._exec_req.put(
+            dict(
+                cmd="exec",
+                job_id=self._exec_job_id,
+                motions=[
+                    dict(
+                        grasp=m.grasp,
+                        Qs=[np.asarray(q, dtype=float) for q in m.Qs],
+                        dQs=[np.asarray(dq, dtype=float) for dq in m.dQs],
+                    )
+                    for m in motions
+                ],
+            )
         )
         self.status = STATUS_EXECUTING
-        self.robot.q = motions[-1].Qs[-1]  # final cfg is known upfront
-        if block:
-            self.wait_sim_done()
 
-    def sim_done(self):
-        if self._viser_proc is None:
-            return True
-        while True:  # drain completion messages
+    def poll_exec_proc(self):
+        """Non-blocking check if the current exec job is done.
+        Sets self.status to STATUS_IDLE when finished. Returns True if idle."""
+        if self._exec_proc is None:
+            return self._exec_done_id >= self._exec_job_id
+        while True:
             try:
-                tag, jid = self._viser_resp.get_nowait()
-                if tag == "done":
-                    self._viser_done_id = max(self._viser_done_id, jid)
-            except queue_mod.Empty:
+                kind, job_id = self._exec_resp.get_nowait()
+            except queue.Empty:
                 break
-        if not self._viser_proc.is_alive():  # worker died mid-job
-            print("viser worker died")
-            return True
-        return self._viser_done_id >= self._viser_job_id
+            if kind == "ready" or job_id is None:
+                continue
+            self._exec_done_id = max(self._exec_done_id, job_id)
+            self.response = "Error" if kind == "error" else "Done"
+        done = self._exec_done_id >= self._exec_job_id
+        if not done and not self._exec_proc.is_alive():
+            print("ROS exec worker process terminated unexpectedly")
+            done = True
+        if done:
+            if not self._exec_proc.is_alive():
+                self._exec_proc.join(0)
+                self._exec_proc = None  # will be restarted on next use
+            self._exec_done_id = self._exec_job_id
+            if self.status == STATUS_EXECUTING:
+                self.status = STATUS_IDLE
+        return done
 
-    def wait_sim_done(self, timeout=None):
+    def wait_exec_done(self, timeout=None):
+        """Block until the current exec job is done (raises ValueError on error)."""
         t0 = time.time()
-        while not self.sim_done():
+        while not self.poll_exec_proc():
             if timeout is not None and time.time() - t0 > timeout:
                 return False
             time.sleep(0.05)
-        self.status = STATUS_IDLE
+        if self.response.lower() == "error":
+            raise ValueError
         return True
 
-    # def simulate(self, stride=4, speed=1.0):
-    #     """Simulate current trajectories using viser."""
+    def stop_exec_proc(self):
+        """Shut down the ros exec worker process."""
+        if self._exec_proc is None:
+            return
+        proc, self._exec_proc = self._exec_proc, None
+        try:
+            self._exec_req.put(None)
+            proc.join(timeout=2.0)
+        except Exception:
+            pass
+        if proc.is_alive():
+            proc.terminate()
+        self._exec_done_id = self._exec_job_id
+        if self.status == STATUS_EXECUTING:
+            self.status = STATUS_IDLE
 
-    #     import viser
-    #     from viser.extras import ViserUrdf
-    #     from yourdfpy import urdf
-    #     import webbrowser, threading
+    def _exec_ros_blocking(self, motions):
+        """Old blocking ros execution (fallback if the worker cannot start)."""
+        for motion in motions:
+            if motion.grasp is not None:
+                with self.wait():
+                    self.send_msg(
+                        "exec:ungrasp" if motion.grasp is False else "exec:grasp"
+                    )
+            if len(motion.Qs):
+                self.send_msg("exec:trajectory")
+                with self.wait():
+                    self.send_joint_trajectory(motion.Qs, motion.dQs)
+                    self.status = STATUS_EXECUTING
+                self.send_msg("exec:trajectory_done")
+        print("Finished motion")
 
-    #     self.status = STATUS_PROCESSING
+    ########## VISER ASYNC SETUP BOT CODE
 
-    #     def _viser_set_q(q):
-    #         """Push a joint configuration to the viser scene."""
-    #         q = np.concatenate([q, self._fixed_q])  # np.asarray(q, dtype=float)
-    #         # assert len(q) == len(self.viser_joint_names), (
-    #         #     "robot.q has %d joints, URDF has %d"
-    #         #     % (len(q), len(self.viser_joint_names))
-    #         # )
-    #         self.viser_urdf.update_cfg(q)
+    ########## VISER SIM WORKER PROCESS
 
-    #     def _launch_viser(host="localhost", port=8080):
-    #         """Start the viser server (once) and load the robot URDF."""
-    #         if self.viser_server is not None:
-    #             return
-    #         server = viser.ViserServer(host=host, port=port)
-    #         server.initial_camera.position = (1.5, 1.5, 1.5)
-    #         server.scene.add_grid("grid")
+    def _ensure_sim_proc(self):
+        """Launch the persistent viser worker process (once)."""
+        if self._sim_proc is not None and self._sim_proc.is_alive():
+            return
+        if self._sim_proc is not None:  # reap dead worker
+            self._sim_proc.join(0)
+            self._sim_proc = None
+        # fork is required: the main script (a py5canvas sketch) is not
+        # importable as a module, which the spawn start method would need
+        try:
+            ctx = multiprocessing.get_context("fork")
+        except ValueError:
+            ctx = multiprocessing.get_context()
+        self._sim_req = ctx.Queue()
+        self._sim_resp = ctx.Queue()
+        self._sim_job_id = 0
+        self._sim_done_id = 0
+        self._sim_proc = ctx.Process(
+            target=_viser_sim_worker,
+            args=(self._sim_req, self._sim_resp, self.robot.urdf_file),
+            daemon=True,
+        )
+        self._sim_proc.start()
+        # Wait until the server is up and the urdf is loaded
+        while True:
+            try:
+                kind, _ = self._sim_resp.get(timeout=0.25)
+                if kind == "ready":
+                    break
+            except queue.Empty:
+                if not self._sim_proc.is_alive():
+                    print("Viser worker failed to start")
+                    self._sim_proc = None
+                    return
 
-    #         urdf_model = urdf.URDF.load(
-    #             self.robot.urdf_file, load_meshes=True, build_scene_graph=True
-    #         )
+    def simulate_proc(self, stride=8, speed=1.0):
+        """Simulate the current trajectories with viser in a separate process.
+        Non-blocking: the job is dispatched to a persistent worker which owns
+        the viser session, so this process is free (e.g. to compute IK) while
+        the motion is animated. Poll with poll_sim_proc() / wait_sim_done()."""
+        print("Preprocessing")
+        self.status = STATUS_PROCESSING
+        motions = [m for m in self.get_motions_safe() if len(m.Qs)]
+        if not motions:
+            print("Simulate: no motions")
+            self.status = STATUS_IDLE
+            return
 
-    #         # Takes a path (or a yourdfpy.URDF object, see note below)
-    #         self.viser_urdf = ViserUrdf(
-    #             server, urdf_or_path=urdf_model, load_meshes=True
-    #         )
-    #         self._fixed_q = np.array(urdf_model.cfg, dtype=float)[7:]
-    #         # Actuated joint names, in the order expected by update_cfg()
-    #         self.viser_joint_names = list(
-    #             self.viser_urdf.get_actuated_joint_limits().keys()
-    #         )
+        print("Ensuring simulator")
+        self._ensure_sim_proc()
+        if self._sim_proc is None:
+            print("No simulator! Idling")
+            self.status = STATUS_IDLE
+            return
 
-    #         self.viser_server = server
-    #         _viser_set_q(self.robot.q)
+        print("Preparing viz data")
+        # Pen tip samples for the point cloud (cheap fk, done here)
+        Qs = np.vstack([np.asarray(m.Qs, dtype=float) for m in motions])
+        pts = np.array([self.robot.pen_tcp_pos(q)[:3] for q in Qs[::10]])
+        self.viser_pts = (
+            pts if self.viser_pts.size == 0 else np.vstack([self.viser_pts, pts])
+        )
+        MAX_POINTS = 10000
+        if len(self.viser_pts) > MAX_POINTS:
+            self.viser_pts = self.viser_pts[-MAX_POINTS:]
 
-    #         self.viser_pts = np.empty((0, 3))
+        colors = np.zeros((len(self.viser_pts), 3), dtype=np.uint8)
+        if len(self.viser_pts) > 1:
+            try:
+                dists = np.clip(
+                    np.asarray(self.pad.dist(self.viser_pts)) / 0.01, 0.0, 1.0
+                )
+                colors[:, 0] = (239 * dists).astype(np.uint8)
+                colors[:, 1] = (191 * dists).astype(np.uint8)
+                colors[:, 2] = (4 * dists).astype(np.uint8)
+            except Exception as e:
+                print("Could not color trajectory points", e)
 
-    #         print("Viser viewer at http://%s:%d" % (host, port))
+        # Robot will end up in the last configuration of the last motion
+        self.robot.q = np.asarray(motions[-1].Qs[-1])
 
-    #         port = self.viser_server.get_port()
-    #         # 0.0.0.0 is not a valid browser address
-    #         url_host = "127.0.0.1" if host in ("0.0.0.0", "") else host
-    #         url = "http://%s:%d" % (url_host, port)
-    #         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+        print("Running sim process")
+        self._sim_job_id += 1
+        self._sim_req.put(
+            dict(
+                cmd="sim",
+                job_id=self._sim_job_id,
+                motions=[np.asarray(m.Qs, dtype=float) for m in motions],
+                points=self.viser_pts,
+                colors=colors,
+                stride=int(stride),
+                speed=float(speed),
+                dt=float(cfg.robot_dt),
+            )
+        )
+        self.status = STATUS_EXECUTING
 
-    #     _launch_viser()
+    def poll_sim_proc(self):
+        """Non-blocking check if the current sim job is done.
+        Sets self.status to STATUS_IDLE when finished. Returns True if idle."""
+        if self._sim_proc is None:
+            return self._sim_done_id >= self._sim_job_id
+        while True:
+            try:
+                kind, job_id = self._sim_resp.get_nowait()
+            except queue.Empty:
+                break
+            if kind == "done" and job_id is not None:
+                self._sim_done_id = max(self._sim_done_id, job_id)
+        done = self._sim_done_id >= self._sim_job_id
+        if not done and not self._sim_proc.is_alive():
+            print("Viser worker process terminated unexpectedly")
+            done = True
+        if done:
+            print("Simulation done")
+            if not self._sim_proc.is_alive():
+                self._sim_proc = None
+            self._sim_done_id = self._sim_job_id
+            if self.status == STATUS_EXECUTING:
+                self.status = STATUS_IDLE
+        return done
 
-    #     motions = self.get_motions_safe()
-    #     self.status = STATUS_EXECUTING
+    def wait_sim_done(self, timeout=None):
+        """Block until the current sim job is done (polls the worker)."""
+        t0 = time.time()
+        print("Waiting for sim done")
+        while not self.poll_sim_proc():
+            if timeout is not None and time.time() - t0 > timeout:
+                return False
 
-    #     Qs = np.vstack([motion.Qs for motion in motions])
-    #     pts = np.array([self.robot.pen_tcp_pos(q)[:3] for q in Qs][::10])
+            time.sleep(0.1)  # 05)
+        print("Done waiting for sim")
+        return True
 
-    #     if self.viser_pts.size == 0:
-    #         self.viser_pts = pts
-    #     else:
-    #         self.viser_pts = np.vstack([self.viser_pts, pts])
+    def send_sim_q(self, q):
+        """Update the configuration shown by the viser worker (if running)."""
+        if self._sim_proc is not None and self._sim_proc.is_alive():
+            self._sim_req.put({"cmd": "q", "q": np.asarray(q, dtype=float)})
 
-    #     MAX_POINTS = 10000
-    #     if len(self.viser_pts) > MAX_POINTS:
-    #         self.viser_pts = self.viser_pts[-MAX_POINTS:]
+    def stop_sim_proc(self):
+        """Shut down the viser worker process."""
+        if self._sim_proc is None:
+            return
+        proc, self._sim_proc = self._sim_proc, None
+        try:
+            self._sim_req.put(None)
+            proc.join(timeout=2.0)
+        except Exception:
+            pass
+        if proc.is_alive():
+            proc.terminate()
+        self._sim_done_id = self._sim_job_id
+        if self.status == STATUS_EXECUTING:
+            self.status = STATUS_IDLE
 
-    #     num_points = len(self.viser_pts)
-    #     if num_points > 1:
-    #         # Add the point cloud to the scene.
-    #         colors = np.zeros((num_points, 3), dtype=np.uint8)
-    #         dists = self.pad.dist(
-    #             self.viser_pts
-    #         )  # np.array([self.pad.dist(p) for p in self.viser_pts])
-    #         dists = np.clip(dists / 0.01, 0.0, 1.0)
-    #         # colors[:, 0] = 239
-    #         # colors[:, 1] = 191
-    #         # colors[:, 2] = 4
-    #         colors[:, 0] = (239 * dists).astype(np.uint8)
-    #         colors[:, 1] = (191 * dists).astype(np.uint8)
-    #         colors[:, 2] = (4 * dists).astype(np.uint8)
+    def simulate(self, stride=8, speed=1.0):
+        """Simulate current trajectories (blocking wrapper around
+        simulate_proc, keeps execute() working)."""
+        self.simulate_proc(stride=stride, speed=speed)
+        self.wait_sim_done()
 
-    #         self.viser_server.scene.add_point_cloud(
-    #             name="/trajectory_points",
-    #             points=self.viser_pts,
-    #             colors=colors,
-    #             point_size=0.0008,
-    #         )
+    def simulate_thread(self, stride=8, speed=1.0):
+        """Simulate current trajectories using viser."""
 
-    #         # segments = np.stack([self.viser_pts[:-1], self.viser_pts[1:]], axis=1)
+        import viser
+        from viser.extras import ViserUrdf
+        from yourdfpy import urdf
+        import webbrowser, threading
 
-    #         # colors = np.zeros_like(segments, dtype=np.uint8)
-    #         # colors[:, :, :] = [0, 255, 255]
+        self.status = STATUS_PROCESSING
 
-    #         # self.viser_server.scene.add_line_segments(
-    #         #     name="/line_segments",
-    #         #     points=segments,
-    #         #     colors=colors,
-    #         #     thickness=0.002,
-    #         # )
+        def _viser_set_q(q):
+            """Push a joint configuration to the viser scene."""
+            q = np.concatenate([q, self._fixed_q])  # np.asarray(q, dtype=float)
+            # assert len(q) == len(self.viser_joint_names), (
+            #     "robot.q has %d joints, URDF has %d"
+            #     % (len(q), len(self.viser_joint_names))
+            # )
+            self.viser_urdf.update_cfg(q)
 
-    #     # q_old = self.robot.q
-    #     for motion in motions:
-    #         for q in motion.Qs[::stride]:
-    #             # self.robot.q = q
-    #             _viser_set_q(q)
-    #             time.sleep(cfg.robot_dt / speed)
-    #         _viser_set_q(motion.Qs[-1])
-    #         # in case we skip smth with stride
-    #     self.robot.q = motion.Qs[-1]
+        def _launch_viser(host="localhost", port=8080):
+            """Start the viser server (once) and load the robot URDF."""
+            if self.viser_server is not None:
+                return
+            server = viser.ViserServer(host=host, port=port)
+            server.initial_camera.position = (1.5, 1.5, 1.5)
+            server.scene.add_grid("grid")
 
-    #     self.status = STATUS_IDLE
+            urdf_model = urdf.URDF.load(
+                self.robot.urdf_file, load_meshes=True, build_scene_graph=True
+            )
 
-    # def simulate(self, stride=2, speed=1.0):
-    #     """Simulate current trajectories using viser."""
-    #     import viser
-    #     from viser.extras import ViserUrdf
-    #     from yourdfpy import urdf
-    #     import webbrowser
-    #     import threading
-    #     from robot_descriptions.loaders.yourdfpy import load_robot_description
+            # Takes a path (or a yourdfpy.URDF object, see note below)
+            self.viser_urdf = ViserUrdf(
+                server, urdf_or_path=urdf_model, load_meshes=True
+            )
+            self._fixed_q = np.array(urdf_model.cfg, dtype=float)[7:]
+            # Actuated joint names, in the order expected by update_cfg()
+            self.viser_joint_names = list(
+                self.viser_urdf.get_actuated_joint_limits().keys()
+            )
 
-    #     if self.viser_server is None:
-    #         # Using 0.0.0.0 listens on all interfaces, but we open 127.0.0.1 in browser
-    #         self.viser_server = viser.ViserServer(host="0.0.0.0", port=8080)
-    #         self.viser_server.initial_camera.position = (1.5, 1.5, 1.5)
-    #         self.viser_server.scene.add_grid("grid")
-    #         # Load via yourdfpy first to satisfy the ViserUrdf object requirement
-    #         urdf_model = urdf.URDF.load(
-    #             self.robot.urdf_file, load_meshes=True, build_scene_graph=True
-    #         )
+            self.viser_server = server
+            _viser_set_q(self.robot.q)
 
-    #         self.viser_urdf = ViserUrdf(
-    #             self.viser_server,
-    #             urdf_or_path=urdf_model,
-    #             load_meshes=True,
-    #             load_collision_meshes=False,
-    #         )
+            self.viser_pts = np.empty((0, 3))
 
-    #         self._fixed_q = np.array(urdf_model.cfg, dtype=float)[7:]
-    #         self.viser_joint_names = list(
-    #             self.viser_urdf.get_actuated_joint_limits().keys()
-    #         )
+            print("Viser viewer at http://%s:%d" % (host, port))
 
-    #         # Automatically pop open the browser window safely
-    #         threading.Timer(
-    #             0.5, lambda: webbrowser.open("http://127.0.0.1:8080")
-    #         ).start()
+            port = self.viser_server.get_port()
+            # 0.0.0.0 is not a valid browser address
+            url_host = "127.0.0.1" if host in ("0.0.0.0", "") else host
+            url = "http://%s:%d" % (url_host, port)
+            threading.Timer(0.5, lambda: webbrowser.open(url)).start()
 
-    #     def _viser_set_q(q):
-    #         """Push a joint configuration to the viser scene."""
-    #         full_q = np.concatenate([q, self._fixed_q])
-    #         self.viser_urdf.update_cfg(full_q)
+        _launch_viser()
 
-    #     # Set initial position
-    #     _viser_set_q(self.robot.q)
-    #     print(
-    #         "Viser viewer active. Waiting 2 seconds for client connection before starting motion..."
-    #     )
-    #     time.sleep(
-    #         2.0
-    #     )  # CRITICAL: Gives the browser time to open and connect before animation starts
+        motions = self.get_motions_safe()
+        self.status = STATUS_EXECUTING
 
-    #     # 3. Playback Trajectory Loop
-    #     for motion in self.motions:
-    #         for q in motion.Qs[::stride]:
-    #             self.robot.q = q
-    #             _viser_set_q(q)
-    #             # Ensure cfg is accessible or pass dt directly
-    #             time.sleep((stride * cfg.robot_dt) / speed)
+        Qs = np.vstack([motion.Qs for motion in motions])
+        pts = np.array([self.robot.pen_tcp_pos(q)[:3] for q in Qs][::10])
 
-    #         self.robot.q = motion.Qs[-1]
-    #         _viser_set_q(motion.Qs[-1])
+        if self.viser_pts.size == 0:
+            self.viser_pts = pts
+        else:
+            self.viser_pts = np.vstack([self.viser_pts, pts])
+
+        MAX_POINTS = 10000
+        if len(self.viser_pts) > MAX_POINTS:
+            self.viser_pts = self.viser_pts[-MAX_POINTS:]
+
+        num_points = len(self.viser_pts)
+        if num_points > 1:
+            # Add the point cloud to the scene.
+            colors = np.zeros((num_points, 3), dtype=np.uint8)
+            dists = self.pad.dist(
+                self.viser_pts
+            )  # np.array([self.pad.dist(p) for p in self.viser_pts])
+            dists = np.clip(dists / 0.01, 0.0, 1.0)
+            # colors[:, 0] = 239
+            # colors[:, 1] = 191
+            # colors[:, 2] = 4
+            colors[:, 0] = (239 * dists).astype(np.uint8)
+            colors[:, 1] = (191 * dists).astype(np.uint8)
+            colors[:, 2] = (4 * dists).astype(np.uint8)
+
+            self.viser_server.scene.add_point_cloud(
+                name="/trajectory_points",
+                points=self.viser_pts,
+                colors=colors,
+                point_size=0.0008,
+            )
+
+            # segments = np.stack([self.viser_pts[:-1], self.viser_pts[1:]], axis=1)
+
+            # colors = np.zeros_like(segments, dtype=np.uint8)
+            # colors[:, :, :] = [0, 255, 255]
+
+            # self.viser_server.scene.add_line_segments(
+            #     name="/line_segments",
+            #     points=segments,
+            #     colors=colors,
+            #     thickness=0.002,
+            # )
+
+        # q_old = self.robot.q
+        for motion in motions:
+            for q in motion.Qs[::stride]:
+                # self.robot.q = q
+                _viser_set_q(q)
+                time.sleep(cfg.robot_dt / speed)
+            _viser_set_q(motion.Qs[-1])
+            # in case we skip smth with stride
+        self.robot.q = motion.Qs[-1]
+
+        self.status = STATUS_IDLE
+
+    # def stop_viser(self):
+    #     if self._viser_proc is not None:
+    #         self._viser_req.put(None)
+    #         self._viser_proc.join(timeout=2.0)
+    #         if self._viser_proc.is_alive():
+    #             self._viser_proc.terminate()
+    #         self._viser_proc = None
 
     # def simulate(self):
     #     """Simulate current trajectories using Swift"""
@@ -1232,7 +1426,6 @@ class TibaInterface:
         """Execute the current joint motion"""
         self.status = STATUS_PROCESSING
         motions = self.get_motions_safe()
-        self.status = STATUS_EXECUTING
         try:
             if self.panda is not None:
                 self.delay(delay)
@@ -1249,36 +1442,43 @@ class TibaInterface:
 
                     # Q = self.Qs
                     # dQ = self.dQs
+                    self.status = STATUS_EXECUTING
                     if motion.is_drawing or force_drawing:
                         raise ValueError("Deprecated")
                         self._exec_drawing_motion(motion)
                     else:
                         self._exec_joint_motion(motion)
+
                 return np.array(self.panda.q)
             elif self.has_ros():
-                for motion in motions:
-                    if motion.grasp is not None:
-                        if motion.grasp == False:
-                            with self.wait():
-                                self.send_msg("exec:ungrasp")
-                        elif type(motion.grasp) == bool:
-                            with self.wait():
-                                self.send_msg("exec:grasp")
-                            # self.grasp()
-                        else:
-                            print(
-                                "Received grasping with parameters, not implemented yet"
-                            )
-                            with self.wait():
-                                self.send_msg("exec:grasp")
-                            # self.grasp(motion.grasp)
-                        # time.sleep(0.3) #1.0)
+                self.execute_proc()
+                self.wait_exec_done()
+                print("Finished motion")
 
-                    if len(motion.Qs):
-                        self.send_msg("exec:trajectory")
-                        with self.wait():
-                            self.send_joint_trajectory(motion.Qs, motion.dQs)
-                        self.send_msg("exec:trajectory_done")
+                # for motion in motions:
+                #     if motion.grasp is not None:
+                #         if motion.grasp == False:
+                #             with self.wait():
+                #                 self.send_msg("exec:ungrasp")
+                #         elif type(motion.grasp) == bool:
+                #             with self.wait():
+                #                 self.send_msg("exec:grasp")
+                #             # self.grasp()
+                #         else:
+                #             print(
+                #                 "Received grasping with parameters, not implemented yet"
+                #             )
+                #             with self.wait():
+                #                 self.send_msg("exec:grasp")
+                #             # self.grasp(motion.grasp)
+                #         # time.sleep(0.3) #1.0)
+
+                #     if len(motion.Qs):
+                #         self.send_msg("exec:trajectory")
+                #         with self.wait():
+                #             self.send_joint_trajectory(motion.Qs, motion.dQs)
+                #             self.status = STATUS_EXECUTING
+                #         self.send_msg("exec:trajectory_done")
             else:
                 print("No panda or ros, can't execute, simulating")
                 self.simulate()
@@ -1317,12 +1517,19 @@ class TibaInterface:
         if self.gripper is None:
             print("No gripper!")
             return
-        print('Graspingggg', mm/1000, speed, force, epsilon_inner_mm/1000, epsilon_outer_mm/1000 )
-        self.gripper.grasp(mm/1000, speed, force,
-                           epsilon_inner_mm/1000,
-                           epsilon_outer_mm/1000) # Might want to increase pressure current 10 N
-        #self.gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04)
-        
+        print(
+            "Graspingggg",
+            mm / 1000,
+            speed,
+            force,
+            epsilon_inner_mm / 1000,
+            epsilon_outer_mm / 1000,
+        )
+        self.gripper.grasp(
+            mm / 1000, speed, force, epsilon_inner_mm / 1000, epsilon_outer_mm / 1000
+        )  # Might want to increase pressure current 10 N
+        # self.gripper.grasp(mm/1000, 0.2, 10, 0.04, 0.04)
+
     def ungrasp(self):
         """Release the gripper"""
         if self.gripper is None:
@@ -1748,55 +1955,181 @@ def plot_cartesian_trajectories(trajectories):
     ply.show()
 
 
-import multiprocessing as mp
-import queue as queue_mod  # for Empty
-
-
-def _viser_worker(req_q, resp_q, urdf_file, host, port):
-    """Persistent process owning the viser server. Plays back jobs from req_q."""
+def _viser_sim_worker(req_q, resp_q, urdf_file, host="localhost", port=8080):
+    """Persistent worker process that owns the viser session.
+    Waits for job dicts on `req_q`, posts ("done", job_id) on `resp_q`:
+      {"cmd": "sim", "job_id", "motions", "points", "colors", "stride", "speed", "dt"}
+      {"cmd": "q", "q": joints}                # set current configuration
+      {"cmd": "urdf", "urdf_file": path}       # e.g. after a tool change
+    A `None` message terminates the worker.
+    """
     import viser
     from viser.extras import ViserUrdf
-    from yourdfpy import urdf as urdf_mod
+    from yourdfpy import urdf
+    import webbrowser, threading
 
-    try:
-        server = viser.ViserServer(host=host, port=port)
-    except Exception as e:
-        resp_q.put(("error", str(e)))
-        return
+    print("Viser worker process started (pid %d)" % os.getpid())
+    server = viser.ViserServer(host=host, port=port)
     server.initial_camera.position = (1.5, 1.5, 1.5)
     server.scene.add_grid("grid")
 
-    urdf_model = urdf_mod.URDF.load(urdf_file, load_meshes=True, build_scene_graph=True)
-    viser_urdf = ViserUrdf(server, urdf_or_path=urdf_model, load_meshes=True)
+    def load_urdf(path):
+        model = urdf.URDF.load(path, load_meshes=True, build_scene_graph=True)
+        return model, ViserUrdf(server, urdf_or_path=model, load_meshes=True)
+
+    urdf_model, viser_urdf = load_urdf(urdf_file)
     fixed_q = np.array(urdf_model.cfg, dtype=float)[7:]
 
     def set_q(q):
-        viser_urdf.update_cfg(np.concatenate([q, fixed_q]))
+        viser_urdf.update_cfg(np.concatenate([np.asarray(q, dtype=float), fixed_q]))
 
-    pts_acc = np.empty((0, 3))
-    cols_acc = np.empty((0, 3), dtype=np.uint8)
+    url_host = "127.0.0.1" if host in ("0.0.0.0", "") else host
+    url = "http://%s:%d" % (url_host, server.get_port())
+    print("Viser viewer at", url)
+    threading.Timer(0.5, lambda: webbrowser.open(url)).start()
 
-    resp_q.put(("started", port))
-    print("[viser-worker] http://%s:%d" % (host, port))
+    resp_q.put(("ready", None))
 
     while True:
-        job = req_q.get()
-        if job is None:  # shutdown sentinel
+        msg = req_q.get()
+        if msg is None:
             break
-        set_q(job["q_init"])
-        for Qs in job["motions"]:
-            for q in Qs[:: job["stride"]]:
-                set_q(q)
-                time.sleep(job["dt"] / job["speed"])
-            set_q(Qs[-1])
+        try:
+            cmd = msg.get("cmd")
+            if cmd == "sim":
+                job_id = msg["job_id"]
+                points, colors = msg["points"], msg["colors"]
+                stride = max(1, int(msg["stride"]))
+                speed = float(msg["speed"])
+                if speed <= 0.0:
+                    speed = 1.0
+                dt = float(msg["dt"])
+                if points is not None and len(points) > 1:
+                    server.scene.add_point_cloud(
+                        name="/trajectory_points",
+                        points=points,
+                        colors=colors,
+                        point_size=0.0008,
+                    )
+                for Qs in msg["motions"]:
+                    for q in Qs[::stride]:
+                        set_q(q)
+                        time.sleep(dt / speed)
+                    if len(Qs):
+                        set_q(Qs[-1])
+                resp_q.put(("done", job_id))
+            elif cmd == "q":
+                set_q(msg["q"])
+            elif cmd == "urdf":
+                try:
+                    viser_urdf.remove()
+                except Exception:
+                    pass
+                urdf_model, viser_urdf = load_urdf(msg["urdf_file"])
+                fixed_q = np.array(urdf_model.cfg, dtype=float)[7:]
+        except Exception:
+            print("Exception in viser worker:")
+            traceback.print_exc()
+            if isinstance(msg, dict) and "job_id" in msg:
+                resp_q.put(("done", msg["job_id"]))  # don't wait forever
 
-        if len(job["pts"]):  # accumulate trajectory point cloud across sims
-            pts_acc = np.vstack([pts_acc, job["pts"]])[-10000:]
-            cols_acc = np.vstack([cols_acc, job["cols"]])[-10000:]
-            server.scene.add_point_cloud(
-                name="/trajectory_points",
-                points=pts_acc,
-                colors=cols_acc,
-                point_size=0.0008,
-            )
-        resp_q.put(("done", job["id"]))
+    print("Viser worker exiting")
+
+
+def _ros_exec_worker(req_q, resp_q, node_name="tiba_exec_worker"):
+    """Persistent worker process that executes motions over ROS.
+    Owns its own rospy node, so the main process stays free (e.g. for IK).
+    Waits for job dicts on =req_q=, posts ("done"|"error", job_id) on =resp_q=:
+      {"cmd": "exec", "job_id", "motions": [{"grasp": ..., "Qs": [...], "dQs": [...]}]}
+    A =None= message terminates the worker.
+    """
+    import rospy
+    from std_msgs.msg import String, Header
+    from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+    from sensor_msgs.msg import JointState
+
+    rospy.init_node(node_name, anonymous=True, log_level=rospy.ERROR)
+    msg_pub = rospy.Publisher("/tiba/msg", String, queue_size=10)
+    jtraj_pub = rospy.Publisher("/tiba/jtraj", JointTrajectory, queue_size=10)
+
+    worker = lambda: None
+    worker.done = True
+    worker.resp = "Done"
+
+    def qdone_callback(data):
+        worker.done = True
+        worker.resp = data.name
+
+    rospy.Subscriber("/tiba/qdone", JointState, qdone_callback)
+
+    # Give publishers some time to connect, else the first message is dropped
+    t0 = time.time()
+    while msg_pub.get_num_connections() == 0 or jtraj_pub.get_num_connections() == 0:
+        if rospy.is_shutdown() or time.time() - t0 > 5.0:
+            break
+        rospy.sleep(0.1)
+
+    joint_names = ["panda_joint%d" % i for i in range(1, 8)]
+
+    def send_msg(data):
+        msg_pub.publish(data)
+
+    def send_joint_trajectory(Qs, dQs):
+        jtraj = JointTrajectory()
+        jtraj.header = Header()
+        jtraj.header.stamp = rospy.Time.now()
+        jtraj.joint_names = joint_names
+        for q, dq in zip(Qs, dQs):
+            p = JointTrajectoryPoint()
+            p.positions = [float(v) for v in q]
+            p.velocities = [float(v) for v in dq]
+            jtraj.points.append(p)
+        jtraj_pub.publish(jtraj)
+
+    def wait_done(timeout=None):
+        t0 = time.time()
+        while not worker.done and not rospy.is_shutdown():
+            if timeout is not None and time.time() - t0 > timeout:
+                print("ROS exec worker: timeout waiting for qdone")
+                return False
+            time.sleep(0.05)
+        return True
+
+    resp_q.put(("ready", None))
+    print("ROS exec worker started (pid %d)" % os.getpid())
+
+    while True:
+        msg = req_q.get()
+        if msg is None:
+            break
+        try:
+            cmd = msg.get("cmd")
+            if cmd == "exec":
+                job_id = msg["job_id"]
+                error = False
+                for m in msg["motions"]:
+                    grasp = m.get("grasp")
+                    if grasp is not None:
+                        worker.done = False
+                        # grasp with parameters is not implemented on the server either
+                        send_msg("exec:ungrasp" if grasp is False else "exec:grasp")
+                        if not wait_done() or worker.resp.lower() == "error":
+                            error = True
+                            break
+                    Qs, dQs = m.get("Qs"), m.get("dQs")
+                    if Qs is not None and len(Qs):
+                        worker.done = False
+                        send_msg("exec:trajectory")
+                        send_joint_trajectory(Qs, dQs)
+                        if not wait_done() or worker.resp.lower() == "error":
+                            error = True
+                            break
+                        send_msg("exec:trajectory_done")
+                resp_q.put(("error" if error else "done", job_id))
+        except Exception:
+            print("Exception in ROS exec worker:")
+            traceback.print_exc()
+            if isinstance(msg, dict) and "job_id" in msg:
+                resp_q.put(("error", msg["job_id"]))  # don't wait forever
+
+    print("ROS exec worker exiting")
