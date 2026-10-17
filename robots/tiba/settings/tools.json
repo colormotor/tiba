@@ -249,5 +249,33 @@
       "range_mm": 3.5,
       "min_radius_mm": 0.5,
       "max_radius_mm": 3.0
+    },
+
+    "Thin-manifold-01": {
+      "tip_dist_mm": 83.0,
+      "tip_height_mm": 0.0,
+      "offset_mm": 0.0,
+      "range_mm": 5.0,
+      "min_radius_mm": 0.5,
+      "max_radius_mm": 2.0
+    },
+    "Chisel-brush-manifold-01": {
+      "tip_dist_mm": 83.0,
+      "tip_height_mm": 1.0,
+      "offset_mm": 0.0,
+      "range_mm": 3.0,
+      "min_radius_mm": 0.5,
+      "max_radius_mm": 2.0
+    },
+
+    "Chisel-manifold-01": {
+      "tip_dist_mm": 56.0,
+      "tip_height_mm": 3.0,
+      "offset_mm": 0.0,
+      "range_mm": 3.0,
+      "min_radius_mm": 0.5,
+      "max_radius_mm": 2.0
     }
+
+
   }

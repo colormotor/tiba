@@ -305,7 +305,7 @@ def rectangle(*args, color=None, fill=False, **kwargs):
         w, h = args[2:]
         r, b = l+w, t+h
     else:
-        print("Invalid arguments", len(args), args)
+        print("Invalid arguments for rectangle", len(args), args)
     X = np.array([[l, t], [r, t], [r, b], [l, b], [l, t]])
     if fill:
         fill = 'toself'

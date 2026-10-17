@@ -35,9 +35,9 @@
   </link>
   <link name="drawing_pad">
     <visual>
-      <origin rpy="0 0 0" xyz="0 0 ${pad_thickness/1.0}"/>
+      <origin rpy="0 0 0" xyz="0 0 ${pad_thickness/2.0 + 0.002}"/>
       <geometry>
-        <box size="1.3 1.2 $(arg pad_thickness)"/>
+        <box size="1.3 0.9 $(arg pad_thickness)"/>
       </geometry>
       <material name="Red">
         <color rgba="1.0 0.0 0.0 0.7"/>

@@ -67,6 +67,15 @@ class DrawingPad:
         except FileNotFoundError as e:
             print(e)
 
+    def get_pose_rec(self):
+        def to_str(v):
+            # Need a space separated sequence of nums for xacro
+            # As arrays/lists will ad surrounding []s
+            return " ".join(v.astype(str))
+
+        pad_pose = SE3(self.frame)
+        return {"pad_pos": to_str(pad_pose.t), "pad_rot": to_str(pad_pose.eul())}
+
     def is_valid(self):
         return len(self.points) > 3 and self.box is not None
 

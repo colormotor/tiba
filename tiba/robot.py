@@ -137,6 +137,7 @@ class TibaRobot(Robot):
         pressure_range=0.0,
         is_squeezer=False,
         limits=fr3_limits,
+        pad_pose={},
         **kwargs,
     ):
         path = os.path.join(os.path.dirname(__file__), "../urdf/franka_description/")
@@ -151,6 +152,13 @@ class TibaRobot(Robot):
                 "angle": angle,
             }
 
+        if pad_pose:
+            mappings.update(pad_pose)
+
+        # mappings contains a dict with two 1d arrays with 3 components that
+        # need to be set in the xacro file. But this inserts [x, y, z] in the urdf and not
+        # space separated numbers as necessary. Can you suggest fix
+        
         self.urdf_file = os.path.join(path, "tiba_test.urdf")
         xacro_to_urdf(self.xacro_file, self.urdf_file, tld=path, mappings=mappings)
         links, name, urdf_string, urdf_filepath = self.URDF_read(

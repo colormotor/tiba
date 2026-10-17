@@ -32,12 +32,12 @@ os.environ["ROS_IPV6"] = "off"
 #
 
 # os.environ['ROS_MASTER_URI']='http:/172.16.17.243:11311' #Running ROS
-os.environ["ROS_MASTER_URI"] = "http://172.16.18.0:11311"  # Running ROS
+os.environ["ROS_MASTER_URI"] = "http://172.16.16.185:11311"  # Running ROS
+os.environ["ROS_MASTER_URI"] = "http://192.168.8.200:11311"  # Running ROS
 
 interface.state.has_ros = (
     True  # Set to false if you don't need to communicate with the server
 )
-
 
 base_path = "./../robots/tiba/settings"  # tiba for London
 itiba = interface.TibaInterface(
@@ -89,6 +89,8 @@ def brush_name():
     # return 'Molotow-brush'
     # return 'HK-Calli-med-02'
     # return 'Probe'
+    return "Chisel-brush-manifold-01"
+    return "Thin-manifold-01"
     return "Labor-gold-0_0"
     return "Spongie"
     return "HK-Calli-small-demo"
@@ -107,7 +109,7 @@ def brush_name():
 
 def dip_command():
     ind = 0
-    # return "Dip-%d" % ind
+    return "Dip-%d" % ind
     return "Dip-rim-%d" % ind
 
 
@@ -348,7 +350,7 @@ def gui():
         if ui.imgui_color_button(btn):
             print("Executing")
             if interface.state.has_ros:
-                itiba.execute()
+                itiba.execute_proc()
             else:
                 itiba.simulate()
             state.planned = False

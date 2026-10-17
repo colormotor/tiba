@@ -27,7 +27,7 @@ from collections import namedtuple
 import swift
 from PIL import Image
 from easydict import EasyDict as edict
-
+import threading
 import queue
 import multiprocessing
 
@@ -460,12 +460,11 @@ class TibaInterface:
         self.swift_env = None
         self.viser_server = None
 
-        # For exec_proc (ros worker)
-        self._exec_proc = None
-        self._exec_req = None
-        self._exec_resp = None
-        self._exec_job_id = 0
-        self._exec_done_id = 0
+        # For execute_proc (ros background thread)
+        self._exec_thread = None
+        self._exec_done_evt = threading.Event()
+        self._exec_error = False
+        self._exec_stop = False
 
         # For simulate_proc
         self._sim_proc = None
@@ -629,18 +628,18 @@ class TibaInterface:
 
     # def prepend_approach(self, Qs, dQs):
 
-    def send_joint_trajectory(self, Qs, dQs):
+    def send_joint_trajectory(self, Qs, dQs, check=True):
         # if Qs is None:
         #     Qs = self.Qs
         # if dQs is None:
         #     dQs = self.dQs
+        if check:
+            self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
+            if not self.trajectory_status:
+                print("Joint trajectory exceeds safety limits, plotting")
+                ilqr.plot_trajectory_stats(self.robot, Qs, dQs)
 
-        self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
-        if not self.trajectory_status:
-            print("Joint trajectory exceeds safety limits, plotting")
-            ilqr.plot_trajectory_stats(self.robot, Qs, dQs)
-
-            return
+                return
 
         jtraj = JointTrajectory()
         jtraj.header = Header()
@@ -817,47 +816,11 @@ class TibaInterface:
 
     ########## ROS EXEC WORKER PROCESS
 
-    def _ensure_exec_proc(self):
-        """Launch the persistent ros execution worker (once)."""
-        if self._exec_proc is not None and self._exec_proc.is_alive():
-            return True
-        if self._exec_proc is not None:  # reap dead worker
-            self._exec_proc.join(0)
-            self._exec_proc = None
-        # NB spawn (not fork): the main process has an initialized rospy node
-        # and forking it would break the child's transports. The target is a
-        # module level function, so spawn works.
-        ctx = multiprocessing.get_context("spawn")
-        self._exec_req = ctx.Queue()
-        self._exec_resp = ctx.Queue()
-        self._exec_job_id = 0
-        self._exec_done_id = 0
-        self._exec_proc = ctx.Process(
-            target=_ros_exec_worker,
-            args=(self._exec_req, self._exec_resp),
-            daemon=True,
-        )
-        self._exec_proc.start()
-        # Wait until the node is up and publishers are connected
-        while True:
-            try:
-                kind, _ = self._exec_resp.get(timeout=0.25)
-                if kind == "ready":
-                    return True
-            except queue.Empty:
-                pass
-            if not self._exec_proc.is_alive():
-                print("ROS exec worker failed to start")
-                self._exec_proc.join(0)
-                self._exec_proc = None
-                return False
-
     def execute_proc(self):
-        """Execute the current motions over ros in a separate process.
-        Non-blocking: the job is dispatched to a persistent worker which owns
-        its own rospy node (message serialization + waiting happen there), so
-        this process is free e.g. to compute IK while the robot moves.
-        Poll with poll_exec_proc() / wait_exec_done()."""
+        """Execute the current motions over ros (non-blocking).
+        Publishing and waiting happen in a daemon thread that sleeps on an
+        event while the robot moves, so this process stays free to compute
+        IK in the meantime. Poll with poll_exec_proc() / wait_exec_done()."""
         if self.panda is not None or not self.has_ros():
             print("execute_proc: only for the ros case, simulating")
             self.simulate_proc()
@@ -873,7 +836,7 @@ class TibaInterface:
             self.status = STATUS_IDLE
             return
 
-        # Safety check (as in send_joint_trajectory)
+        # Safety check + plot in the main thread
         Qs, dQs = self.get_planned_joint_trajectory(motions)
         self.trajectory_status = self.robot.check_joint_trajectory(Qs, dQs)
         if not self.trajectory_status:
@@ -882,54 +845,40 @@ class TibaInterface:
             self.status = STATUS_IDLE
             return
 
-        if not self._ensure_exec_proc():
-            # Fallback: old blocking behavior in this process
-            self._exec_ros_blocking(motions)
-            return
-
-        self._exec_job_id += 1
-        self._exec_req.put(
+        # Snapshot as plain floats here so the thread does no numpy work
+        job = [
             dict(
-                cmd="exec",
-                job_id=self._exec_job_id,
-                motions=[
-                    dict(
-                        grasp=m.grasp,
-                        Qs=[np.asarray(q, dtype=float) for q in m.Qs],
-                        dQs=[np.asarray(dq, dtype=float) for dq in m.dQs],
-                    )
-                    for m in motions
-                ],
+                grasp=m.grasp,
+                Qs=[[float(v) for v in q] for q in m.Qs],
+                dQs=[[float(v) for v in dq] for dq in m.dQs],
             )
+            for m in motions
+        ]
+        est_dur = sum(len(m.Qs) for m in motions) * cfg.robot_dt
+
+        self._exec_stop = False
+        self._exec_error = False
+        self._exec_thread = threading.Thread(
+            target=_ros_exec_thread,
+            args=(self, job, max(60.0, est_dur * 3.0 + 60.0)),
+            daemon=True,
         )
+        self._exec_thread.start()
         self.status = STATUS_EXECUTING
 
     def poll_exec_proc(self):
         """Non-blocking check if the current exec job is done.
         Sets self.status to STATUS_IDLE when finished. Returns True if idle."""
-        if self._exec_proc is None:
-            return self._exec_done_id >= self._exec_job_id
-        while True:
-            try:
-                kind, job_id = self._exec_resp.get_nowait()
-            except queue.Empty:
-                break
-            if kind == "ready" or job_id is None:
-                continue
-            self._exec_done_id = max(self._exec_done_id, job_id)
-            self.response = "Error" if kind == "error" else "Done"
-        done = self._exec_done_id >= self._exec_job_id
-        if not done and not self._exec_proc.is_alive():
-            print("ROS exec worker process terminated unexpectedly")
-            done = True
-        if done:
-            if not self._exec_proc.is_alive():
-                self._exec_proc.join(0)
-                self._exec_proc = None  # will be restarted on next use
-            self._exec_done_id = self._exec_job_id
+        thread = self._exec_thread
+        if thread is not None and not thread.is_alive():
+            thread.join(0)
+            self._exec_thread = None
+            self.response = "Error" if self._exec_error else "Done"
+        if self._exec_thread is None:
             if self.status == STATUS_EXECUTING:
                 self.status = STATUS_IDLE
-        return done
+            return True
+        return False
 
     def wait_exec_done(self, timeout=None):
         """Block until the current exec job is done (raises ValueError on error)."""
@@ -943,18 +892,12 @@ class TibaInterface:
         return True
 
     def stop_exec_proc(self):
-        """Shut down the ros exec worker process."""
-        if self._exec_proc is None:
-            return
-        proc, self._exec_proc = self._exec_proc, None
-        try:
-            self._exec_req.put(None)
-            proc.join(timeout=2.0)
-        except Exception:
-            pass
-        if proc.is_alive():
-            proc.terminate()
-        self._exec_done_id = self._exec_job_id
+        """Stop the background exec thread."""
+        self._exec_stop = True
+        self._exec_done_evt.set()  # wake it if it is waiting
+        if self._exec_thread is not None:
+            self._exec_thread.join(timeout=2.0)
+            self._exec_thread = None
         if self.status == STATUS_EXECUTING:
             self.status = STATUS_IDLE
 
@@ -1421,6 +1364,13 @@ class TibaInterface:
                         break
         print("Stopping Cartesian impedance controller")
         self.panda.stop_controller()
+
+    def qdone_callback(self, data):
+        self.robot.q = np.array(data.position)
+        self.debug_q = np.array(data.position)
+        self.server_busy = False
+        self.response = data.name
+        self._exec_done_evt.set()
 
     def execute(self, delay=0.2, force_drawing=False):
         """Execute the current joint motion"""
@@ -2036,100 +1986,50 @@ def _viser_sim_worker(req_q, resp_q, urdf_file, host="localhost", port=8080):
     print("Viser worker exiting")
 
 
-def _ros_exec_worker(req_q, resp_q, node_name="tiba_exec_worker"):
-    """Persistent worker process that executes motions over ROS.
-    Owns its own rospy node, so the main process stays free (e.g. for IK).
-    Waits for job dicts on =req_q=, posts ("done"|"error", job_id) on =resp_q=:
-      {"cmd": "exec", "job_id", "motions": [{"grasp": ..., "Qs": [...], "dQs": [...]}]}
-    A =None= message terminates the worker.
-    """
-    import rospy
-    from std_msgs.msg import String, Header
-    from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-    from sensor_msgs.msg import JointState
+def _ros_exec_thread(iface, motions, timeout):
+    """Background executor for the ros path: publishes each motion, then
+    sleeps on an event until /tiba/qdone arrives. All waiting is event-based
+    (GIL released), so this does not compete with IK planning in the main
+    thread - unlike a viser animation loop, which is why the sim worker is a
+    process but this is only a thread."""
 
-    rospy.init_node(node_name, anonymous=True, log_level=rospy.ERROR)
-    msg_pub = rospy.Publisher("/tiba/msg", String, queue_size=10)
-    jtraj_pub = rospy.Publisher("/tiba/jtraj", JointTrajectory, queue_size=10)
+    def check_resp():
+        resp = iface.response
+        if not isinstance(resp, str):  # JointState.name is string[]
+            resp = "".join(resp)
+        return resp.lower() != "error"
 
-    worker = lambda: None
-    worker.done = True
-    worker.resp = "Done"
-
-    def qdone_callback(data):
-        worker.done = True
-        worker.resp = data.name
-
-    rospy.Subscriber("/tiba/qdone", JointState, qdone_callback)
-
-    # Give publishers some time to connect, else the first message is dropped
-    t0 = time.time()
-    while msg_pub.get_num_connections() == 0 or jtraj_pub.get_num_connections() == 0:
-        if rospy.is_shutdown() or time.time() - t0 > 5.0:
-            break
-        rospy.sleep(0.1)
-
-    joint_names = ["panda_joint%d" % i for i in range(1, 8)]
-
-    def send_msg(data):
-        msg_pub.publish(data)
-
-    def send_joint_trajectory(Qs, dQs):
-        jtraj = JointTrajectory()
-        jtraj.header = Header()
-        jtraj.header.stamp = rospy.Time.now()
-        jtraj.joint_names = joint_names
-        for q, dq in zip(Qs, dQs):
-            p = JointTrajectoryPoint()
-            p.positions = [float(v) for v in q]
-            p.velocities = [float(v) for v in dq]
-            jtraj.points.append(p)
-        jtraj_pub.publish(jtraj)
-
-    def wait_done(timeout=None):
-        t0 = time.time()
-        while not worker.done and not rospy.is_shutdown():
-            if timeout is not None and time.time() - t0 > timeout:
-                print("ROS exec worker: timeout waiting for qdone")
-                return False
-            time.sleep(0.05)
-        return True
-
-    resp_q.put(("ready", None))
-    print("ROS exec worker started (pid %d)" % os.getpid())
-
-    while True:
-        msg = req_q.get()
-        if msg is None:
-            break
-        try:
-            cmd = msg.get("cmd")
-            if cmd == "exec":
-                job_id = msg["job_id"]
-                error = False
-                for m in msg["motions"]:
-                    grasp = m.get("grasp")
-                    if grasp is not None:
-                        worker.done = False
-                        # grasp with parameters is not implemented on the server either
-                        send_msg("exec:ungrasp" if grasp is False else "exec:grasp")
-                        if not wait_done() or worker.resp.lower() == "error":
-                            error = True
-                            break
-                    Qs, dQs = m.get("Qs"), m.get("dQs")
-                    if Qs is not None and len(Qs):
-                        worker.done = False
-                        send_msg("exec:trajectory")
-                        send_joint_trajectory(Qs, dQs)
-                        if not wait_done() or worker.resp.lower() == "error":
-                            error = True
-                            break
-                        send_msg("exec:trajectory_done")
-                resp_q.put(("error" if error else "done", job_id))
-        except Exception:
-            print("Exception in ROS exec worker:")
-            traceback.print_exc()
-            if isinstance(msg, dict) and "job_id" in msg:
-                resp_q.put(("error", msg["job_id"]))  # don't wait forever
-
-    print("ROS exec worker exiting")
+    error = False
+    try:
+        for m in motions:
+            if iface._exec_stop:
+                break
+            if m["grasp"] is not None:
+                iface._exec_done_evt.clear()
+                iface.send_msg("exec:ungrasp" if m["grasp"] is False else "exec:grasp")
+                woke = iface._exec_done_evt.wait(timeout)
+                if iface._exec_stop:
+                    break
+                if not woke or not check_resp():
+                    print("ROS exec thread: grasp failed/timed out")
+                    error = True
+                    break
+            Qs, dQs = m["Qs"], m["dQs"]
+            if len(Qs):
+                iface.send_msg("exec:trajectory")
+                iface._exec_done_evt.clear()
+                iface.send_joint_trajectory(Qs, dQs, check=False)
+                woke = iface._exec_done_evt.wait(timeout)
+                if iface._exec_stop:
+                    break
+                if not woke or not check_resp():
+                    print("ROS exec thread: trajectory failed/timed out")
+                    error = True
+                    break
+                iface.send_msg("exec:trajectory_done")
+    except Exception:
+        print("Exception in ROS exec thread:")
+        traceback.print_exc()
+        error = True
+    iface._exec_error = error
+    print("Could not finish motion" if error else "Finished motion")

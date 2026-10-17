@@ -364,7 +364,9 @@ class TrajectoryPlanner:
                 chunks.append([])
                 d = 0
         log("Total distance: ", d)
-
+        # For measuring distance
+        self.box_trajectories = trajectories
+        
         chunks = [paths for paths in chunks if paths]
         # chunks = [(paths, [False for _ in paths]) for paths in chunks]
         # pdb.set_trace()
