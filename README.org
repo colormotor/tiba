@@ -113,7 +113,7 @@ The unusual step here is that we will install within the conda environment with
 #+begin_example
 conda activate ros_env
 mkdir build; cd build;
-cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX:PATH=$CONDA_PREFIX ..
+cmake -DCMAKE_BUILD_TYPE=Release       -DBUILD_TESTS=OFF       -DCMAKE_INSTALL_PREFIX:PATH=$CONDA_PREFIX       -DEIGEN3_INCLUDE_DIRS=$CONDA_PREFIX/include/eigen3       -DEIGEN3_INCLUDE_DIR_HINTS=$CONDA_PREFIX/include/eigen3       ..
 cmake --build .
 make install
 #+end_example
