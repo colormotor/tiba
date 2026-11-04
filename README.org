@@ -76,13 +76,18 @@ pip install xdialog
 
 Because we are running Python 3.9 and py5canvas relies of Python IMGUI bindings built for Python 3.10+ we will need to install these from [[https://github.com/colormotor/ilqr_planner][custom repo]].
 
-And then, either install locally by cloning the the [[https://github.com/colormotor/py5canvas][py5canvas]] repository and then
 #+begin_example
-pip install -e .
+git clone https://github.com/colormotor/slimgui.git
+cd slimgui
+git checkout py39-test
+mamba install ninja pandoc clang-format nanobind
+pip install markdown scikit-build-core click
+sh full_build.sh
 #+end_example
-or through pip with:
+
+And then install py5canvas with
 #+begin_example
-pip install git+https://github.com/colormotor/py5canvas.git
+pip install py5canvas
 #+end_example
 
 ** Server installation (for Franka robot)
