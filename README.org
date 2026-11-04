@@ -70,11 +70,11 @@ The Tiba system relies on graphic interface software to create/visualize traject
 conda activate ros_env
 mamba install conda-forge::pycairo
 mamba install conda-forge::moderngl
-pip install pyglet
-pip install imgui[pyglet]
 pip install easydict
 pip install xdialog
 #+end_example
+
+Because we are running Python 3.9 and py5canvas relies of Python IMGUI bindings built for Python 3.10+ we will need to install these from [[https://github.com/colormotor/ilqr_planner][custom repo]].
 
 And then, either install locally by cloning the the [[https://github.com/colormotor/py5canvas][py5canvas]] repository and then
 #+begin_example
