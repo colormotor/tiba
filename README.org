@@ -129,6 +129,8 @@ pip install .
 First create a ROS workspace, by creating a directory (we will call it ~catkin_ws~) and create a subdirectory ~src~ within it. Again we will not follow the exact instructions because we want to use the latest version of libfranka and Robostack for ROS. From the ~catkin_ws~ directory and with *the ros conda environment active*:
 #+begin_example
 git clone --recursive https://github.com/frankaemika/franka_ros src/franka_ros
+rosdep init
+rosdep update
 rosdep install --from-paths src --ignore-src --rosdistro noetic -y --skip-keys libfranka
 catkin build --cmake-args -DCMAKE_BUILD_TYPE=Release
 #+end_example
