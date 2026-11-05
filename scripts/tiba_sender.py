@@ -1,5 +1,5 @@
 from py5canvas import *
-
+import socket
 import numpy as np
 import cv2
 
@@ -19,19 +19,26 @@ import tiba.trajectory_utils as tu
 
 # ROS Setup
 #
-os.environ["ROS_IPV6"] = "off"
-# os.environ['ROS_MASTER_URI']='http://192.168.1.227:11311' #Running ROS
-# os.environ['ROS_MASTER_URI']='http://172.16.16.38:11311' #Running ROS
-#
-# os.environ['ROS_MASTER_URI']='http://10.1.1.5:11311' #Running ROS
-#
+# os.environ["ROS_IPV6"] = "off"
+# os.environ["ROS_MASTER_URI"] = "http://132.76.82.14:11311"  # Running ROS
 
-# os.environ['ROS_MASTER_URI']='http:/172.16.17.243:11311' #Running ROS
-os.environ["ROS_MASTER_URI"] = "http://172.16.16.185:11311"  # Running ROS
-os.environ["ROS_MASTER_URI"] = "http://192.168.8.200:11311"  # Running ROS
+os.environ["ROS_IPV6"] = "off"
+ROBOT_HOST = "132.76.82.14"
+os.environ["ROS_MASTER_URI"] = "http://%s:11311" % ROBOT_HOST
+
+def _local_ip(host, port=11311):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect((host, port))  # picks the routed interface, sends nothing
+        return s.getsockname()[0]
+    finally:
+        s.close()
+
+os.environ["ROS_HOSTNAME"] = _local_ip(ROBOT_HOST)
+
 
 interface.state.has_ros = (
-    False  # Set to false if you don't need to communicate with the server
+    True  # Set to false if you don't need to communicate with the server
 )
 
 base_path = "./../robots/tiba/settings"  # tiba for London
@@ -592,6 +599,7 @@ def load_file():
         f"~/Dropbox/transfer_box/data/calligraph/outputs/{name}.json"
     )
     fl = '/home/danielsp/Downloads/camel_16strokes_seed0_best.svg'
+    fl = './tiba.svg'
     # name = "bez5"
     # fl = os.path.expanduser(
     #     f"~/Dropbox/develop_box/py5sketches/drawlab_vectorize/{name}.bez"
