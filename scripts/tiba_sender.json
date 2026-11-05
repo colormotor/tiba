@@ -1,0 +1,26 @@
+{
+    "params": {
+        "alpha": 0.0,
+        "scale": 0.8870000243186951,
+        "px": 1.0,
+        "py": 1.0,
+        "spline_subd": 5,
+        "dip_distance": 2.2239999771118164,
+        "dt_mul": 1.0,
+        "plane_offset_mm": 0.0,
+        "topp": false,
+        "split_w": false,
+        "calibrate_camera": false,
+        "testing": {
+            "calibrate_viz": false,
+            "no_dip": false,
+            "active": false,
+            "pos_x": 10.0,
+            "pos_y": 10.0,
+            "length": 100.0,
+            "plot_rect": false
+        }
+    },
+    "presets": {},
+    "aux": {}
+}
